@@ -14,4 +14,11 @@
 - Planner 5D - create floor plan and upload furniture from a catalogue
 
 ## Photogrammetry
+Extraction of 3D measurements from 2D photos. 
 
+Can use YOLO for object detection (free). This works as follows: 
+1. Resize image to smaller size
+2. Divide image into NxN grid
+3. Use regression to determine which boxes might contain an 'object'
+4. 
+It outputs a set of bounding boxes enclosing the objects in the image. 
