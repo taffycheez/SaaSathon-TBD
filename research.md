@@ -22,3 +22,6 @@ Can use YOLO for object detection (free). This works as follows:
 3. Use regression to determine which boxes might contain an 'object'
 4. 
 It outputs a set of bounding boxes enclosing the objects in the image. 
+## Source of 3d models
+https://sketchfab.com/william.sayin/collections/office-supplies-and-furniture-501bd32b2c874c52b897de7917a16cc6
+https://sketchfab.com/anatoly.sennov/collections/gamedev-sceneprops-c2a78989b3f7460cbd8b35b2782157b8
