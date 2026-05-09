@@ -1,7 +1,13 @@
-import { useRef } from "react";
+import { forwardRef, useImperativeHandle, useRef } from "react";
 
-export default function UploadScreen({ onUpload, isLoading, error }) {
+const UploadScreen = forwardRef(function UploadScreen({ onUpload, isLoading, error }, ref) {
   const inputRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    openPicker() {
+      inputRef.current?.click();
+    }
+  }));
 
   function handleFileSelection(event) {
     const file = event.target.files?.[0];
@@ -46,4 +52,6 @@ export default function UploadScreen({ onUpload, isLoading, error }) {
       {error ? <p className="error-banner">{error}</p> : null}
     </section>
   );
-}
+});
+
+export default UploadScreen;
