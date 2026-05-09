@@ -67,6 +67,13 @@ function objectPixelSize(item, roomBox) {
   };
 }
 
+function clampObjectScale(widthPixels, heightPixels, roomBox) {
+  return {
+    width_percent: Math.max(2, Math.min(100, (widthPixels / roomBox.width) * 100)),
+    height_percent: Math.max(2, Math.min(100, (heightPixels / roomBox.height) * 100))
+  };
+}
+
 function getLabel(item, fallbackLabel) {
   return getObjectDefinition(item.type).label || fallbackLabel;
 }
@@ -248,6 +255,13 @@ export default function FloorPlanEditor({
     }
 
     updatePlacedItem(type, index, clampObjectPosition(position, roomBox));
+  }
+
+  function handleResizeDrag(type, index, event) {
+    event.cancelBubble = true;
+    const nextWidth = Math.max(18, event.target.x());
+    const nextHeight = Math.max(14, event.target.y());
+    updatePlacedItem(type, index, clampObjectScale(nextWidth, nextHeight, roomBox));
   }
 
   function moveWall(index, deltaXPercent, deltaYPercent) {
@@ -508,6 +522,28 @@ export default function FloorPlanEditor({
                     strokeWidth={1.5}
                     label={getLabel(item, "Object")}
                   />
+                  <Rect
+                    x={Math.max(14, width) - 10}
+                    y={Math.max(14, height) - 10}
+                    width={12}
+                    height={12}
+                    fill="#ffffff"
+                    stroke={definition.stroke}
+                    strokeWidth={2}
+                    cornerRadius={3}
+                    draggable
+                    onDragStart={(event) => {
+                      event.cancelBubble = true;
+                      onActionStart?.();
+                    }}
+                    onDragMove={(event) => handleResizeDrag("furniture", index, event)}
+                    onMouseDown={(event) => {
+                      event.cancelBubble = true;
+                    }}
+                    onTouchStart={(event) => {
+                      event.cancelBubble = true;
+                    }}
+                  />
                 </Group>
               );
             })}
@@ -541,6 +577,28 @@ export default function FloorPlanEditor({
                     stroke={definition.stroke}
                     strokeWidth={2}
                     label={`${getLabel(desk, "Desk")} ${index + 1}`}
+                  />
+                  <Rect
+                    x={Math.max(14, width) - 10}
+                    y={Math.max(14, height) - 10}
+                    width={12}
+                    height={12}
+                    fill="#ffffff"
+                    stroke={definition.stroke}
+                    strokeWidth={2}
+                    cornerRadius={3}
+                    draggable
+                    onDragStart={(event) => {
+                      event.cancelBubble = true;
+                      onActionStart?.();
+                    }}
+                    onDragMove={(event) => handleResizeDrag("desks", index, event)}
+                    onMouseDown={(event) => {
+                      event.cancelBubble = true;
+                    }}
+                    onTouchStart={(event) => {
+                      event.cancelBubble = true;
+                    }}
                   />
                 </Group>
               );
