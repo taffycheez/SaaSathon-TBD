@@ -9,6 +9,12 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 const DEFAULT_ROOM = {
   estimated_width_m: 8,
   estimated_height_m: 6,
+  walls: [
+    { x1_percent: 0, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
+    { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },
+    { x1_percent: 100, y1_percent: 100, x2_percent: 0, y2_percent: 100 },
+    { x1_percent: 0, y1_percent: 100, x2_percent: 0, y2_percent: 0 }
+  ],
   windows: [],
   doors: [],
   furniture: [],
@@ -20,16 +26,64 @@ const defaultPreferences = {
   workStyle: "balanced"
 };
 
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function normalizeRotation(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return ((numeric % 360) + 360) % 360;
+}
+
+function normalizeWallIndex(value, wallsLength) {
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || wallsLength <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(wallsLength - 1, numeric));
+}
+
 function normalizeRoomData(data) {
   const safeData = data && typeof data === "object" ? data : {};
+  const walls = Array.isArray(safeData.walls) && safeData.walls.length >= 3
+    ? safeData.walls.map((wall) => ({
+        x1_percent: clampPercent(wall?.x1_percent),
+        y1_percent: clampPercent(wall?.y1_percent),
+        x2_percent: clampPercent(wall?.x2_percent),
+        y2_percent: clampPercent(wall?.y2_percent)
+      }))
+    : DEFAULT_ROOM.walls;
 
   return {
     ...DEFAULT_ROOM,
     estimated_width_m: Math.max(1, Number(safeData.estimated_width_m) || DEFAULT_ROOM.estimated_width_m),
     estimated_height_m: Math.max(1, Number(safeData.estimated_height_m) || DEFAULT_ROOM.estimated_height_m),
-    windows: Array.isArray(safeData.windows) ? safeData.windows : [],
-    doors: Array.isArray(safeData.doors) ? safeData.doors : [],
-    furniture: Array.isArray(safeData.furniture) ? safeData.furniture : [],
+    walls,
+    windows: Array.isArray(safeData.windows)
+      ? safeData.windows.map((item) => ({
+          wall_index: normalizeWallIndex(item?.wall_index, walls.length),
+          position_percent: clampPercent(item?.position_percent)
+        }))
+      : [],
+    doors: Array.isArray(safeData.doors)
+      ? safeData.doors.map((item) => ({
+          wall_index: normalizeWallIndex(item?.wall_index, walls.length),
+          position_percent: clampPercent(item?.position_percent)
+        }))
+      : [],
+    furniture: Array.isArray(safeData.furniture)
+      ? safeData.furniture.map((item) => ({
+          type: typeof item?.type === "string" ? item.type : "desk",
+          x_percent: clampPercent(item?.x_percent),
+          y_percent: clampPercent(item?.y_percent),
+          width_percent: Math.max(2, clampPercent(item?.width_percent ?? 8)),
+          height_percent: Math.max(2, clampPercent(item?.height_percent ?? 5)),
+          rotation_deg: normalizeRotation(item?.rotation_deg)
+        }))
+      : [],
     desks: [],
     notes: Array.isArray(safeData.notes) ? safeData.notes : []
   };
@@ -41,9 +95,9 @@ function normalizeDeskData(data) {
 
   return {
     desks: rawDesks.map((desk) => ({
-      x_percent: Number(desk?.x_percent) || 0,
-      y_percent: Number(desk?.y_percent) || 0,
-      rotation_deg: Number(desk?.rotation_deg) || 0
+      x_percent: clampPercent(desk?.x_percent),
+      y_percent: clampPercent(desk?.y_percent),
+      rotation_deg: normalizeRotation(desk?.rotation_deg)
     })),
     notes: Array.isArray(safeData.notes) ? safeData.notes : []
   };
@@ -57,27 +111,48 @@ function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function isNearWindow(desk, windows) {
+function pointOnWall(edgeItem, walls) {
+  const wall = walls[edgeItem.wall_index];
+  if (!wall) {
+    return { x: 50, y: 50 };
+  }
+
+  const ratio = clampPercent(edgeItem.position_percent) / 100;
+  return {
+    x: wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio,
+    y: wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
+  };
+}
+
+function isNearWindow(desk, windows, walls) {
   return windows.some((windowItem) => {
-    const anchor =
-      windowItem.wall === "top"
-        ? { x: windowItem.position_percent, y: 0 }
-        : windowItem.wall === "bottom"
-          ? { x: windowItem.position_percent, y: 100 }
-          : windowItem.wall === "left"
-            ? { x: 0, y: windowItem.position_percent }
-            : { x: 100, y: windowItem.position_percent };
+    const anchor = pointOnWall(windowItem, walls);
     return distance({ x: desk.x_percent, y: desk.y_percent }, anchor) <= 28;
   });
 }
 
-function isFacingWall(desk) {
+function isFacingWall(desk, walls) {
   const rotation = ((desk.rotation_deg % 360) + 360) % 360;
-  const closeToTop = desk.y_percent < 18 && rotation >= 225 && rotation <= 315;
-  const closeToBottom = desk.y_percent > 82 && (rotation <= 45 || rotation >= 315 || (rotation >= 0 && rotation <= 45));
-  const closeToLeft = desk.x_percent < 18 && rotation >= 135 && rotation <= 225;
-  const closeToRight = desk.x_percent > 82 && (rotation >= 315 || rotation <= 45);
-  return closeToTop || closeToBottom || closeToLeft || closeToRight;
+  const angleVector = rotation >= 315 || rotation < 45
+    ? { x: 1, y: 0 }
+    : rotation < 135
+      ? { x: 0, y: 1 }
+      : rotation < 225
+        ? { x: -1, y: 0 }
+        : { x: 0, y: -1 };
+
+  return walls.some((wall) => {
+    const midPoint = {
+      x: (wall.x1_percent + wall.x2_percent) / 2,
+      y: (wall.y1_percent + wall.y2_percent) / 2
+    };
+    const toWall = {
+      x: midPoint.x - desk.x_percent,
+      y: midPoint.y - desk.y_percent
+    };
+    const dot = angleVector.x * toWall.x + angleVector.y * toWall.y;
+    return dot > 0 && Math.abs(toWall.x) + Math.abs(toWall.y) < 36;
+  });
 }
 
 function hasCorridor(desks) {
@@ -93,19 +168,11 @@ function hasCorridor(desks) {
   return false;
 }
 
-function hasQuietZone(desks, doors) {
+function hasQuietZone(desks, doors, walls) {
   if (!desks.length || !doors.length) {
     return false;
   }
-  const doorway = doors[0];
-  const doorPoint =
-    doorway.wall === "top"
-      ? { x: doorway.position_percent, y: 0 }
-      : doorway.wall === "bottom"
-        ? { x: doorway.position_percent, y: 100 }
-        : doorway.wall === "left"
-          ? { x: 0, y: doorway.position_percent }
-          : { x: 100, y: doorway.position_percent };
+  const doorPoint = pointOnWall(doors[0], walls);
   const farDesks = desks.filter(
     (desk) => distance({ x: desk.x_percent, y: desk.y_percent }, doorPoint) >= 40
   );
@@ -135,17 +202,18 @@ function hasCollaborationZone(desks, workStyle) {
 
 function computeScore(room, preferences) {
   const desks = room.desks || [];
+  const walls = room.walls || [];
   const windows = room.windows || [];
   const doors = room.doors || [];
   const breakdown = [];
   let score = 0;
 
-  const nearWindowCount = desks.filter((desk) => isNearWindow(desk, windows)).length;
+  const nearWindowCount = desks.filter((desk) => isNearWindow(desk, windows, walls)).length;
   const windowPoints = Math.min(30, nearWindowCount * 10);
   score += windowPoints;
   breakdown.push(`${nearWindowCount} desk(s) benefit from natural light: +${windowPoints}`);
 
-  const notFacingWallCount = desks.filter((desk) => !isFacingWall(desk)).length;
+  const notFacingWallCount = desks.filter((desk) => !isFacingWall(desk, walls)).length;
   const facingPoints = Math.min(20, notFacingWallCount * 10);
   score += facingPoints;
   breakdown.push(`${notFacingWallCount} desk(s) avoid direct wall-facing orientation: +${facingPoints}`);
@@ -154,7 +222,7 @@ function computeScore(room, preferences) {
   score += corridorPoints;
   breakdown.push(`${corridorPoints ? "Clear" : "Insufficient"} corridor between desk rows: +${corridorPoints}`);
 
-  const quietPoints = hasQuietZone(desks, doors) ? 15 : 0;
+  const quietPoints = hasQuietZone(desks, doors, walls) ? 15 : 0;
   score += quietPoints;
   breakdown.push(`${quietPoints ? "Quiet zone present" : "Quiet zone missing"}: +${quietPoints}`);
 

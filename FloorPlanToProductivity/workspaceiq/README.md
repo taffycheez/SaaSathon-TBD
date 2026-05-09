@@ -1,4 +1,4 @@
-# WorkspaceIQ Local Testing Instructions
+# WorkspaceIQ Local Setup
 
 ## Prerequisites
 
@@ -8,39 +8,46 @@
 
 ## Project Location
 
-Run everything from:
+Run commands from:
 
-```bash
-cd /home/peterl/Projects/SaaSathon-TBD/FloorPlanToProductivity/workspaceiq
+```powershell
+cd "C:\Users\...\SaaSathon-TBD\FloorPlanToProductivity\workspaceiq"
 ```
 
 ## First-Time Setup
 
-1. Install dependencies:
+Install dependencies before trying to start the app:
 
-```bash
-npm install
+```powershell
+npm.cmd install
 ```
 
-2. Create a local env file if you do not already have one:
-
-```bash
-cp .env.example .env
-```
-
-3. Open `.env` and set your real OpenAI key:
+The local env file should exist at `.env`. It should contain:
 
 ```env
 OPENAI_API_KEY=your_key_here
 PORT=3001
+RUN_OPENAI_IMAGE_TESTS=0
 ```
 
-## Run the App
+## Start The Server
 
-Start both frontend and backend:
+To run only the backend:
 
-```bash
-npm run dev
+```powershell
+npm.cmd run dev:server
+```
+
+The backend will start on:
+
+- `http://localhost:3001`
+
+## Start The Full App
+
+To run frontend and backend together:
+
+```powershell
+npm.cmd run dev
 ```
 
 Expected local URLs:
@@ -48,7 +55,27 @@ Expected local URLs:
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:3001`
 
-## How to Test
+## Why `concurrently` was not recognized
+
+If you see:
+
+```text
+'concurrently' is not recognized as an internal or external command
+```
+
+that usually means the workspace dependencies have not been installed yet. `concurrently` is a dev dependency from this project's `package.json`, so run:
+
+```powershell
+npm.cmd install
+```
+
+and then try:
+
+```powershell
+npm.cmd run dev
+```
+
+## How To Test
 
 1. Open `http://localhost:5173`
 2. Upload a photo of an office or room
@@ -60,9 +87,29 @@ Expected local URLs:
 8. Confirm layout notes appear in the sidebar
 9. Drag desks around and verify the productivity score updates
 
+## Test Commands
+
+Run server tests:
+
+```powershell
+npm.cmd test
+```
+
+Run OpenAI-backed image tests:
+
+```powershell
+npm.cmd run test:images
+```
+
+To enable the image tests, set this in `.env`:
+
+```env
+RUN_OPENAI_IMAGE_TESTS=1
+```
+
 ## Expected Behavior
 
-- If AI room analysis succeeds, the app should estimate room size, windows, doors, and furniture
+- If AI room analysis succeeds, the app should estimate room size, walls, windows, doors, and desk-like furniture
 - If AI room analysis fails, the app should still return a starter room and show fallback notes
 - If AI layout generation fails, the app should still place a basic fallback desk layout and show fallback notes
 - The uploaded image should remain visible inside the floor plan editor
@@ -73,8 +120,8 @@ Expected local URLs:
 
 You are probably in the wrong folder. Make sure you are inside:
 
-```bash
-/home/peterl/Projects/SaaSathon-TBD/FloorPlanToProductivity/workspaceiq
+```powershell
+cd "C:\Users\varya\Documents\Uni\2026S1\SaaSathon-TBD\FloorPlanToProductivity\workspaceiq"
 ```
 
 ### `EADDRINUSE: address already in use :::3001`
@@ -87,12 +134,12 @@ Option 1: change `.env`:
 PORT=3002
 ```
 
-Then restart `npm run dev`.
+Then restart the server.
 
-Option 2: find and stop the process already using the port:
+Option 2: find the process using the port:
 
-```bash
-lsof -nP -iTCP:3001 -sTCP:LISTEN
+```powershell
+netstat -ano | findstr :3001
 ```
 
 ### Upload works but analysis/generation fails
@@ -104,20 +151,10 @@ Check:
 - the backend is running
 - the API key has billing/access enabled
 
-Even on failure, the app should now show fallback notes and a starter layout instead of stopping completely.
+Even on failure, the app should still show fallback notes and a starter layout.
 
-## Clean Restart
+## Notes For The Team
 
-If things get weird:
-
-```bash
-rm -rf node_modules
-npm install
-npm run dev
-```
-
-## Notes for the Team
-
-- Do not commit your real `.env`
-- Only commit `.env.example`
-- The frontend proxies API calls to the backend automatically during local dev
+- `.env` is currently not ignored in this repo, so be careful not to commit a real secret by accident
+- `.env.example` should stay safe for sharing
+- The frontend proxies `/api` requests to the backend during local development
