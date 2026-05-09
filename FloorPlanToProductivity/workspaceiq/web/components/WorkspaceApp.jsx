@@ -7,9 +7,11 @@ import FloorPlanEditor from "@/components/FloorPlanEditor";
 import FloorPlanEditorBoundary from "@/components/FloorPlanEditorBoundary";
 import ScorePanel from "@/components/ScorePanel";
 import { getObjectDefinition } from "@/lib/objectCatalog";
+import { computeFengShuiScore } from "@/lib/fengShuiScore";
 import {
   addObjectToRoom,
   clampPercent,
+  createDoorForRoom,
   createWindowForRoom,
   isDeskLikeFurniture,
   normalizeRoomLayout,
@@ -37,7 +39,8 @@ const DEFAULT_ROOM = {
 };
 
 const defaultPreferences = {
-  numPeople: 8
+  numPeople: 8,
+  workStyle: "balanced"
 };
 
 const DEFAULT_ANALYSIS_BOUNDS = {
@@ -104,7 +107,9 @@ function normalizeRoomData(data) {
     : DEFAULT_ROOM.walls;
 
   const furniture = Array.isArray(safeData.furniture)
-    ? safeData.furniture.map(normalizeFurnitureItem)
+    ? safeData.furniture
+        .map(normalizeFurnitureItem)
+        .filter((item) => item.type !== "office_equipment")
     : [];
   const detectedDesks = furniture.filter(isDeskLikeFurniture).map(normalizeFurnitureItem);
 
@@ -594,7 +599,7 @@ export default function WorkspaceApp() {
   const [layoutNotes, setLayoutNotes] = useState([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  const scoreResult = useMemo(() => computeScore(room), [room]);
+  const scoreResult = useMemo(() => computeFengShuiScore(room, preferences), [room, preferences]);
 
   useEffect(() => {
     if (!error) {
@@ -622,8 +627,14 @@ export default function WorkspaceApp() {
     }));
   }
 
-  function addTable() {
-    addObject("table");
+  function addDoor() {
+    setRoom((currentRoom) => ({
+      ...currentRoom,
+      doors: [
+        ...(currentRoom.doors || []),
+        createDoorForRoom(currentRoom)
+      ]
+    }));
   }
 
   async function handleUpload(file) {
@@ -688,7 +699,7 @@ export default function WorkspaceApp() {
         body: JSON.stringify({
           room,
           num_people: preferences.numPeople,
-          work_style: "balanced"
+          work_style: preferences.workStyle || "balanced"
         })
       });
 
@@ -797,7 +808,7 @@ export default function WorkspaceApp() {
                 showReferenceImage={showReferenceImage}
               />
             </FloorPlanEditorBoundary>
-            <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} />
+            <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} advice={scoreResult.advice} />
           </section>
 
           <aside className="sidebar-column">
@@ -809,7 +820,7 @@ export default function WorkspaceApp() {
               showReferenceImage={showReferenceImage}
               setShowReferenceImage={setShowReferenceImage}
               onAddWindow={addWindow}
-              onAddTable={addTable}
+              onAddDoor={addDoor}
               onAddObject={addObject}
               onGenerateLayout={handleGenerateLayout}
               onReset={resetWorkspace}

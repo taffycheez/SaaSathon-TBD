@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   addObjectToRoom,
+  createDoorForRoom,
   createWindowForRoom,
   normalizeRoomLayout,
+  pointOnWall,
   updateEdgeItemPosition,
   updatePlacedObjectPosition
 } from "./roomState.js";
@@ -36,7 +38,16 @@ test("createWindowForRoom attaches a new window to a wall", () => {
   const windowItem = createWindowForRoom(room);
   assert.equal(windowItem.wall_index, 0);
   assert.equal(windowItem.y_percent, 0);
-  assert.equal(windowItem.position_percent, 50);
+  assert.equal(windowItem.position_percent, 28);
+});
+
+test("createDoorForRoom attaches a new door to a wall", () => {
+  const room = normalizeRoomLayout(BASE_ROOM);
+  const doorItem = createDoorForRoom(room);
+  assert.equal(doorItem.wall_index, 0);
+  assert.equal(doorItem.y_percent, 0);
+  assert.equal(doorItem.position_percent, 18);
+  assert.deepEqual(pointOnWall(doorItem, room.walls), { x: 18, y: 0 });
 });
 
 test("addObjectToRoom chooses a non-overlapping catalog placement", () => {

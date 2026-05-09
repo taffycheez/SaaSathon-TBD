@@ -32,10 +32,18 @@ export const OBJECT_TYPES = {
     tone: "#d9d2c3",
     stroke: "#786047"
   },
-  armchair: {
-    label: "Armchair",
+  chair: {
+    label: "Chair",
     shape_kind: "rect",
-    width_percent: 7,
+    width_percent: 6,
+    height_percent: 6,
+    tone: "#d8e6f4",
+    stroke: "#31526f"
+  },
+  armchair: {
+    label: "Lounge Chair",
+    shape_kind: "rect",
+    width_percent: 8,
     height_percent: 7,
     tone: "#c7e3d5",
     stroke: "#2b6b53"
@@ -48,13 +56,37 @@ export const OBJECT_TYPES = {
     tone: "#dce6cf",
     stroke: "#5f7152"
   },
+  filing_cabinet: {
+    label: "File Cabinet",
+    shape_kind: "rect",
+    width_percent: 8,
+    height_percent: 5,
+    tone: "#d7dde6",
+    stroke: "#516173"
+  },
+  whiteboard: {
+    label: "Whiteboard",
+    shape_kind: "rect",
+    width_percent: 16,
+    height_percent: 5,
+    tone: "#f7fbff",
+    stroke: "#607587"
+  },
   plant: {
     label: "Plant",
     shape_kind: "ellipse",
-    width_percent: 4,
-    height_percent: 4,
+    width_percent: 5,
+    height_percent: 6,
     tone: "#d9f0cf",
     stroke: "#48703d"
+  },
+  trashcan: {
+    label: "Trashcan",
+    shape_kind: "ellipse",
+    width_percent: 4,
+    height_percent: 4,
+    tone: "#e3e6ea",
+    stroke: "#5b6673"
   },
   office_equipment: {
     label: "Equipment",
@@ -98,12 +130,37 @@ const OBJECT_ALIASES = {
   l_desk: "l_shaped_desk",
   conference_table: "meeting_table",
   meeting_desk: "meeting_table",
+  chair: "chair",
+  office_chair: "chair",
+  task_chair: "chair",
+  desk_chair: "chair",
+  rolling_chair: "chair",
+  visitor_chair: "chair",
+  seat: "chair",
+  seating: "chair",
   sofa_chair: "armchair",
   lounge_chair: "armchair",
+  soft_chair: "armchair",
+  filing_cabinet: "filing_cabinet",
+  filingcabinet: "filing_cabinet",
+  cabinet: "filing_cabinet",
+  drawer_unit: "filing_cabinet",
+  dry_erase_board: "whiteboard",
+  marker_board: "whiteboard",
+  board: "whiteboard",
+  wall_board: "whiteboard",
   copier: "office_equipment",
   shredder: "office_equipment",
   potted_plant: "plant",
   plant_pot: "plant",
+  planter: "plant",
+  indoor_plant: "plant",
+  pot_plant: "plant",
+  tree: "plant",
+  trash_can: "trashcan",
+  wastebasket: "trashcan",
+  recycle_bin: "trashcan",
+  bin: "trashcan",
   bathroom_toilet: "toilet",
   bathtub: "shower",
   wash_basin: "sink",
@@ -133,12 +190,12 @@ export function isDeskType(type) {
 export const OBJECT_PALETTE = [
   "desk",
   "l_shaped_desk",
-  "meeting_table",
+  "chair",
   "armchair",
+  "meeting_table",
   "table",
+  "filing_cabinet",
+  "whiteboard",
   "plant",
-  "office_equipment",
-  "toilet",
-  "sink",
-  "shower"
+  "trashcan"
 ];

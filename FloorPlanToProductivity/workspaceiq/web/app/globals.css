@@ -497,6 +497,52 @@ button:disabled {
   touch-action: none;
 }
 
+.workspace-object,
+.workspace-opening {
+  cursor: grab;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 180ms ease,
+    opacity 180ms ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.workspace-object text {
+  pointer-events: none;
+  user-select: none;
+}
+
+.workspace-object:hover {
+  filter: drop-shadow(0 4px 10px rgba(23, 32, 47, 0.14));
+}
+
+.workspace-object--chair:hover,
+.workspace-object--armchair:hover,
+.workspace-object--plant:hover {
+  transform: scale(1.05);
+}
+
+.workspace-object--whiteboard:hover {
+  transform: scale(1.025);
+}
+
+.workspace-object.is-dragging,
+.workspace-opening.is-dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 8px 16px rgba(23, 32, 47, 0.18));
+}
+
+.workspace-object--chair.is-dragging,
+.workspace-object--armchair.is-dragging,
+.workspace-object--plant.is-dragging {
+  transform: scale(1.08);
+}
+
+.workspace-object--whiteboard.is-dragging {
+  transform: scale(1.04);
+}
+
 .score-badge {
   min-width: 72px;
   height: 56px;
@@ -533,6 +579,19 @@ button:disabled {
   padding-left: 18px;
   color: var(--muted);
   font-size: 0.94rem;
+}
+
+.score-advice {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.score-advice-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 0.93rem;
 }
 
 .score-badge::after {
