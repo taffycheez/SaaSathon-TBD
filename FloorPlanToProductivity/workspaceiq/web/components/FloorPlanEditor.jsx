@@ -196,6 +196,17 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
       return undefined;
     }
 
+    if (typeof ResizeObserver === "undefined") {
+      const handleResize = () => {
+        const nextWidth = node.getBoundingClientRect().width;
+        setStageScale(Math.min(1, nextWidth / CANVAS_WIDTH));
+      };
+
+      handleResize();
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }
+
     const observer = new ResizeObserver(([entry]) => {
       const nextWidth = entry.contentRect.width;
       setStageScale(Math.min(1, nextWidth / CANVAS_WIDTH));

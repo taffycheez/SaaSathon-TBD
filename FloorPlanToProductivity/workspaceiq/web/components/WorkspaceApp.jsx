@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import UploadScreen from "@/components/UploadScreen";
 import ControlPanel from "@/components/ControlPanel";
+import FloorPlanEditorBoundary from "@/components/FloorPlanEditorBoundary";
 import ScorePanel from "@/components/ScorePanel";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import {
@@ -445,12 +446,14 @@ export default function WorkspaceApp() {
       ) : (
         <main className="workspace-layout">
           <section className="canvas-column">
-            <FloorPlanEditor
-              room={room}
-              setRoom={setRoom}
-              imagePreview={imagePreview}
-              showReferenceImage={showReferenceImage}
-            />
+            <FloorPlanEditorBoundary>
+              <FloorPlanEditor
+                room={room}
+                setRoom={setRoom}
+                imagePreview={imagePreview}
+                showReferenceImage={showReferenceImage}
+              />
+            </FloorPlanEditorBoundary>
             <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} />
           </section>
 
