@@ -126,7 +126,13 @@ export function normalizeRoomDescription(payload) {
 
 export function normalizeAnalysisResult(payload) {
   const safePayload = payload && typeof payload === "object" ? payload : {};
-  const isValidRoom = safePayload.is_valid_room !== false;
+  const returnedWallCount = Array.isArray(safePayload.walls) ? safePayload.walls.length : 0;
+  const returnedObjectCount = Array.isArray(safePayload.furniture) ? safePayload.furniture.length : 0;
+  const returnedEdgeCount =
+    (Array.isArray(safePayload.windows) ? safePayload.windows.length : 0) +
+    (Array.isArray(safePayload.doors) ? safePayload.doors.length : 0);
+  const hasFloorPlanEvidence = returnedWallCount >= 2 || returnedObjectCount > 0 || returnedEdgeCount > 0;
+  const isValidRoom = safePayload.is_valid_room !== false || hasFloorPlanEvidence;
   const rejectionReason =
     typeof safePayload.rejection_reason === "string" && safePayload.rejection_reason.trim()
       ? safePayload.rejection_reason.trim()

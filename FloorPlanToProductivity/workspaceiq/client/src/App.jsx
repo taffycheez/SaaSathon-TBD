@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import UploadScreen from "./components/UploadScreen";
 import FloorPlanEditor from "./components/FloorPlanEditor";
 import ControlPanel from "./components/ControlPanel";
@@ -261,6 +261,18 @@ export default function App() {
 
   const scoreResult = useMemo(() => computeScore(room, preferences), [room, preferences]);
 
+  useEffect(() => {
+    if (!error) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setError("");
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [error]);
+
   function addObject(type) {
     setRoom((currentRoom) => addObjectToRoom(currentRoom, type));
   }
@@ -372,6 +384,8 @@ export default function App() {
         ) : null}
       </header>
 
+      {isAnalysing ? <LoadingScreen /> : null}
+
       {!imagePreview ? (
         <HomePage
           uploadRef={uploadRef}
@@ -430,6 +444,31 @@ export default function App() {
       )}
       <Footer />
     </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <section className="loading-screen" aria-live="polite" aria-label="Analysing uploaded floor plan">
+      <div className="loading-panel">
+        <div className="loading-plan" aria-hidden="true">
+          <span className="loading-room" />
+          <span className="loading-desk desk-a" />
+          <span className="loading-desk desk-b" />
+          <span className="loading-path" />
+        </div>
+        <p className="eyebrow">Analysing image</p>
+        <h2>Checking the floor plan</h2>
+        <p>
+          WorkspaceIQ is reading walls, doors, windows, and existing objects before opening the editor.
+        </p>
+        <div className="loading-steps" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </div>
+    </section>
   );
 }
 

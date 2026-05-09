@@ -15,7 +15,7 @@ export const port = process.env.PORT || 3001;
 export const analysisPipeline = process.env.ANALYSIS_PIPELINE || "hybrid";
 export const cvPythonBin = process.env.CV_PYTHON_BIN || "python";
 export const cvSegmentationModel = process.env.CV_SEGMENTATION_MODEL || "yolov8n-seg.pt";
-export const cvMinWallSegments = Number(process.env.CV_MIN_WALL_SEGMENTS || 3);
+export const cvMinWallSegments = Number(process.env.CV_MIN_WALL_SEGMENTS || 2);
 export const cvPipelineScript = path.resolve(__dirname, "./cv_pipeline/analyse_room_cv.py");
 
 export function createAiClient() {
