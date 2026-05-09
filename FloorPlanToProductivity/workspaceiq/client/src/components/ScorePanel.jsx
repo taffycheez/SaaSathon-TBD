@@ -1,4 +1,4 @@
-export default function ScorePanel({ score, breakdown, advice = [] }) {
+export default function ScorePanel({ score, breakdown, advice = [], isPreviewing = false }) {
   const segmentCount = 10;
   const activeSegments = Math.max(0, Math.min(segmentCount, Math.round(score / 10)));
 
@@ -6,7 +6,7 @@ export default function ScorePanel({ score, breakdown, advice = [] }) {
     <div className="panel-card score-card">
       <div className="score-topline">
         <div>
-          <p className="upload-kicker">Live Feng Shui score</p>
+          <p className="upload-kicker">{isPreviewing ? "Live Feng Shui preview" : "Live Feng Shui score"}</p>
           <h2>Productivity score</h2>
         </div>
         <div className="score-badge">{score}</div>

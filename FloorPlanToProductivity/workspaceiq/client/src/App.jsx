@@ -209,6 +209,7 @@ function computeScore(room) {
 export default function App() {
   const uploadRef = useRef(null);
   const [room, setRoom] = useState(DEFAULT_ROOM);
+  const [roomPreview, setRoomPreview] = useState(null);
   const [baseRoom, setBaseRoom] = useState(DEFAULT_ROOM);
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
@@ -220,10 +221,11 @@ export default function App() {
   const [layoutNotes, setLayoutNotes] = useState([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
+  const activeRoom = roomPreview ?? room;
 
   const scoreResult = useMemo(
-    () => computeFengShuiScore(room, preferences),
-    [room, preferences]
+    () => computeFengShuiScore(activeRoom, preferences),
+    [activeRoom, preferences]
   );
 
   useEffect(() => {
@@ -259,6 +261,7 @@ export default function App() {
       }
 
       const previous = current[current.length - 1];
+      setRoomPreview(null);
       setRoom(previous.room);
       setBaseRoom(previous.baseRoom);
       setPreferences(previous.preferences);
@@ -271,16 +274,19 @@ export default function App() {
   }
 
   function addObject(type) {
+    setRoomPreview(null);
     pushUndoSnapshot();
     setRoom((currentRoom) => addObjectToRoom(currentRoom, type));
   }
 
   function addWindow() {
+    setRoomPreview(null);
     pushUndoSnapshot();
     setRoom((currentRoom) => addOpeningToRoom(currentRoom, "window"));
   }
 
   function addDoor() {
+    setRoomPreview(null);
     pushUndoSnapshot();
     setRoom((currentRoom) => addOpeningToRoom(currentRoom, "door"));
   }
@@ -305,6 +311,7 @@ export default function App() {
 
       const data = await response.json();
       const normalizedRoom = normalizeRoomData(data);
+      setRoomPreview(null);
       setImagePreview(base64);
       setShowReferenceImage(false);
       setRoom(normalizedRoom);
@@ -339,6 +346,7 @@ export default function App() {
       }
 
       pushUndoSnapshot();
+      setRoomPreview(null);
       const { desks, notes } = normalizeDeskData(await response.json());
       setRoom((currentRoom) => ({
         ...currentRoom,
@@ -353,6 +361,7 @@ export default function App() {
   }
 
   function updateRoomDimensions(dimension, value) {
+    setRoomPreview(null);
     pushUndoSnapshot();
     setRoom((currentRoom) => ({
       ...currentRoom,
@@ -366,6 +375,7 @@ export default function App() {
 
   function goHome() {
     setShowResetConfirm(false);
+    setRoomPreview(null);
     setRoom(DEFAULT_ROOM);
     setBaseRoom(DEFAULT_ROOM);
     setPreferences(defaultPreferences);
@@ -379,6 +389,7 @@ export default function App() {
 
   function confirmResetWorkspace() {
     setShowResetConfirm(false);
+    setRoomPreview(null);
     pushUndoSnapshot();
 
     if (imagePreview) {
@@ -444,8 +455,9 @@ export default function App() {
         <main className="workspace-layout">
             <section className="canvas-column">
             <FloorPlanEditor
-              room={room}
+              room={activeRoom}
               setRoom={setRoom}
+              onRoomPreviewChange={setRoomPreview}
               imagePreview={imagePreview}
               showReferenceImage={showReferenceImage}
               onActionStart={pushUndoSnapshot}
@@ -456,6 +468,7 @@ export default function App() {
               score={scoreResult.score}
               breakdown={scoreResult.breakdown}
               advice={scoreResult.advice}
+              isPreviewing={Boolean(roomPreview)}
             />
             </section>
 
@@ -463,6 +476,7 @@ export default function App() {
               <ControlPanel
                 preferences={preferences}
                 setPreferences={(updater) => {
+                  setRoomPreview(null);
                   pushUndoSnapshot();
                   setPreferences(updater);
                 }}
@@ -470,6 +484,7 @@ export default function App() {
                 updateRoomDimensions={updateRoomDimensions}
                 showReferenceImage={showReferenceImage}
                 setShowReferenceImage={(updater) => {
+                  setRoomPreview(null);
                   pushUndoSnapshot();
                   setShowReferenceImage(updater);
                 }}
