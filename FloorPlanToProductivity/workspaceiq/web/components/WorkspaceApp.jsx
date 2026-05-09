@@ -1146,6 +1146,18 @@ function LoadingScreen() {
 }
 
 function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, heroSceneIndex }) {
+  const [pointerLight, setPointerLight] = useState({ x: 50, y: 50, active: false });
+
+  function handlePlanPointerMove(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100;
+    const y = ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100;
+    setPointerLight({
+      x: clampPercent(x),
+      y: clampPercent(y),
+      active: true
+    });
+  }
   return (
     <main className="home-page">
       <section className="hero-section" id="home">
@@ -1177,8 +1189,19 @@ function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, he
             <span />
             <strong>Score {heroScene.score}</strong>
           </div>
-          <div className="mini-plan">
-            <div className="mini-plan-glow" />
+          <div
+            className="mini-plan"
+            onMouseMove={handlePlanPointerMove}
+            onMouseEnter={() => setPointerLight((current) => ({ ...current, active: true }))}
+            onMouseLeave={() => setPointerLight((current) => ({ ...current, active: false }))}
+          >
+            <div
+              className={`mini-cursor-light${pointerLight.active ? " is-active" : ""}`}
+              style={{
+                left: `${pointerLight.x}%`,
+                top: `${pointerLight.y}%`
+              }}
+            />
             {heroScene.windows.map((windowItem, index) => (
               <span
                 key={`${heroScene.id}-window-${index}`}
