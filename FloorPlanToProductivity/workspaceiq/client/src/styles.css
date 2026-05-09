@@ -81,6 +81,24 @@ button:disabled {
   max-width: 520px;
 }
 
+.undo-button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, #2e8b68, #1f7a5a);
+  color: white;
+  font-weight: 800;
+  box-shadow: 0 10px 20px rgba(31, 122, 90, 0.18);
+}
+
+.undo-button:disabled {
+  background: #d8e4dc;
+  color: #6d8075;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .brand-lockup {
   display: flex;
   align-items: center;
@@ -481,12 +499,98 @@ button:disabled {
 }
 
 .floor-stage-shell {
+  position: relative;
   margin-top: 12px;
   border-radius: 8px;
   overflow: hidden;
   background: #f7faf8;
   border: 1px solid var(--border);
   width: 100%;
+}
+
+.editor-undo-button {
+  position: absolute;
+  right: 14px;
+  bottom: 86px;
+  z-index: 5;
+}
+
+.trash-indicator {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  width: 58px;
+  height: 58px;
+  border: 2px solid #f0b9b9;
+  border-radius: 8px;
+  background: #fff2f2;
+  box-shadow: 0 10px 20px rgba(23, 32, 47, 0.12);
+  pointer-events: none;
+  animation: trash-float 2.2s ease-in-out infinite;
+}
+
+.trash-lid,
+.trash-handle,
+.trash-body,
+.trash-body span {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.trash-lid {
+  top: 16px;
+  width: 26px;
+  height: 3px;
+  border-radius: 999px;
+  background: #a83b3b;
+}
+
+.trash-handle {
+  top: 10px;
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+  background: #a83b3b;
+}
+
+.trash-body {
+  top: 22px;
+  width: 22px;
+  height: 18px;
+  border: 3px solid #a83b3b;
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+}
+
+.trash-body span {
+  top: 3px;
+  width: 2px;
+  height: 10px;
+  border-radius: 999px;
+  background: #a83b3b;
+}
+
+.trash-body span:first-child {
+  margin-left: -5px;
+}
+
+.trash-body span:last-child {
+  margin-left: 5px;
+}
+
+@keyframes trash-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 10px 20px rgba(23, 32, 47, 0.12);
+  }
+
+  50% {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(23, 32, 47, 0.16);
+  }
 }
 
 .floor-stage {
