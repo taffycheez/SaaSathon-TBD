@@ -677,6 +677,19 @@ button:disabled {
   font-size: 0.94rem;
 }
 
+.score-advice {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.score-advice-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 0.93rem;
+}
+
 .score-badge::after {
   content: "/100";
   margin-left: 2px;

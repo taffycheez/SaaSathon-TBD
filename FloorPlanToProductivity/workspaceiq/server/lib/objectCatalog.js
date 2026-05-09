@@ -38,8 +38,26 @@ const OBJECT_TYPES = {
     width_percent: 10,
     height_percent: 7
   },
+  filing_cabinet: {
+    label: "File Cabinet",
+    shape_kind: "rect",
+    width_percent: 8,
+    height_percent: 5
+  },
+  whiteboard: {
+    label: "Whiteboard",
+    shape_kind: "rect",
+    width_percent: 14,
+    height_percent: 4
+  },
   plant: {
     label: "Plant",
+    shape_kind: "ellipse",
+    width_percent: 4,
+    height_percent: 4
+  },
+  trashcan: {
+    label: "Trashcan",
     shape_kind: "ellipse",
     width_percent: 4,
     height_percent: 4
@@ -85,6 +103,13 @@ const OBJECT_ALIASES = {
   task_chair: "armchair",
   seat: "armchair",
   seating: "armchair",
+  filing_cabinet: "filing_cabinet",
+  filingcabinet: "filing_cabinet",
+  cabinet: "filing_cabinet",
+  drawer_unit: "filing_cabinet",
+  dry_erase_board: "whiteboard",
+  marker_board: "whiteboard",
+  board: "whiteboard",
   copier: "office_equipment",
   shredder: "office_equipment",
   potted_plant: "plant",
@@ -93,6 +118,10 @@ const OBJECT_ALIASES = {
   indoor_plant: "plant",
   pot_plant: "plant",
   tree: "plant",
+  trash_can: "trashcan",
+  wastebasket: "trashcan",
+  recycle_bin: "trashcan",
+  bin: "trashcan",
   bathroom_toilet: "toilet",
   bathtub: "shower",
   wash_basin: "sink",

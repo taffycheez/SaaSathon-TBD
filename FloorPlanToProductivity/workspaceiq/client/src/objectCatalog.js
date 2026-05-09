@@ -48,6 +48,22 @@ export const OBJECT_TYPES = {
     tone: "#dce6cf",
     stroke: "#5f7152"
   },
+  filing_cabinet: {
+    label: "File Cabinet",
+    shape_kind: "rect",
+    width_percent: 8,
+    height_percent: 5,
+    tone: "#d7dde6",
+    stroke: "#516173"
+  },
+  whiteboard: {
+    label: "Whiteboard",
+    shape_kind: "rect",
+    width_percent: 14,
+    height_percent: 4,
+    tone: "#f7fbff",
+    stroke: "#607587"
+  },
   plant: {
     label: "Plant",
     shape_kind: "ellipse",
@@ -55,6 +71,14 @@ export const OBJECT_TYPES = {
     height_percent: 4,
     tone: "#d9f0cf",
     stroke: "#48703d"
+  },
+  trashcan: {
+    label: "Trashcan",
+    shape_kind: "ellipse",
+    width_percent: 4,
+    height_percent: 4,
+    tone: "#e3e6ea",
+    stroke: "#5b6673"
   },
   office_equipment: {
     label: "Equipment",
@@ -105,6 +129,13 @@ const OBJECT_ALIASES = {
   task_chair: "armchair",
   seat: "armchair",
   seating: "armchair",
+  filing_cabinet: "filing_cabinet",
+  filingcabinet: "filing_cabinet",
+  cabinet: "filing_cabinet",
+  drawer_unit: "filing_cabinet",
+  dry_erase_board: "whiteboard",
+  marker_board: "whiteboard",
+  board: "whiteboard",
   copier: "office_equipment",
   shredder: "office_equipment",
   potted_plant: "plant",
@@ -113,6 +144,10 @@ const OBJECT_ALIASES = {
   indoor_plant: "plant",
   pot_plant: "plant",
   tree: "plant",
+  trash_can: "trashcan",
+  wastebasket: "trashcan",
+  recycle_bin: "trashcan",
+  bin: "trashcan",
   bathroom_toilet: "toilet",
   bathtub: "shower",
   wash_basin: "sink",
@@ -145,9 +180,8 @@ export const OBJECT_PALETTE = [
   "meeting_table",
   "armchair",
   "table",
+  "filing_cabinet",
+  "whiteboard",
   "plant",
-  "office_equipment",
-  "toilet",
-  "sink",
-  "shower"
+  "trashcan"
 ];

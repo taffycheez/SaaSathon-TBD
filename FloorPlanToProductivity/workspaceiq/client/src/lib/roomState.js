@@ -54,6 +54,48 @@ export function addObjectToRoom(room, type) {
   };
 }
 
+export function addOpeningToRoom(room, type) {
+  const collection = type === "window" ? "windows" : "doors";
+  const existingItems = Array.isArray(room?.[collection]) ? room[collection] : [];
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  const wallCount = Math.max(1, walls.length);
+  const seedIndex = existingItems.length;
+  const wallIndex = seedIndex % wallCount;
+  const positions = type === "window" ? [30, 70, 50] : [20, 50, 80];
+  const wall = walls[wallIndex];
+  const ratio = positions[seedIndex % positions.length] / 100;
+
+  if (!wall) {
+    return {
+      ...room,
+      [collection]: [
+        ...existingItems,
+        {
+          x_percent: 50,
+          y_percent: type === "window" ? 12 : 88,
+          rotation_deg: 0
+        }
+      ]
+    };
+  }
+
+  const rotation = normalizeRotation(
+    Math.atan2(wall.y2_percent - wall.y1_percent, wall.x2_percent - wall.x1_percent) * 180 / Math.PI
+  );
+
+  return {
+    ...room,
+    [collection]: [
+      ...existingItems,
+      {
+        x_percent: clampPercent(wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio),
+        y_percent: clampPercent(wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio),
+        rotation_deg: rotation
+      }
+    ]
+  };
+}
+
 export function isDeskLikeFurniture(item) {
   return isDeskType(item?.type);
 }

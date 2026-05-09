@@ -1,4 +1,4 @@
-export default function ScorePanel({ score, breakdown }) {
+export default function ScorePanel({ score, breakdown, advice = [] }) {
   const segmentCount = 10;
   const activeSegments = Math.max(0, Math.min(segmentCount, Math.round(score / 10)));
 
@@ -6,7 +6,7 @@ export default function ScorePanel({ score, breakdown }) {
     <div className="panel-card score-card">
       <div className="score-topline">
         <div>
-          <p className="upload-kicker">Live score</p>
+          <p className="upload-kicker">Live Feng Shui score</p>
           <h2>Productivity score</h2>
         </div>
         <div className="score-badge">{score}</div>
@@ -21,10 +21,21 @@ export default function ScorePanel({ score, breakdown }) {
       </div>
 
       <ul className="score-list">
-        {breakdown.map((item) => (
-          <li key={item}>{item}</li>
+        {breakdown.map((item, index) => (
+          <li key={`${index}-${item}`}>{item}</li>
         ))}
       </ul>
+
+      {advice.length ? (
+        <div className="score-advice">
+          <p className="upload-kicker">How to improve</p>
+          <ul className="score-advice-list">
+            {advice.map((item, index) => (
+              <li key={`${index}-${item}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
