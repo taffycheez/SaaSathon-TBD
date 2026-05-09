@@ -74,6 +74,18 @@ function clampObjectScale(widthPixels, heightPixels, roomBox) {
   };
 }
 
+function getLocalPointFromDrag(event) {
+  const group = event.target.getParent();
+  const stage = event.target.getStage();
+  const pointer = stage?.getPointerPosition();
+
+  if (!group || !pointer) {
+    return null;
+  }
+
+  return group.getAbsoluteTransform().copy().invert().point(pointer);
+}
+
 function getLabel(item, fallbackLabel) {
   return getObjectDefinition(item.type).label || fallbackLabel;
 }
@@ -280,9 +292,20 @@ export default function FloorPlanEditor({
 
   function handleResizeDrag(type, index, event) {
     event.cancelBubble = true;
-    const nextWidth = Math.max(18, event.target.x());
-    const nextHeight = Math.max(14, event.target.y());
+    const localPoint = getLocalPointFromDrag(event);
+    if (!localPoint) {
+      return;
+    }
+
+    const nextWidth = Math.max(18, localPoint.x + 6);
+    const nextHeight = Math.max(14, localPoint.y + 6);
     updatePlacedItem(type, index, clampObjectScale(nextWidth, nextHeight, roomBox));
+  }
+
+  function handleResizeEnd(event) {
+    event.cancelBubble = true;
+    setIsTrashHot(false);
+    event.target.stopDrag();
   }
 
   function moveWall(index, deltaXPercent, deltaYPercent) {
@@ -597,8 +620,10 @@ export default function FloorPlanEditor({
                     onDragStart={(event) => {
                       event.cancelBubble = true;
                       onActionStart?.();
+                      setIsTrashHot(false);
                     }}
                     onDragMove={(event) => handleResizeDrag("furniture", index, event)}
+                    onDragEnd={handleResizeEnd}
                     onMouseDown={(event) => {
                       event.cancelBubble = true;
                     }}
@@ -657,8 +682,10 @@ export default function FloorPlanEditor({
                     onDragStart={(event) => {
                       event.cancelBubble = true;
                       onActionStart?.();
+                      setIsTrashHot(false);
                     }}
                     onDragMove={(event) => handleResizeDrag("desks", index, event)}
+                    onDragEnd={handleResizeEnd}
                     onMouseDown={(event) => {
                       event.cancelBubble = true;
                     }}
