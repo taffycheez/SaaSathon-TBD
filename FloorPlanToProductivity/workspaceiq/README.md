@@ -22,7 +22,23 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-That starts the single supported local setup from one root command:
+That starts the web app:
+
+- `http://localhost:3000` for the Next.js web app
+
+To make localhost use the same analysis source as the deployed site, put this in `web/.env.local`:
+
+```env
+ANALYSIS_WORKER_URL=https://your-render-worker-url
+```
+
+If you want the full stack locally instead, run:
+
+```powershell
+npm.cmd run dev:full
+```
+
+That starts:
 
 - `http://localhost:3000` for the Next.js web app
 - `http://127.0.0.1:8001` for the local Python CV worker
@@ -55,7 +71,9 @@ Start from:
 web/.env.local.example
 ```
 
-The root `npm.cmd run dev` command automatically points the web app at the local worker on `http://127.0.0.1:8001`.
+Use `ANALYSIS_WORKER_URL=https://your-render-worker-url` in `web/.env.local` if you want localhost to match production.
+
+Use `npm.cmd run dev:full` if you want localhost to use the local Python worker instead.
 
 ## Environment variables
 
