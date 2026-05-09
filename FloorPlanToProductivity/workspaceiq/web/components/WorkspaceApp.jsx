@@ -369,12 +369,13 @@ function remapWallsIntoOriginalBounds(walls, analysisBounds) {
     return [];
   }
 
-  return walls.map((wall) => ({
-    x1_percent: remapPercentIntoOriginal(wall.x1_percent, analysisBounds.x_percent, analysisBounds.width_percent),
-    y1_percent: remapPercentIntoOriginal(wall.y1_percent, analysisBounds.y_percent, analysisBounds.height_percent),
-    x2_percent: remapPercentIntoOriginal(wall.x2_percent, analysisBounds.x_percent, analysisBounds.width_percent),
-    y2_percent: remapPercentIntoOriginal(wall.y2_percent, analysisBounds.y_percent, analysisBounds.height_percent)
-  }));
+  return walls.map((wall) => remapWallIntoOriginal(
+    wall,
+    analysisBounds.x_percent,
+    analysisBounds.y_percent,
+    analysisBounds.width_percent,
+    analysisBounds.height_percent
+  ));
 }
 
 function chooseBestWalls(modelRoom, clientDetectedWalls) {
@@ -402,6 +403,36 @@ function remapPercentIntoOriginal(value, startPercent, sizePercent) {
   return clampPercent(startPercent + (clampPercent(value) / 100) * sizePercent);
 }
 
+function remapWallIntoOriginal(wall, startX, startY, widthScale, heightScale) {
+  return {
+    ...wall,
+    x1_percent: remapPercentIntoOriginal(wall.x1_percent, startX, widthScale),
+    y1_percent: remapPercentIntoOriginal(wall.y1_percent, startY, heightScale),
+    x2_percent: remapPercentIntoOriginal(wall.x2_percent, startX, widthScale),
+    y2_percent: remapPercentIntoOriginal(wall.y2_percent, startY, heightScale)
+  };
+}
+
+function remapEdgeItemIntoOriginal(item, startX, startY, widthScale, heightScale) {
+  return item && item.x_percent != null && item.y_percent != null
+    ? {
+        ...item,
+        x_percent: remapPercentIntoOriginal(item.x_percent, startX, widthScale),
+        y_percent: remapPercentIntoOriginal(item.y_percent, startY, heightScale)
+      }
+    : item;
+}
+
+function remapPlacedItemIntoOriginal(item, startX, startY, widthScale, heightScale) {
+  return {
+    ...item,
+    x_percent: remapPercentIntoOriginal(item.x_percent, startX, widthScale),
+    y_percent: remapPercentIntoOriginal(item.y_percent, startY, heightScale),
+    width_percent: clampPercent((Number(item.width_percent) || 0) * (widthScale / 100)),
+    height_percent: clampPercent((Number(item.height_percent) || 0) * (heightScale / 100))
+  };
+}
+
 function remapRoomToOriginalBounds(room, analysisBounds) {
   if (!room || !analysisBounds) {
     return room;
@@ -414,53 +445,19 @@ function remapRoomToOriginalBounds(room, analysisBounds) {
   return {
     ...room,
     walls: Array.isArray(room.walls)
-      ? room.walls.map((wall) => ({
-          ...wall,
-          x1_percent: remapPercentIntoOriginal(wall.x1_percent, startX, safeWidthScale),
-          y1_percent: remapPercentIntoOriginal(wall.y1_percent, startY, safeHeightScale),
-          x2_percent: remapPercentIntoOriginal(wall.x2_percent, startX, safeWidthScale),
-          y2_percent: remapPercentIntoOriginal(wall.y2_percent, startY, safeHeightScale)
-        }))
+      ? room.walls.map((wall) => remapWallIntoOriginal(wall, startX, startY, safeWidthScale, safeHeightScale))
       : room.walls,
     windows: Array.isArray(room.windows)
-      ? room.windows.map((item) =>
-          item && item.x_percent != null && item.y_percent != null
-            ? {
-                ...item,
-                x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
-                y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale)
-              }
-            : item
-        )
+      ? room.windows.map((item) => remapEdgeItemIntoOriginal(item, startX, startY, safeWidthScale, safeHeightScale))
       : room.windows,
     doors: Array.isArray(room.doors)
-      ? room.doors.map((item) =>
-          item && item.x_percent != null && item.y_percent != null
-            ? {
-                ...item,
-                x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
-                y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale)
-              }
-            : item
-        )
+      ? room.doors.map((item) => remapEdgeItemIntoOriginal(item, startX, startY, safeWidthScale, safeHeightScale))
       : room.doors,
     furniture: Array.isArray(room.furniture)
-      ? room.furniture.map((item) => ({
-          ...item,
-          x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
-          y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale),
-          width_percent: clampPercent((Number(item.width_percent) || 0) * (safeWidthScale / 100)),
-          height_percent: clampPercent((Number(item.height_percent) || 0) * (safeHeightScale / 100))
-        }))
+      ? room.furniture.map((item) => remapPlacedItemIntoOriginal(item, startX, startY, safeWidthScale, safeHeightScale))
       : room.furniture,
     desks: Array.isArray(room.desks)
-      ? room.desks.map((item) => ({
-          ...item,
-          x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
-          y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale),
-          width_percent: clampPercent((Number(item.width_percent) || 0) * (safeWidthScale / 100)),
-          height_percent: clampPercent((Number(item.height_percent) || 0) * (safeHeightScale / 100))
-        }))
+      ? room.desks.map((item) => remapPlacedItemIntoOriginal(item, startX, startY, safeWidthScale, safeHeightScale))
       : room.desks
   };
 }
@@ -524,127 +521,6 @@ function normalizeDeskData(data) {
       };
     }),
     notes: Array.isArray(safeData.notes) ? safeData.notes : []
-  };
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function distance(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function pointOnWall(edgeItem, walls) {
-  if (edgeItem && edgeItem.x_percent != null && edgeItem.y_percent != null) {
-    return {
-      x: clampPercent(edgeItem.x_percent),
-      y: clampPercent(edgeItem.y_percent)
-    };
-  }
-  const wall = walls[edgeItem?.wall_index];
-  if (!wall) {
-    return { x: 50, y: 50 };
-  }
-  const ratio = clampPercent(edgeItem?.position_percent) / 100;
-  return {
-    x: wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio,
-    y: wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
-  };
-}
-
-function isNearWindow(desk, windows, walls) {
-  return windows.some((windowItem) => {
-    const anchor = pointOnWall(windowItem, walls);
-    return distance({ x: desk.x_percent, y: desk.y_percent }, anchor) <= 28;
-  });
-}
-
-function isFacingWall(desk, walls) {
-  const rotation = ((desk.rotation_deg % 360) + 360) % 360;
-  const angleVector = rotation >= 315 || rotation < 45
-    ? { x: 1, y: 0 }
-    : rotation < 135
-      ? { x: 0, y: 1 }
-      : rotation < 225
-        ? { x: -1, y: 0 }
-        : { x: 0, y: -1 };
-
-  return walls.some((wall) => {
-    const midPoint = {
-      x: (wall.x1_percent + wall.x2_percent) / 2,
-      y: (wall.y1_percent + wall.y2_percent) / 2
-    };
-    const toWall = {
-      x: midPoint.x - desk.x_percent,
-      y: midPoint.y - desk.y_percent
-    };
-    const dot = angleVector.x * toWall.x + angleVector.y * toWall.y;
-    return dot > 0 && Math.abs(toWall.x) + Math.abs(toWall.y) < 36;
-  });
-}
-
-function hasCorridor(desks) {
-  if (desks.length < 2) {
-    return false;
-  }
-  const sorted = [...desks].sort((a, b) => a.y_percent - b.y_percent);
-  for (let index = 1; index < sorted.length; index += 1) {
-    if (sorted[index].y_percent - sorted[index - 1].y_percent >= 18) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function hasQuietZone(desks, doors, walls) {
-  if (!desks.length || !doors.length) {
-    return false;
-  }
-  const doorPoint = pointOnWall(doors[0], walls);
-  const farDesks = desks.filter(
-    (desk) => distance({ x: desk.x_percent, y: desk.y_percent }, doorPoint) >= 40
-  );
-  return farDesks.length >= Math.max(2, Math.ceil(desks.length / 2));
-}
-
-function computeScore(room) {
-  const desks = room.desks || [];
-  const walls = room.walls || [];
-  const windows = room.windows || [];
-  const doors = room.doors || [];
-  const breakdown = [];
-  let score = 0;
-
-  const nearWindowCount = desks.filter((desk) => isNearWindow(desk, windows, walls)).length;
-  const windowPoints = Math.min(30, nearWindowCount * 10);
-  score += windowPoints;
-  breakdown.push(`${nearWindowCount} desk(s) benefit from natural light: +${windowPoints}`);
-
-  const notFacingWallCount = desks.filter((desk) => !isFacingWall(desk, walls)).length;
-  const facingPoints = Math.min(20, notFacingWallCount * 10);
-  score += facingPoints;
-  breakdown.push(`${notFacingWallCount} desk(s) avoid direct wall-facing orientation: +${facingPoints}`);
-
-  const corridorPoints = hasCorridor(desks) ? 15 : 0;
-  score += corridorPoints;
-  breakdown.push(`${corridorPoints ? "Clear" : "Insufficient"} corridor between desk rows: +${corridorPoints}`);
-
-  const quietPoints = hasQuietZone(desks, doors, walls) ? 15 : 0;
-  score += quietPoints;
-  breakdown.push(`${quietPoints ? "Quiet zone present" : "Quiet zone missing"}: +${quietPoints}`);
-
-  const areaPerDesk =
-    desks.length > 0
-      ? (room.estimated_width_m * room.estimated_height_m) / desks.length
-      : room.estimated_width_m * room.estimated_height_m;
-  const areaPoints = areaPerDesk >= 4 ? 10 : 0;
-  score += areaPoints;
-  breakdown.push(`${areaPerDesk.toFixed(1)} sqm per desk: +${areaPoints}`);
-
-  return {
-    score: clamp(score, 0, 100),
-    breakdown
   };
 }
 
