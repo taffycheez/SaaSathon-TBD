@@ -376,7 +376,6 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
             >
               {isLoading ? "Analysing..." : "Start with a photo"}
             </button>
-            <a className="secondary-link" href="#features">View features</a>
           </div>
         </div>
 
@@ -437,16 +436,22 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
 function Footer() {
   return (
     <footer className="site-footer" id="footer">
-      <div>
-        <p className="eyebrow">WorkspaceIQ</p>
-        <h2>Quick links</h2>
+      <div className="footer-links">
+        <div className="brand-lockup">
+          <span className="brand-mark">WIQ</span>
+          <div>
+            <p className="eyebrow">WorkspaceIQ</p>
+            <h2>Quick links</h2>
+          </div>
+        </div>
+        <nav aria-label="Footer quick links">
+          <a href="#home">Home</a>
+          <a href="#features">Features</a>
+          <a href="#upload">Upload</a>
+          <a href="mailto:hello@workspaceiq.local">Contact</a>
+        </nav>
       </div>
-      <nav aria-label="Footer quick links">
-        <a href="#home">Home</a>
-        <a href="#features">Features</a>
-        <a href="#upload">Upload</a>
-        <a href="mailto:hello@workspaceiq.local">Contact</a>
-      </nav>
+      <p className="copyright">&copy; {new Date().getFullYear()} WorkspaceIQ. All rights reserved.</p>
     </footer>
   );
 }
