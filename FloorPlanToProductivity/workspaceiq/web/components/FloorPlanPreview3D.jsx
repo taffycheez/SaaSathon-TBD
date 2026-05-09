@@ -243,6 +243,35 @@ function disposeObject(object) {
   });
 }
 
+function rotateCameraAroundTarget(camera, controls, deltaRadians) {
+  if (!camera || !controls) {
+    return;
+  }
+
+  const offset = camera.position.clone().sub(controls.target);
+  offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), deltaRadians);
+  camera.position.copy(controls.target.clone().add(offset));
+  camera.lookAt(controls.target);
+  controls.update();
+}
+
+function zoomCamera(camera, controls, scaleDelta) {
+  if (!camera || !controls) {
+    return;
+  }
+
+  const offset = camera.position.clone().sub(controls.target);
+  const nextLength = THREE.MathUtils.clamp(
+    offset.length() * scaleDelta,
+    controls.minDistance || 1,
+    controls.maxDistance || 100
+  );
+  offset.setLength(nextLength);
+  camera.position.copy(controls.target.clone().add(offset));
+  camera.lookAt(controls.target);
+  controls.update();
+}
+
 export default function FloorPlanPreview3D({ room }) {
   const mountRef = useRef(null);
   const rendererRef = useRef(null);
@@ -268,6 +297,7 @@ export default function FloorPlanPreview3D({ room }) {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(width, height);
+      renderer.domElement.style.touchAction = "none";
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       mountRef.current.appendChild(renderer.domElement);
@@ -419,6 +449,30 @@ export default function FloorPlanPreview3D({ room }) {
     rendererRef.current?.render(scene, cameraRef.current);
   }, [room, timeOfDay]);
 
+  function rotateView(deltaDegrees) {
+    rotateCameraAroundTarget(
+      cameraRef.current,
+      controlsRef.current,
+      (deltaDegrees * Math.PI) / 180
+    );
+    rendererRef.current?.render(sceneRef.current, cameraRef.current);
+  }
+
+  function zoomView(scaleDelta) {
+    zoomCamera(cameraRef.current, controlsRef.current, scaleDelta);
+    rendererRef.current?.render(sceneRef.current, cameraRef.current);
+  }
+
+  function resetView() {
+    if (!cameraRef.current || !controlsRef.current) {
+      return;
+    }
+    cameraRef.current.position.set(7.5, 7.2, 7.5);
+    controlsRef.current.target.set(0, 0.8, 0);
+    controlsRef.current.update();
+    rendererRef.current?.render(sceneRef.current, cameraRef.current);
+  }
+
   return (
     <div className="panel-card preview3d-card">
       <div className="score-topline">
@@ -457,6 +511,23 @@ export default function FloorPlanPreview3D({ room }) {
               {preset.label}
             </button>
           ))}
+        </div>
+        <div className="preview3d-controls" role="group" aria-label="Adjust 3D camera">
+          <button type="button" className="preview3d-preset" onClick={() => rotateView(-15)}>
+            Rotate Left
+          </button>
+          <button type="button" className="preview3d-preset" onClick={() => rotateView(15)}>
+            Rotate Right
+          </button>
+          <button type="button" className="preview3d-preset" onClick={() => zoomView(0.88)}>
+            Zoom In
+          </button>
+          <button type="button" className="preview3d-preset" onClick={() => zoomView(1.14)}>
+            Zoom Out
+          </button>
+          <button type="button" className="preview3d-preset" onClick={resetView}>
+            Reset View
+          </button>
         </div>
         <div className="preview3d-meta">
           <span>North {northDirection} deg</span>

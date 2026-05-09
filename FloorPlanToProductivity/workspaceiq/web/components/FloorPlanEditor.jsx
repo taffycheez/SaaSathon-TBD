@@ -475,6 +475,11 @@ export default function FloorPlanEditor({
       ? northAngleFromPoint(pointerToBoundedRoomPosition(dragState.point, roomBoxRef.current, roomSize.bounds, false), roomSize.bounds)
       : normalizeRotation(room?.north_direction_deg);
 
+  function nudgeNorthAngle(deltaDegrees) {
+    const baseAngle = normalizeRotation(room?.north_direction_deg);
+    onApplyNorthDirection?.(baseAngle + deltaDegrees);
+  }
+
   dragStateRef.current = dragState;
   roomBoxRef.current = roomBox;
   wallsRef.current = walls;
@@ -1494,6 +1499,17 @@ export default function FloorPlanEditor({
           <div className="wall-action-copy">
             <strong>Set north</strong>
             <small>Drag anywhere on the room to rotate the compass. The 3D daylight will use this north direction.</small>
+          </div>
+          <div className="object-scale-actions">
+            <button type="button" className="object-scale-reset" onClick={() => nudgeNorthAngle(-15)}>
+              Turn Left 15°
+            </button>
+            <button type="button" className="object-scale-reset" onClick={() => onApplyNorthDirection?.(0)}>
+              Face Up
+            </button>
+            <button type="button" className="object-scale-reset" onClick={() => nudgeNorthAngle(15)}>
+              Turn Right 15°
+            </button>
           </div>
         </div>
       ) : null}
