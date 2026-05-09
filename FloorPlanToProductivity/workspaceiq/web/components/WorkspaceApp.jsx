@@ -20,6 +20,7 @@ import {
   normalizeRotation,
   normalizeShapeKind
 } from "@/lib/roomState";
+import { normalizeObjectScale } from "@/lib/roomGeometry";
 
 const API_BASE_URL = "/api";
 
@@ -516,6 +517,7 @@ function normalizeDeskData(data) {
         y_percent: clampPercent(desk?.y_percent),
         width_percent: Math.max(2, clampPercent(desk?.width_percent ?? definition.width_percent)),
         height_percent: Math.max(2, clampPercent(desk?.height_percent ?? definition.height_percent)),
+        scale: normalizeObjectScale(desk?.scale),
         rotation_deg: normalizeRotation(desk?.rotation_deg),
         footprint_points: normalizeFootprintPoints(desk?.footprint_points, definition.footprint_points)
       };

@@ -5,12 +5,15 @@ import {
   addObjectToRoom,
   createDoorForRoom,
   createWindowForRoom,
+  normalizeFurnitureItem,
   normalizeRoomLayout,
   pointOnWall,
+  updatePlacedObject,
   updateWallEndpoint,
   updateEdgeItemPosition,
   updatePlacedObjectPosition
 } from "./roomState.js";
+import { getScaledItemDimensions } from "./roomGeometry.js";
 
 const BASE_ROOM = {
   estimated_width_m: 8,
@@ -92,6 +95,7 @@ test("addObjectToRoom chooses a non-overlapping catalog placement", () => {
   const secondRoom = addObjectToRoom(firstRoom, "desk");
 
   assert.equal(secondRoom.desks.length, 2);
+  assert.equal(secondRoom.desks[0].scale, 1);
   assert.notDeepEqual(
     {
       x_percent: secondRoom.desks[0].x_percent,
@@ -102,6 +106,64 @@ test("addObjectToRoom chooses a non-overlapping catalog placement", () => {
       y_percent: secondRoom.desks[1].y_percent
     }
   );
+});
+
+test("normalizeFurnitureItem preserves individual scale factors", () => {
+  const item = normalizeFurnitureItem({
+    type: "desk",
+    width_percent: 10,
+    height_percent: 6,
+    scale: 1.5
+  });
+
+  assert.equal(item.scale, 1.5);
+  assert.deepEqual(getScaledItemDimensions(item), {
+    width_percent: 15,
+    height_percent: 9
+  });
+});
+
+test("updatePlacedObject validates scaled furniture footprints", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    desks: [
+      normalizeFurnitureItem({
+        type: "desk",
+        x_percent: 50,
+        y_percent: 50,
+        width_percent: 60,
+        height_percent: 20
+      })
+    ]
+  });
+
+  const rejected = updatePlacedObject(room, "desks", 0, { scale: 2 });
+  assert.equal(rejected.desks[0].scale, 1);
+});
+
+test("updatePlacedObject nudges wall-touching furniture while scaling", () => {
+  const firstDesk = normalizeFurnitureItem({
+    type: "desk",
+    x_percent: 30,
+    y_percent: 3,
+    width_percent: 10,
+    height_percent: 6
+  });
+  const secondDesk = normalizeFurnitureItem({
+    type: "desk",
+    x_percent: 43,
+    y_percent: 20,
+    width_percent: 10,
+    height_percent: 6
+  });
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    desks: [firstDesk, secondDesk]
+  });
+
+  const updated = updatePlacedObject(room, "desks", 0, { scale: 1.5 });
+  assert.equal(updated.desks[0].scale, 1.5);
+  assert.ok(updated.desks[0].y_percent > firstDesk.y_percent);
 });
 
 test("updatePlacedObjectPosition rejects overlapping moves", () => {

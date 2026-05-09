@@ -4,6 +4,8 @@ const DEFAULT_OPENING_WIDTH_PERCENT = 10;
 const ELLIPSE_SEGMENTS = 12;
 const WALL_ANGLE_INCREMENT_DEGREES = 45;
 const OPENING_WALL_BIAS = 0.75;
+const MIN_OBJECT_SCALE = 0.5;
+const MAX_OBJECT_SCALE = 2;
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -15,6 +17,22 @@ function normalizeRotation(value) {
     return 0;
   }
   return ((numeric % 360) + 360) % 360;
+}
+
+export function normalizeObjectScale(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 1;
+  }
+  return Math.max(MIN_OBJECT_SCALE, Math.min(MAX_OBJECT_SCALE, numeric));
+}
+
+export function getScaledItemDimensions(item) {
+  const scale = normalizeObjectScale(item?.scale);
+  return {
+    width_percent: (Number(item?.width_percent) || 0) * scale,
+    height_percent: (Number(item?.height_percent) || 0) * scale
+  };
 }
 
 function distanceBetweenPoints(a, b) {
@@ -472,8 +490,7 @@ function rotateLocalPoint(point, rotationDeg) {
 }
 
 export function getItemFootprint(item) {
-  const width = Number(item?.width_percent) || 0;
-  const height = Number(item?.height_percent) || 0;
+  const { width_percent: width, height_percent: height } = getScaledItemDimensions(item);
   const rotation = normalizeRotation(item?.rotation_deg);
 
   let localPoints;
@@ -502,8 +519,8 @@ export function getItemFootprint(item) {
   return localPoints.map((point) => {
     const rotated = rotateLocalPoint(point, rotation);
     return {
-      x: clampPercent((Number(item?.x_percent) || 0) + rotated.x),
-      y: clampPercent((Number(item?.y_percent) || 0) + rotated.y)
+      x: (Number(item?.x_percent) || 0) + rotated.x,
+      y: (Number(item?.y_percent) || 0) + rotated.y
     };
   });
 }
@@ -721,4 +738,44 @@ export function findFirstFreeObjectPlacement(room, item, collectionType, exclude
       y_percent: clampPercent(item.y_percent)
     }
   );
+}
+
+export function findNearestValidObjectPlacement(room, item, collectionType, excludedIndex = -1) {
+  const origin = {
+    x_percent: clampPercent(item?.x_percent),
+    y_percent: clampPercent(item?.y_percent)
+  };
+  const candidates = [origin];
+
+  for (let radius = 1; radius <= 30; radius += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      candidates.push({
+        x_percent: clampPercent(origin.x_percent + dx),
+        y_percent: clampPercent(origin.y_percent - radius)
+      });
+      candidates.push({
+        x_percent: clampPercent(origin.x_percent + dx),
+        y_percent: clampPercent(origin.y_percent + radius)
+      });
+    }
+
+    for (let dy = -radius + 1; dy < radius; dy += 1) {
+      candidates.push({
+        x_percent: clampPercent(origin.x_percent - radius),
+        y_percent: clampPercent(origin.y_percent + dy)
+      });
+      candidates.push({
+        x_percent: clampPercent(origin.x_percent + radius),
+        y_percent: clampPercent(origin.y_percent + dy)
+      });
+    }
+  }
+
+  return candidates.find((candidate) =>
+    isPlacementValid(room, collectionType, excludedIndex, {
+      ...item,
+      x_percent: candidate.x_percent,
+      y_percent: candidate.y_percent
+    })
+  ) || null;
 }

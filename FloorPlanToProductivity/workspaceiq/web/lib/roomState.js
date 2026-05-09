@@ -1,6 +1,8 @@
 import { canonicalizeObjectType, getObjectDefinition, isDeskType } from "./objectCatalog.js";
 import {
   findFirstFreeObjectPlacement,
+  findNearestValidObjectPlacement,
+  normalizeObjectScale,
   isPlacementValid,
   normalizeWallGraph,
   snapEdgeItemToWalls
@@ -75,6 +77,7 @@ export function createPlacedObject(type, seedIndex = 0) {
     y_percent: 28 + (Math.floor(seedIndex / 4) % 3) * 16,
     width_percent: definition.width_percent,
     height_percent: definition.height_percent,
+    scale: 1,
     rotation_deg: 0,
     footprint_points: normalizeFootprintPoints(definition.footprint_points, definition.footprint_points)
   };
@@ -112,6 +115,7 @@ export function normalizeFurnitureItem(item) {
     y_percent: clampPercent(item?.y_percent),
     width_percent: Math.max(2, clampPercent(item?.width_percent ?? definition.width_percent)),
     height_percent: Math.max(2, clampPercent(item?.height_percent ?? definition.height_percent)),
+    scale: normalizeObjectScale(item?.scale),
     rotation_deg: normalizeRotation(item?.rotation_deg),
     footprint_points: normalizeFootprintPoints(item?.footprint_points, definition.footprint_points)
   };
@@ -184,6 +188,10 @@ export function updateEdgeItemPosition(room, collectionType, index, pointerPosit
 }
 
 export function updatePlacedObjectPosition(room, collectionType, index, pointerPosition) {
+  return updatePlacedObject(room, collectionType, index, pointerPosition);
+}
+
+export function updatePlacedObject(room, collectionType, index, updates) {
   const items = Array.isArray(room?.[collectionType]) ? room[collectionType] : [];
   const currentItem = items[index];
   if (!currentItem) {
@@ -191,10 +199,37 @@ export function updatePlacedObjectPosition(room, collectionType, index, pointerP
   }
 
   const nextItem = {
-    ...currentItem,
-    x_percent: clampPercent(pointerPosition?.x_percent),
-    y_percent: clampPercent(pointerPosition?.y_percent)
+    ...currentItem
   };
+
+  if (updates?.x_percent != null) {
+    nextItem.x_percent = clampPercent(updates.x_percent);
+  }
+  if (updates?.y_percent != null) {
+    nextItem.y_percent = clampPercent(updates.y_percent);
+  }
+  if (updates?.rotation_deg != null) {
+    nextItem.rotation_deg = normalizeRotation(updates.rotation_deg);
+  }
+  if (updates?.scale != null) {
+    nextItem.scale = normalizeObjectScale(updates.scale);
+  }
+  if (updates?.width_percent != null) {
+    nextItem.width_percent = Math.max(2, clampPercent(updates.width_percent));
+  }
+  if (updates?.height_percent != null) {
+    nextItem.height_percent = Math.max(2, clampPercent(updates.height_percent));
+  }
+
+  if (!isPlacementValid(room, collectionType, index, nextItem)) {
+    if (updates?.scale != null || updates?.width_percent != null || updates?.height_percent != null) {
+      const placement = findNearestValidObjectPlacement(room, nextItem, collectionType, index);
+      if (placement) {
+        nextItem.x_percent = placement.x_percent;
+        nextItem.y_percent = placement.y_percent;
+      }
+    }
+  }
 
   if (!isPlacementValid(room, collectionType, index, nextItem)) {
     return room;
