@@ -261,42 +261,144 @@ button:disabled {
   background-size: 38px 38px;
 }
 
-.mini-desk,
-.mini-window,
-.mini-door {
+.mini-plan-glow {
   position: absolute;
-  display: block;
-  border-radius: 6px;
+  inset: 12% 8% auto auto;
+  width: 34%;
+  height: 30%;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(244, 207, 119, 0.26), rgba(244, 207, 119, 0));
+  filter: blur(4px);
+  pointer-events: none;
 }
 
-.mini-desk {
+.mini-object,
+.mini-opening {
+  position: absolute;
+  display: block;
+  transition:
+    left 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 700ms ease,
+    background-color 700ms ease,
+    border-color 700ms ease,
+    box-shadow 700ms ease;
+  will-change: left, top, width, height, transform, opacity;
+}
+
+.mini-object {
+  border-radius: 10px;
+  transform-origin: center;
+}
+
+.mini-object--desk {
   width: 58px;
   height: 34px;
   background: #b9d8f2;
   border: 2px solid var(--blue);
+  box-shadow: 0 8px 16px rgba(62, 123, 182, 0.16);
 }
 
-.desk-1 { left: 16%; top: 20%; }
-.desk-2 { left: 40%; top: 20%; }
-.desk-3 { left: 64%; top: 20%; }
-.desk-4 { left: 16%; top: 58%; }
-.desk-5 { left: 40%; top: 58%; }
-.desk-6 { left: 64%; top: 58%; }
+.mini-object--table {
+  width: 92px;
+  height: 62px;
+  border-radius: 999px;
+  background: #d7eadc;
+  border: 2px solid #76a98a;
+  box-shadow: 0 10px 18px rgba(50, 98, 76, 0.12);
+}
+
+.mini-object--plant {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #1f7a5a;
+  border: 3px solid #dff3e8;
+  box-shadow: 0 0 0 4px rgba(31, 122, 90, 0.14);
+}
+
+.mini-object--zone {
+  width: 80px;
+  height: 50px;
+  border-radius: 16px;
+  background: rgba(31, 122, 90, 0.12);
+  border: 1px dashed rgba(31, 122, 90, 0.42);
+}
+
+.mini-object--band {
+  width: 76%;
+  height: 18%;
+  border-radius: 18px;
+  background: linear-gradient(90deg, rgba(31, 122, 90, 0.18), rgba(31, 122, 90, 0.06));
+  border: 1px solid rgba(31, 122, 90, 0.16);
+}
+
+.mini-opening {
+  border-radius: 999px;
+}
 
 .mini-window {
-  left: 12%;
   top: -4px;
-  width: 34%;
   height: 8px;
   background: var(--blue);
+  box-shadow: 0 0 0 4px rgba(62, 123, 182, 0.12);
 }
 
 .mini-door {
-  right: -4px;
-  bottom: 18%;
   width: 8px;
-  height: 20%;
   background: #9a6b3f;
+  box-shadow: 0 0 0 4px rgba(154, 107, 63, 0.12);
+}
+
+.mini-plan-caption {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 12px 24px rgba(23, 32, 47, 0.08);
+}
+
+.mini-plan-caption strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.mini-plan-caption span {
+  max-width: 220px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.mini-scene-pips {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mini-scene-pips span {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #d4ddd8;
+  transition: transform 280ms ease, background-color 280ms ease, width 280ms ease;
+}
+
+.mini-scene-pips span.is-active {
+  width: 28px;
+  background: var(--accent);
 }
 
 .mini-insights {
@@ -312,6 +414,15 @@ button:disabled {
   color: var(--muted);
   font-weight: 750;
   text-align: center;
+  transition: transform 420ms ease, background-color 420ms ease, color 420ms ease;
+}
+
+.mini-insights span:nth-child(2) {
+  transition-delay: 90ms;
+}
+
+.mini-insights span:nth-child(3) {
+  transition-delay: 180ms;
 }
 
 .feature-section {

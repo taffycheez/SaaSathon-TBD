@@ -59,6 +59,69 @@ const WALL_DETECTION_SETTINGS = {
   maxSegmentGapPx: 12
 };
 
+const HERO_LAYOUT_SCENES = [
+  {
+    id: "focus",
+    label: "Focus-heavy",
+    score: 86,
+    insights: ["Light +24", "Flow +16", "Quiet +20"],
+    windows: [{ left: "12%", width: "30%" }, { left: "56%", width: "18%" }],
+    doors: [{ side: "right", top: "62%", height: "18%" }],
+    objects: [
+      { id: "desk-a", kind: "desk", left: "14%", top: "20%", rotate: "0deg" },
+      { id: "desk-b", kind: "desk", left: "40%", top: "20%", rotate: "0deg" },
+      { id: "desk-c", kind: "desk", left: "66%", top: "20%", rotate: "0deg" },
+      { id: "desk-d", kind: "desk", left: "14%", top: "60%", rotate: "0deg" },
+      { id: "desk-e", kind: "desk", left: "40%", top: "60%", rotate: "0deg" },
+      { id: "desk-f", kind: "desk", left: "66%", top: "60%", rotate: "0deg" },
+      { id: "table", kind: "zone", left: "43%", top: "42%", width: "15%", height: "10%", opacity: 0.22 },
+      { id: "plant-a", kind: "plant", left: "8%", top: "84%" },
+      { id: "plant-b", kind: "plant", left: "84%", top: "10%" },
+      { id: "quiet-band", kind: "band", left: "9%", top: "10%", width: "74%", height: "22%", opacity: 0.85 }
+    ]
+  },
+  {
+    id: "balanced",
+    label: "Balanced",
+    score: 82,
+    insights: ["Light +20", "Flow +15", "Team +14"],
+    windows: [{ left: "16%", width: "26%" }, { left: "60%", width: "20%" }],
+    doors: [{ side: "right", top: "54%", height: "20%" }],
+    objects: [
+      { id: "desk-a", kind: "desk", left: "18%", top: "22%", rotate: "0deg" },
+      { id: "desk-b", kind: "desk", left: "43%", top: "22%", rotate: "0deg" },
+      { id: "desk-c", kind: "desk", left: "68%", top: "22%", rotate: "0deg" },
+      { id: "desk-d", kind: "desk", left: "18%", top: "62%", rotate: "0deg" },
+      { id: "desk-e", kind: "desk", left: "68%", top: "62%", rotate: "0deg" },
+      { id: "desk-f", kind: "desk", left: "43%", top: "67%", rotate: "90deg" },
+      { id: "table", kind: "table", left: "40%", top: "44%", width: "20%", height: "14%", rotate: "0deg" },
+      { id: "plant-a", kind: "plant", left: "10%", top: "82%" },
+      { id: "plant-b", kind: "plant", left: "84%", top: "18%" },
+      { id: "quiet-band", kind: "band", left: "10%", top: "12%", width: "78%", height: "18%", opacity: 0.52 }
+    ]
+  },
+  {
+    id: "collab",
+    label: "Collaboration",
+    score: 79,
+    insights: ["Team +22", "Flow +13", "Light +16"],
+    windows: [{ left: "14%", width: "24%" }, { left: "54%", width: "24%" }],
+    doors: [{ side: "right", top: "48%", height: "24%" }],
+    objects: [
+      { id: "desk-a", kind: "desk", left: "16%", top: "24%", rotate: "90deg" },
+      { id: "desk-b", kind: "desk", left: "27%", top: "24%", rotate: "90deg" },
+      { id: "desk-c", kind: "desk", left: "63%", top: "24%", rotate: "90deg" },
+      { id: "desk-d", kind: "desk", left: "74%", top: "24%", rotate: "90deg" },
+      { id: "desk-e", kind: "desk", left: "22%", top: "68%", rotate: "0deg" },
+      { id: "desk-f", kind: "desk", left: "68%", top: "68%", rotate: "0deg" },
+      { id: "table", kind: "table", left: "36%", top: "44%", width: "28%", height: "18%", rotate: "0deg" },
+      { id: "plant-a", kind: "plant", left: "10%", top: "84%" },
+      { id: "plant-b", kind: "plant", left: "84%", top: "12%" },
+      { id: "quiet-band", kind: "band", left: "12%", top: "60%", width: "76%", height: "18%", opacity: 0.3 }
+    ]
+  }
+];
+
 function normalizeWallIndex(value, wallsLength) {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || wallsLength <= 0) {
@@ -601,8 +664,10 @@ export default function WorkspaceApp() {
   const [roomNotes, setRoomNotes] = useState([]);
   const [layoutNotes, setLayoutNotes] = useState([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [heroSceneIndex, setHeroSceneIndex] = useState(0);
 
   const scoreResult = useMemo(() => computeFengShuiScore(room, preferences), [room, preferences]);
+  const heroScene = HERO_LAYOUT_SCENES[heroSceneIndex];
 
   useEffect(() => {
     if (!error) {
@@ -615,6 +680,14 @@ export default function WorkspaceApp() {
 
     return () => window.clearTimeout(timeoutId);
   }, [error]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setHeroSceneIndex((current) => (current + 1) % HERO_LAYOUT_SCENES.length);
+    }, 3200);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   function syncRoomState(nextRoom) {
     roomRef.current = nextRoom;
@@ -856,6 +929,8 @@ export default function WorkspaceApp() {
           onUpload={handleUpload}
           isLoading={isAnalysing}
           error={error}
+          heroScene={heroScene}
+          heroSceneIndex={heroSceneIndex}
         />
       ) : (
         <main className="workspace-layout">
@@ -973,7 +1048,7 @@ function LoadingScreen() {
   );
 }
 
-function HomePage({ uploadRef, onUpload, isLoading, error }) {
+function HomePage({ uploadRef, onUpload, isLoading, error, heroScene, heroSceneIndex }) {
   return (
     <main className="home-page">
       <section className="hero-section" id="home">
@@ -1000,19 +1075,57 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
           <div className="mini-toolbar">
             <span />
             <span />
-            <strong>Score 82</strong>
+            <strong>Score {heroScene.score}</strong>
           </div>
           <div className="mini-plan">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <span key={`desk-${index}`} className={`mini-desk desk-${index + 1}`} />
+            <div className="mini-plan-glow" />
+            {heroScene.windows.map((windowItem, index) => (
+              <span
+                key={`${heroScene.id}-window-${index}`}
+                className="mini-opening mini-window"
+                style={{ left: windowItem.left, width: windowItem.width }}
+              />
             ))}
-            <span className="mini-window" />
-            <span className="mini-door" />
+            {heroScene.doors.map((doorItem, index) => (
+              <span
+                key={`${heroScene.id}-door-${index}`}
+                className="mini-opening mini-door"
+                style={doorItem.side === "right"
+                  ? { right: "-4px", top: doorItem.top, height: doorItem.height }
+                  : { left: "-4px", top: doorItem.top, height: doorItem.height }}
+              />
+            ))}
+            {heroScene.objects.map((item) => (
+              <span
+                key={item.id}
+                className={`mini-object mini-object--${item.kind}`}
+                style={{
+                  left: item.left,
+                  top: item.top,
+                  width: item.width,
+                  height: item.height,
+                  opacity: item.opacity,
+                  transform: item.rotate ? `rotate(${item.rotate})` : undefined
+                }}
+              />
+            ))}
+            <div className="mini-plan-caption">
+              <strong>{heroScene.label}</strong>
+              <span>AI shuffles desks, zones, and light priorities live.</span>
+            </div>
+          </div>
+          <div className="mini-scene-pips" aria-hidden="true">
+            {HERO_LAYOUT_SCENES.map((scene, index) => (
+              <span
+                key={scene.id}
+                className={index === heroSceneIndex ? "is-active" : ""}
+              />
+            ))}
           </div>
           <div className="mini-insights">
-            <span>Light +24</span>
-            <span>Flow +15</span>
-            <span>Focus +18</span>
+            {heroScene.insights.map((insight) => (
+              <span key={insight}>{insight}</span>
+            ))}
           </div>
         </div>
       </section>
