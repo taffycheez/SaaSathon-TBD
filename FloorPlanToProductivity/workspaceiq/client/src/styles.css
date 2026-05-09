@@ -588,6 +588,18 @@ button:disabled {
   background: #ffe3e3;
 }
 
+.upload-screen .error-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 30;
+  width: min(520px, calc(100vw - 36px));
+  transform: translate(-50%, -50%);
+  border: 1px solid #f2b6b6;
+  box-shadow: 0 18px 48px rgba(143, 31, 31, 0.18);
+  text-align: center;
+}
+
 .site-footer {
   width: 100%;
   margin: 20px 0 0;

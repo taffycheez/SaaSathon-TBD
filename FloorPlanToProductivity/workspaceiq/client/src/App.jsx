@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import UploadScreen from "./components/UploadScreen";
 import FloorPlanEditor from "./components/FloorPlanEditor";
 import ControlPanel from "./components/ControlPanel";
@@ -256,6 +256,18 @@ export default function App() {
   const [layoutNotes, setLayoutNotes] = useState([]);
 
   const scoreResult = useMemo(() => computeScore(room, preferences), [room, preferences]);
+
+  useEffect(() => {
+    if (!error) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setError("");
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [error]);
 
   async function handleUpload(file) {
     setIsAnalysing(true);
