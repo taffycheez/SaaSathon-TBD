@@ -3,6 +3,16 @@ import UploadScreen from "./components/UploadScreen";
 import FloorPlanEditor from "./components/FloorPlanEditor";
 import ControlPanel from "./components/ControlPanel";
 import ScorePanel from "./components/ScorePanel";
+import { getObjectDefinition } from "./objectCatalog";
+import {
+  addObjectToRoom,
+  clampPercent,
+  isDeskLikeFurniture,
+  normalizeFootprintPoints,
+  normalizeFurnitureItem,
+  normalizeRotation,
+  normalizeShapeKind
+} from "./lib/roomState";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
@@ -26,18 +36,6 @@ const defaultPreferences = {
   workStyle: "balanced"
 };
 
-function clampPercent(value) {
-  return Math.max(0, Math.min(100, Number(value) || 0));
-}
-
-function normalizeRotation(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return 0;
-  }
-  return ((numeric % 360) + 360) % 360;
-}
-
 function normalizeWallIndex(value, wallsLength) {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || wallsLength <= 0) {
@@ -57,6 +55,11 @@ function normalizeRoomData(data) {
       }))
     : DEFAULT_ROOM.walls;
 
+  const furniture = Array.isArray(safeData.furniture)
+    ? safeData.furniture.map(normalizeFurnitureItem)
+    : [];
+  const detectedDesks = furniture.filter(isDeskLikeFurniture).map(normalizeFurnitureItem);
+
   return {
     ...DEFAULT_ROOM,
     estimated_width_m: Math.max(1, Number(safeData.estimated_width_m) || DEFAULT_ROOM.estimated_width_m),
@@ -74,17 +77,8 @@ function normalizeRoomData(data) {
           position_percent: clampPercent(item?.position_percent)
         }))
       : [],
-    furniture: Array.isArray(safeData.furniture)
-      ? safeData.furniture.map((item) => ({
-          type: typeof item?.type === "string" ? item.type : "desk",
-          x_percent: clampPercent(item?.x_percent),
-          y_percent: clampPercent(item?.y_percent),
-          width_percent: Math.max(2, clampPercent(item?.width_percent ?? 8)),
-          height_percent: Math.max(2, clampPercent(item?.height_percent ?? 5)),
-          rotation_deg: normalizeRotation(item?.rotation_deg)
-        }))
-      : [],
-    desks: [],
+    furniture: furniture.filter((item) => !isDeskLikeFurniture(item)),
+    desks: detectedDesks,
     notes: Array.isArray(safeData.notes) ? safeData.notes : []
   };
 }
@@ -94,11 +88,20 @@ function normalizeDeskData(data) {
   const rawDesks = Array.isArray(data) ? data : Array.isArray(safeData.desks) ? safeData.desks : [];
 
   return {
-    desks: rawDesks.map((desk) => ({
-      x_percent: clampPercent(desk?.x_percent),
-      y_percent: clampPercent(desk?.y_percent),
-      rotation_deg: normalizeRotation(desk?.rotation_deg)
-    })),
+    desks: rawDesks.map((desk) => {
+      const type = normalizeFurnitureItem({ ...desk, type: desk?.type ?? "desk" }).type;
+      const definition = getObjectDefinition(type);
+      return {
+        type,
+        shape_kind: normalizeShapeKind(desk?.shape_kind, definition.shape_kind),
+        x_percent: clampPercent(desk?.x_percent),
+        y_percent: clampPercent(desk?.y_percent),
+        width_percent: Math.max(2, clampPercent(desk?.width_percent ?? definition.width_percent)),
+        height_percent: Math.max(2, clampPercent(desk?.height_percent ?? definition.height_percent)),
+        rotation_deg: normalizeRotation(desk?.rotation_deg),
+        footprint_points: normalizeFootprintPoints(desk?.footprint_points, definition.footprint_points)
+      };
+    }),
     notes: Array.isArray(safeData.notes) ? safeData.notes : []
   };
 }
@@ -249,6 +252,7 @@ export default function App() {
   const [room, setRoom] = useState(DEFAULT_ROOM);
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
+  const [showReferenceImage, setShowReferenceImage] = useState(false);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -268,6 +272,10 @@ export default function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [error]);
+
+  function addObject(type) {
+    setRoom((currentRoom) => addObjectToRoom(currentRoom, type));
+  }
 
   async function handleUpload(file) {
     setIsAnalysing(true);
@@ -289,6 +297,7 @@ export default function App() {
 
       const data = await response.json();
       setImagePreview(base64);
+      setShowReferenceImage(false);
       setRoom(normalizeRoomData(data));
       setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
       setLayoutNotes([]);
@@ -342,6 +351,7 @@ export default function App() {
     setRoom(DEFAULT_ROOM);
     setPreferences(defaultPreferences);
     setImagePreview("");
+    setShowReferenceImage(false);
     setError("");
     setRoomNotes([]);
     setLayoutNotes([]);
@@ -384,7 +394,12 @@ export default function App() {
       ) : (
         <main className="workspace-layout">
           <section className="canvas-column">
-            <FloorPlanEditor room={room} setRoom={setRoom} imagePreview={imagePreview} />
+            <FloorPlanEditor
+              room={room}
+              setRoom={setRoom}
+              imagePreview={imagePreview}
+              showReferenceImage={showReferenceImage}
+            />
             <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} />
           </section>
 
@@ -394,6 +409,9 @@ export default function App() {
               setPreferences={setPreferences}
               room={room}
               updateRoomDimensions={updateRoomDimensions}
+              showReferenceImage={showReferenceImage}
+              setShowReferenceImage={setShowReferenceImage}
+              onAddObject={addObject}
               onGenerateLayout={handleGenerateLayout}
               onReset={resetWorkspace}
               isGenerating={isGenerating}

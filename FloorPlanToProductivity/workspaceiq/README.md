@@ -28,7 +28,27 @@ The local env file should exist at `.env`. It should contain:
 OPENAI_API_KEY=your_key_here
 PORT=3001
 RUN_OPENAI_IMAGE_TESTS=0
+ANALYSIS_PIPELINE=hybrid
+CV_PYTHON_BIN=python
+CV_SEGMENTATION_MODEL=yolov8n-seg.pt
+CV_MIN_WALL_SEGMENTS=3
 ```
+
+## ELI5
+
+Think of the analysis system as three helpers:
+
+- `OpenCV` is the helper that looks for room edges and wall lines.
+- The `segmentation model` is the helper that colors in objects so we get their shapes, not just a rectangle around them.
+- The `LLM` is the helper that reads all that evidence and turns it into tidy room JSON when needed.
+
+So instead of asking one model to "guess everything from the picture", we split the job up:
+
+1. Find the lines for the room.
+2. Find the shapes of desks and furniture.
+3. Turn that into clean structured data for the floor plan editor.
+
+That is why this hybrid approach is more reliable than LLM-only vision.
 
 ## Start The Server
 
@@ -41,6 +61,63 @@ npm.cmd run dev:server
 The backend will start on:
 
 - `http://localhost:3001`
+
+## Optional CV + Segmentation Pipeline
+
+The server now supports three analysis modes:
+
+- `ANALYSIS_PIPELINE=llm`: only use the current LLM-based image analysis
+- `ANALYSIS_PIPELINE=cv`: only use the local Python CV pipeline
+- `ANALYSIS_PIPELINE=hybrid`: try the local CV pipeline first, then fall back to the LLM if needed
+
+`hybrid` is the recommended setting.
+
+### What the CV pipeline does
+
+- extracts room contours and wall segments with `OpenCV`
+- optionally runs a segmentation/object model to detect desks and other objects with footprints
+- returns the same room schema the React editor already understands
+
+### Python setup for the CV pipeline
+
+Important: `cv2` is **not** an npm package. It comes from the Python package `opencv-python`, so installing Node dependencies alone will not install it.
+
+From the server folder:
+
+```powershell
+cd "C:\Users\varya\Documents\Uni\2026S1\SaaSathon-TBD\FloorPlanToProductivity\workspaceiq\server"
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r cv_pipeline\requirements-cv.txt
+```
+
+Or from the workspace root, use the shortcut script:
+
+```powershell
+cd "C:\Users\varya\Documents\Uni\2026S1\SaaSathon-TBD\FloorPlanToProductivity\workspaceiq"
+npm.cmd run cv:setup
+npm.cmd run cv:check
+```
+
+By default, the CV pipeline now uses the standard Ultralytics segmentation model name:
+
+```env
+CV_SEGMENTATION_MODEL=yolov8n-seg.pt
+```
+
+You can still override that with a different model name or path if you want. The goal is that users do not need to hardcode a machine-specific local file path just to get segmentation running.
+
+Examples of what this model would be used for:
+
+- desks
+- L-shaped desks
+- meeting tables
+- armchairs
+- plants
+- office equipment
+- toilets / sinks / showers
+
+If segmentation cannot load, the CV pipeline will still do room contour and wall extraction, but object-shape detection will be limited.
 
 ## Start The Full App
 
@@ -150,6 +227,14 @@ Check:
 - `OPENAI_API_KEY` is set correctly
 - the backend is running
 - the API key has billing/access enabled
+- if you are using `ANALYSIS_PIPELINE=cv` or `hybrid`, make sure Python dependencies are installed
+- if you want object-shape segmentation, make sure `CV_SEGMENTATION_MODEL` points to a real model file
+
+If you see `ModuleNotFoundError: No module named 'cv2'`, the CV pipeline is not installed yet. Run:
+
+```powershell
+npm.cmd run cv:setup
+```
 
 Even on failure, the app should still show fallback notes and a starter layout.
 

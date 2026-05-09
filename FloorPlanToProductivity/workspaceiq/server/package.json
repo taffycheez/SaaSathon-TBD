@@ -7,7 +7,9 @@
     "dev": "node --watch index.js",
     "start": "node index.js",
     "test": "node --test",
-    "test:images": "RUN_OPENAI_IMAGE_TESTS=1 node --test test/imageClassification.integration.test.js"
+    "test:images": "RUN_OPENAI_IMAGE_TESTS=1 node --test test/imageClassification.integration.test.js",
+    "cv:setup": "python -m pip install -r cv_pipeline/requirements-cv.txt",
+    "cv:check": "python -c \"import cv2, numpy, PIL; print('CV deps ok')\""
   },
   "dependencies": {
     "cors": "^2.8.5",

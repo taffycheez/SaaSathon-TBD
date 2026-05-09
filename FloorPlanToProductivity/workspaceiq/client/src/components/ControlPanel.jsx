@@ -1,8 +1,13 @@
+import { OBJECT_PALETTE, getObjectDefinition } from "../objectCatalog";
+
 export default function ControlPanel({
   preferences,
   setPreferences,
   room,
   updateRoomDimensions,
+  showReferenceImage,
+  setShowReferenceImage,
+  onAddObject,
   onGenerateLayout,
   onReset,
   isGenerating
@@ -95,6 +100,34 @@ export default function ControlPanel({
           />
         </label>
       </div>
+
+      <div className="field">
+        <span>Add objects</span>
+        <div className="object-palette">
+          {OBJECT_PALETTE.map((type) => (
+            <button
+              key={type}
+              type="button"
+              className="object-chip"
+              onClick={() => onAddObject(type)}
+            >
+              {getObjectDefinition(type).label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <label className="field toggle-field">
+        <span>Show original floor plan</span>
+        <button
+          type="button"
+          className={`toggle-button ${showReferenceImage ? "active" : ""}`}
+          aria-pressed={showReferenceImage}
+          onClick={() => setShowReferenceImage((current) => !current)}
+        >
+          {showReferenceImage ? "On" : "Off"}
+        </button>
+      </label>
 
       <button type="button" className="primary-button" onClick={onGenerateLayout} disabled={isGenerating}>
         {isGenerating ? "Generating..." : "Generate Layout"}

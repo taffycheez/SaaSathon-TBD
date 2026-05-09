@@ -1,10 +1,11 @@
 import express from "express";
-import { createAiClient, openRouterModel } from "../config.js";
+import { analysisPipeline, createAiClient, openRouterModel } from "../config.js";
 import {
   buildRoomNotes,
   fallbackRoom,
   normalizeRoomDescription
 } from "../lib/analyseRoomHelpers.js";
+import { analyseRoomWithCv, cvAnalysisLooksUsable } from "../lib/analyseRoomCv.js";
 import { analyseRoomImage } from "../lib/analyseRoomVision.js";
 
 const router = express.Router();
@@ -19,7 +20,23 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Image is required." });
     }
 
-    const analysis = await analyseRoomImage(client, image, openRouterModel);
+    let analysis = null;
+
+    if (analysisPipeline === "cv") {
+      analysis = await analyseRoomWithCv(image);
+    } else if (analysisPipeline === "hybrid") {
+      try {
+        analysis = await analyseRoomWithCv(image);
+      } catch (cvError) {
+        console.warn("analyse-room cv pipeline unavailable, falling back to llm", cvError.message);
+      }
+
+      if (!cvAnalysisLooksUsable(analysis)) {
+        analysis = await analyseRoomImage(client, image, openRouterModel);
+      }
+    } else {
+      analysis = await analyseRoomImage(client, image, openRouterModel);
+    }
 
     if (!analysis.is_valid_room) {
       return res.status(422).json({
