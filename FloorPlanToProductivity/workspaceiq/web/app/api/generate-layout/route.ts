@@ -3,7 +3,8 @@ import { extractJson } from "@/lib/server/json";
 import {
   buildFallbackLayout,
   buildLayoutNotes,
-  normalizeDeskArray
+  normalizeDeskArray,
+  optimizeLayout
 } from "@/lib/server/generateLayoutHelpers";
 
 export const dynamic = "force-dynamic";
@@ -54,7 +55,7 @@ work_style=${workStyle}`
     });
 
     const parsed = extractJson(response.output_text);
-    const desks = normalizeDeskArray(parsed);
+    const desks = optimizeLayout(room, normalizeDeskArray(parsed), numPeople, workStyle);
     return Response.json({
       desks,
       notes: buildLayoutNotes(desks, false),
