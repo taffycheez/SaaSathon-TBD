@@ -1315,23 +1315,46 @@ function HomePage({ uploadRef, onUpload, onStartSandbox, isLoading, error, heroS
               />
             ))}
             {heroScene.objects.map((item) => (
-              <span
-                key={item.id}
-                className={`mini-object mini-object--${item.kind}`}
-                style={{
-                  left: item.left,
-                  top: item.top,
-                  width: item.width,
-                  height: item.height,
-                  opacity: item.opacity,
-                  transform: item.rotate ? `rotate(${item.rotate})` : undefined
-                }}
-              />
+              item.kind === "plant" ? (
+                <span
+                  key={item.id}
+                  className="mini-object mini-object--plant-icon"
+                  style={{
+                    "--plant-delay": item.id.endsWith("b") ? "900ms" : "0ms",
+                    left: item.left,
+                    top: item.top,
+                    width: item.width,
+                    height: item.height,
+                    opacity: item.opacity,
+                    transform: item.rotate ? `rotate(${item.rotate})` : undefined
+                  }}
+                >
+                  <svg viewBox="0 0 32 38" aria-hidden="true">
+                    <FloorPlanObjectIcon
+                      item={{ type: "plant" }}
+                      width={32}
+                      height={38}
+                      fill={getObjectDefinition("plant").tone}
+                      stroke={getObjectDefinition("plant").stroke}
+                      strokeWidth={1.8}
+                    />
+                  </svg>
+                </span>
+              ) : (
+                <span
+                  key={item.id}
+                  className={`mini-object mini-object--${item.kind}`}
+                  style={{
+                    left: item.left,
+                    top: item.top,
+                    width: item.width,
+                    height: item.height,
+                    opacity: item.opacity,
+                    transform: item.rotate ? `rotate(${item.rotate})` : undefined
+                  }}
+                />
+              )
             ))}
-            <div className="mini-plan-caption">
-              <strong>{heroScene.label}</strong>
-              <span>AI shuffles desks, zones, and light priorities live.</span>
-            </div>
           </div>
           <div className="mini-scene-pips" aria-hidden="true">
             {HERO_LAYOUT_SCENES.map((scene, index) => (
