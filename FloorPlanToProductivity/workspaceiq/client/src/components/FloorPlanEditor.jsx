@@ -54,10 +54,14 @@ function fromCanvasPoint(point, roomBox, bounds) {
   };
 }
 
-function clampObjectPosition(pointer, roomBox) {
+function getObjectPosition(pointer, roomBox, options = {}) {
+  const { clampToRoom = true } = options;
+  const xPercent = ((pointer.x - roomBox.x) / roomBox.width) * 100;
+  const yPercent = ((pointer.y - roomBox.y) / roomBox.height) * 100;
+
   return {
-    x_percent: Math.max(0, Math.min(100, ((pointer.x - roomBox.x) / roomBox.width) * 100)),
-    y_percent: Math.max(0, Math.min(100, ((pointer.y - roomBox.y) / roomBox.height) * 100))
+    x_percent: clampToRoom ? Math.max(0, Math.min(100, xPercent)) : xPercent,
+    y_percent: clampToRoom ? Math.max(0, Math.min(100, yPercent)) : yPercent
   };
 }
 
@@ -75,8 +79,33 @@ function clampObjectScale(widthPixels, heightPixels, roomBox) {
   };
 }
 
+function getLocalPointFromDrag(event) {
+  const group = event.target.getParent();
+  const stage = event.target.getStage();
+  const pointer = stage?.getPointerPosition();
+
+  if (!group || !pointer) {
+    return null;
+  }
+
+  return group.getAbsoluteTransform().copy().invert().point(pointer);
+}
+
 function getLabel(item, fallbackLabel) {
   return getObjectDefinition(item.type).label || fallbackLabel;
+}
+
+function HistoryIcon({ direction = "undo" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`history-button-icon ${direction === "redo" ? "is-redo" : ""}`}
+      aria-hidden="true"
+    >
+      <polyline points="10 6 4 12 10 18" />
+      <path d="M5 12h8c3.87 0 7 3.13 7 7" />
+    </svg>
+  );
 }
 
 function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label }) {
@@ -157,7 +186,9 @@ export default function FloorPlanEditor({
   showReferenceImage = false,
   onActionStart,
   onUndo,
-  canUndo
+  onRedo,
+  canUndo,
+  canRedo
 }) {
   const shellRef = useRef(null);
   const trashRef = useRef(null);
@@ -176,20 +207,23 @@ export default function FloorPlanEditor({
     width: roomSize.width,
     height: roomSize.height
   };
-  const controlGap = 18;
+  const controlColumn = {
+    x: Math.max(12, roomBox.x - 96),
+    y: Math.max(12, roomBox.y + 6)
+  };
   const trashTarget = {
-    x: Math.max(10, roomBox.x - 58 - controlGap),
-    y: Math.min(CANVAS_HEIGHT - 64, roomBox.y + roomBox.height - 4),
+    x: controlColumn.x,
+    y: Math.min(CANVAS_HEIGHT - 72, controlColumn.y + 120),
     size: 58
+  };
+  const historyControlsStyle = {
+    left: `${controlColumn.x * stageScale}px`,
+    top: `${controlColumn.y * stageScale}px`,
+    transform: `scale(${stageScale})`
   };
   const trashShellStyle = {
     left: `${trashTarget.x * stageScale}px`,
     top: `${trashTarget.y * stageScale}px`,
-    transform: `scale(${stageScale})`
-  };
-  const undoButtonStyle = {
-    left: `${trashTarget.x * stageScale}px`,
-    top: `${(trashTarget.y - 54) * stageScale}px`,
     transform: `scale(${stageScale})`
   };
 
@@ -292,7 +326,11 @@ export default function FloorPlanEditor({
       return;
     }
 
-    previewPlacedItem(type, index, clampObjectPosition(event.target.position(), roomBox));
+    previewPlacedItem(
+      type,
+      index,
+      getObjectPosition(event.target.position(), roomBox, { clampToRoom: false })
+    );
   }
 
   function handlePlacedItemDragEnd(type, index, event) {
@@ -305,14 +343,25 @@ export default function FloorPlanEditor({
       return;
     }
 
-    updatePlacedItem(type, index, clampObjectPosition(position, roomBox));
+    updatePlacedItem(type, index, getObjectPosition(position, roomBox));
   }
 
   function handleResizeDrag(type, index, event) {
     event.cancelBubble = true;
-    const nextWidth = Math.max(18, event.target.x());
-    const nextHeight = Math.max(14, event.target.y());
+    const localPoint = getLocalPointFromDrag(event);
+    if (!localPoint) {
+      return;
+    }
+
+    const nextWidth = Math.max(18, localPoint.x + 6);
+    const nextHeight = Math.max(14, localPoint.y + 6);
     updatePlacedItem(type, index, clampObjectScale(nextWidth, nextHeight, roomBox));
+  }
+
+  function handleResizeEnd(event) {
+    event.cancelBubble = true;
+    setIsTrashHot(false);
+    event.target.stopDrag();
   }
 
   function handleOpeningDragMove(type, openingType, item, index, event) {
@@ -328,7 +377,7 @@ export default function FloorPlanEditor({
       snapOpeningToWall(
         {
           ...item,
-          ...clampObjectPosition(event.target.position(), roomBox)
+          ...getObjectPosition(event.target.position(), roomBox)
         },
         walls,
         openingType
@@ -352,7 +401,7 @@ export default function FloorPlanEditor({
       snapOpeningToWall(
         {
           ...item,
-          ...clampObjectPosition(position, roomBox)
+          ...getObjectPosition(position, roomBox)
         },
         walls,
         openingType
@@ -417,15 +466,28 @@ export default function FloorPlanEditor({
         className="floor-stage-shell"
         style={{ height: CANVAS_HEIGHT * stageScale }}
       >
-        <button
-          type="button"
-          className="undo-button editor-undo-button"
-          style={undoButtonStyle}
-          onClick={onUndo}
-          disabled={!canUndo}
-        >
-          Undo
-        </button>
+        <div className="editor-history-controls" style={historyControlsStyle}>
+          <button
+            type="button"
+            className="undo-button editor-history-button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            aria-label="Undo last change"
+            title="Undo"
+          >
+            <HistoryIcon direction="undo" />
+          </button>
+          <button
+            type="button"
+            className="undo-button editor-history-button"
+            onClick={onRedo}
+            disabled={!canRedo}
+            aria-label="Redo last change"
+            title="Redo"
+          >
+            <HistoryIcon direction="redo" />
+          </button>
+        </div>
         <div ref={trashRef} className="trash-indicator-shell" style={trashShellStyle} aria-hidden="true">
           <div className={`trash-indicator${isTrashHot ? " is-hot" : ""}`}>
             <div className="trash-lid" />
@@ -631,8 +693,10 @@ export default function FloorPlanEditor({
                     onDragStart={(event) => {
                       event.cancelBubble = true;
                       onActionStart?.();
+                      setIsTrashHot(false);
                     }}
                     onDragMove={(event) => handleResizeDrag("furniture", index, event)}
+                    onDragEnd={handleResizeEnd}
                     onMouseDown={(event) => {
                       event.cancelBubble = true;
                     }}
@@ -692,8 +756,10 @@ export default function FloorPlanEditor({
                     onDragStart={(event) => {
                       event.cancelBubble = true;
                       onActionStart?.();
+                      setIsTrashHot(false);
                     }}
                     onDragMove={(event) => handleResizeDrag("desks", index, event)}
+                    onDragEnd={handleResizeEnd}
                     onMouseDown={(event) => {
                       event.cancelBubble = true;
                     }}

@@ -221,6 +221,7 @@ export default function App() {
   const [layoutNotes, setLayoutNotes] = useState([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
   const activeRoom = roomPreview ?? room;
 
   const scoreResult = useMemo(
@@ -240,37 +241,60 @@ export default function App() {
     return () => window.clearTimeout(timeoutId);
   }, [error]);
 
+  function captureHistoryState() {
+    return {
+      room: cloneValue(room),
+      baseRoom: cloneValue(baseRoom),
+      preferences: cloneValue(preferences),
+      imagePreview,
+      showReferenceImage,
+      roomNotes: cloneValue(roomNotes),
+      layoutNotes: cloneValue(layoutNotes)
+    };
+  }
+
+  function restoreHistoryState(snapshot) {
+    setRoomPreview(null);
+    setRoom(snapshot.room);
+    setBaseRoom(snapshot.baseRoom);
+    setPreferences(snapshot.preferences);
+    setImagePreview(snapshot.imagePreview || "");
+    setShowReferenceImage(snapshot.showReferenceImage);
+    setRoomNotes(snapshot.roomNotes || []);
+    setLayoutNotes(snapshot.layoutNotes || []);
+  }
+
   function pushUndoSnapshot() {
+    const snapshot = captureHistoryState();
+    setRedoStack([]);
     setUndoStack((current) => [
       ...current.slice(-39),
-      {
-        room: cloneValue(room),
-        baseRoom: cloneValue(baseRoom),
-        preferences: cloneValue(preferences),
-        showReferenceImage,
-        roomNotes: cloneValue(roomNotes),
-        layoutNotes: cloneValue(layoutNotes)
-      }
+      snapshot
     ]);
   }
 
   function undoLastAction() {
-    setUndoStack((current) => {
-      if (!current.length) {
-        return current;
-      }
+    if (!undoStack.length) {
+      return;
+    }
 
-      const previous = current[current.length - 1];
-      setRoomPreview(null);
-      setRoom(previous.room);
-      setBaseRoom(previous.baseRoom);
-      setPreferences(previous.preferences);
-      setShowReferenceImage(previous.showReferenceImage);
-      setRoomNotes(previous.roomNotes);
-      setLayoutNotes(previous.layoutNotes);
+    const previous = undoStack[undoStack.length - 1];
+    const currentSnapshot = captureHistoryState();
+    setRedoStack((current) => [...current.slice(-39), currentSnapshot]);
+    setUndoStack((current) => current.slice(0, -1));
+    restoreHistoryState(previous);
+  }
 
-      return current.slice(0, -1);
-    });
+  function redoLastAction() {
+    if (!redoStack.length) {
+      return;
+    }
+
+    const next = redoStack[redoStack.length - 1];
+    const currentSnapshot = captureHistoryState();
+    setUndoStack((current) => [...current.slice(-39), currentSnapshot]);
+    setRedoStack((current) => current.slice(0, -1));
+    restoreHistoryState(next);
   }
 
   function addObject(type) {
@@ -319,6 +343,7 @@ export default function App() {
       setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
       setLayoutNotes([]);
       setUndoStack([]);
+      setRedoStack([]);
     } catch (uploadError) {
       setError(uploadError.message || "We couldn't analyse that image. Please try again.");
     } finally {
@@ -385,6 +410,7 @@ export default function App() {
     setRoomNotes([]);
     setLayoutNotes([]);
     setUndoStack([]);
+    setRedoStack([]);
   }
 
   function confirmResetWorkspace() {
@@ -462,7 +488,9 @@ export default function App() {
               showReferenceImage={showReferenceImage}
               onActionStart={pushUndoSnapshot}
               onUndo={undoLastAction}
+              onRedo={redoLastAction}
               canUndo={Boolean(undoStack.length)}
+              canRedo={Boolean(redoStack.length)}
             />
             <ScorePanel
               score={scoreResult.score}
