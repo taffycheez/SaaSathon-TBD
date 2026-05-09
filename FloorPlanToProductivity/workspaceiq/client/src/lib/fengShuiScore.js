@@ -1,3 +1,5 @@
+import { pointOnWall } from "./roomState.js";
+
 const DISRUPTIVE_TYPES = ["office_equipment", "trashcan", "toilet", "sink", "shower"];
 const COLLABORATION_ANCHORS = ["meeting_table", "table", "armchair", "whiteboard"];
 
@@ -47,26 +49,6 @@ function bandScore(value, idealMin, idealMax, minValue, maxValue) {
   }
 
   return 1;
-}
-
-function pointOnWall(edgeItem, walls) {
-  if (edgeItem && edgeItem.x_percent != null && edgeItem.y_percent != null) {
-    return {
-      x: clamp(Number(edgeItem.x_percent) || 0, 0, 100),
-      y: clamp(Number(edgeItem.y_percent) || 0, 0, 100)
-    };
-  }
-
-  const wall = walls[edgeItem.wall_index];
-  if (!wall) {
-    return { x: 50, y: 50 };
-  }
-
-  const ratio = clamp(Number(edgeItem.position_percent) || 0, 0, 100) / 100;
-  return {
-    x: wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio,
-    y: wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
-  };
 }
 
 function nearestPointOnSegment(point, start, end) {

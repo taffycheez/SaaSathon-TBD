@@ -2,10 +2,11 @@ import express from "express";
 import { analysisPipeline, createAiClient, openRouterModel } from "../config.js";
 import {
   buildRoomNotes,
+  mergeRoomAnalyses,
   fallbackRoom,
   normalizeRoomDescription
 } from "../lib/analyseRoomHelpers.js";
-import { analyseRoomWithCv, cvAnalysisLooksUsable } from "../lib/analyseRoomCv.js";
+import { analyseRoomWithCv, cvAnalysisLooksUsable, cvOpeningsLookUsable } from "../lib/analyseRoomCv.js";
 import { analyseRoomImage } from "../lib/analyseRoomVision.js";
 
 const router = express.Router();
@@ -25,13 +26,26 @@ router.post("/", async (req, res) => {
     if (analysisPipeline === "cv") {
       analysis = await analyseRoomWithCv(image);
     } else if (analysisPipeline === "hybrid") {
+      let cvAnalysis = null;
+      let visionAnalysis = null;
+
       try {
-        analysis = await analyseRoomWithCv(image);
+        cvAnalysis = await analyseRoomWithCv(image);
       } catch (cvError) {
         console.warn("analyse-room cv pipeline unavailable, falling back to llm", cvError.message);
       }
 
-      if (!cvAnalysisLooksUsable(analysis)) {
+      if (cvAnalysisLooksUsable(cvAnalysis)) {
+        if (!cvOpeningsLookUsable(cvAnalysis)) {
+          try {
+            visionAnalysis = await analyseRoomImage(client, image, openRouterModel);
+          } catch (visionError) {
+            console.warn("analyse-room vision opening pass unavailable, keeping cv analysis", visionError.message);
+          }
+        }
+
+        analysis = visionAnalysis ? mergeRoomAnalyses(cvAnalysis, visionAnalysis) : cvAnalysis;
+      } else {
         analysis = await analyseRoomImage(client, image, openRouterModel);
       }
     } else {

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   buildRoomNotes,
   fallbackRoom,
+  mergeRoomAnalyses,
+  normalizeEdgeItems,
   normalizeAnalysisResult,
   normalizeRoomDescription
 } from "../lib/analyseRoomHelpers.js";
@@ -43,7 +45,7 @@ test("normalizeRoomDescription clamps bad values into a safe room shape", () => 
     { x1_percent: 100, y1_percent: 100, x2_percent: 0, y2_percent: 100 }
   ]);
   assert.deepEqual(room.windows, [{ wall_index: 2, position_percent: 100 }]);
-  assert.deepEqual(room.doors, [{ wall_index: 2, position_percent: 0 }]);
+  assert.deepEqual(room.doors, [{ wall_index: 1, position_percent: 100 }]);
   assert.deepEqual(room.furniture, [{
     type: "l_shaped_desk",
     shape_kind: "polygon",
@@ -67,6 +69,7 @@ test("fallback room produces useful fallback notes", () => {
   assert.equal(notes.length >= 2, true);
   assert.match(notes[0], /starter room/i);
   assert.deepEqual(fallbackRoom.windows, []);
+  assert.deepEqual(fallbackRoom.doors, []);
 });
 
 test("normalizeAnalysisResult preserves explicit room rejection", () => {
@@ -92,4 +95,54 @@ test("normalizeAnalysisResult accepts wall evidence from borderline floor plans"
   assert.equal(result.is_valid_room, true);
   assert.equal(result.rejection_reason, "");
   assert.equal(result.room.walls.length, 2);
+});
+
+test("normalizeEdgeItems projects point-like openings to the nearest wall and dedupes them", () => {
+  const walls = [
+    { x1_percent: 0, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
+    { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },
+    { x1_percent: 100, y1_percent: 100, x2_percent: 0, y2_percent: 100 },
+    { x1_percent: 0, y1_percent: 100, x2_percent: 0, y2_percent: 0 }
+  ];
+
+  const openings = normalizeEdgeItems([
+    { x_percent: 4, y_percent: 48 },
+    { x_percent: 2, y_percent: 50 },
+    { wall_index: 1, position_percent: 32 }
+  ], walls);
+
+  assert.deepEqual(openings, [
+    { wall_index: 1, position_percent: 32 },
+    { wall_index: 3, position_percent: 50 }
+  ]);
+});
+
+test("mergeRoomAnalyses keeps primary walls and merges secondary openings onto them", () => {
+  const primary = normalizeAnalysisResult({
+    walls: [
+      { x1_percent: 10, y1_percent: 10, x2_percent: 90, y2_percent: 10 },
+      { x1_percent: 90, y1_percent: 10, x2_percent: 90, y2_percent: 90 },
+      { x1_percent: 90, y1_percent: 90, x2_percent: 10, y2_percent: 90 },
+      { x1_percent: 10, y1_percent: 90, x2_percent: 10, y2_percent: 10 }
+    ],
+    doors: [{ wall_index: 3, position_percent: 50 }]
+  });
+  const secondary = normalizeAnalysisResult({
+    walls: [
+      { x1_percent: 0, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
+      { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },
+      { x1_percent: 100, y1_percent: 100, x2_percent: 0, y2_percent: 100 },
+      { x1_percent: 0, y1_percent: 100, x2_percent: 0, y2_percent: 0 }
+    ],
+    windows: [{ wall_index: 0, position_percent: 55 }]
+  });
+
+  const merged = mergeRoomAnalyses(primary, secondary);
+  const mergedDoorWall = merged.room.walls[merged.room.doors[0].wall_index];
+
+  assert.equal(merged.room.walls.length >= 4, true);
+  assert.equal(merged.room.walls.some((wall) => wall.x1_percent === 10 && wall.y1_percent === 10), true);
+  assert.equal(merged.room.doors[0].position_percent, 50);
+  assert.deepEqual(mergedDoorWall, { x1_percent: 10, y1_percent: 90, x2_percent: 10, y2_percent: 10 });
+  assert.deepEqual(merged.room.windows, [{ wall_index: 0, position_percent: 55 }]);
 });

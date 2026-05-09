@@ -490,8 +490,11 @@ button:disabled {
   width: 100%;
 }
 
-.floor-stage {
-  transform-origin: top left;
+.floor-stage-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: none;
 }
 
 .score-badge {

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: workspaceiq-cv-worker
+    runtime: docker
+    plan: free
+    rootDir: FloorPlanToProductivity/workspaceiq/web/python-worker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: CV_SEGMENTATION_MODEL
+        value: yolov8n-seg.pt

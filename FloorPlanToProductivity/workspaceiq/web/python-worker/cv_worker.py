@@ -1,12 +1,12 @@
-from http.server import BaseHTTPRequestHandler
 import base64
 import io
-import json
 import os
 from typing import Dict, List, Tuple
 
 import cv2
 import numpy as np
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from PIL import Image
 
 
@@ -31,6 +31,13 @@ SUPPORTED_TYPES = {
 }
 
 
+class AnalysePayload(BaseModel):
+    image: str
+
+
+app = FastAPI(title="WorkspaceIQ CV Worker")
+
+
 def clamp_percent(value: float) -> float:
     return max(0.0, min(100.0, float(value)))
 
@@ -41,6 +48,21 @@ def normalize_point(x: float, y: float, room_rect: Tuple[int, int, int, int]) ->
         "x_percent": clamp_percent(((x - rx) / max(rw, 1)) * 100),
         "y_percent": clamp_percent(((y - ry) / max(rh, 1)) * 100),
     }
+
+
+def rect_hugs_image_border(rect: Tuple[int, int, int, int], image_shape: Tuple[int, int, int]) -> bool:
+    x, y, w, h = rect
+    image_h, image_w = image_shape[:2]
+    margin = max(3, int(min(image_w, image_h) * 0.015))
+    area_ratio = (w * h) / max(image_w * image_h, 1)
+
+    return (
+        area_ratio >= 0.92
+        and x <= margin
+        and y <= margin
+        and x + w >= image_w - margin
+        and y + h >= image_h - margin
+    )
 
 
 def decode_image(data_url: str) -> np.ndarray:
@@ -70,6 +92,8 @@ def choose_room_contour(image: np.ndarray) -> Tuple[np.ndarray, Tuple[int, int, 
         perimeter = cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, 0.015 * perimeter, True)
         x, y, w, h = cv2.boundingRect(approx)
+        if rect_hugs_image_border((x, y, w, h), image.shape):
+            continue
         candidates.append((area, approx, (x, y, w, h)))
 
     if not candidates:
@@ -313,24 +337,16 @@ def build_response(image: np.ndarray) -> Dict:
     }
 
 
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        try:
-            length = int(self.headers.get("content-length", "0"))
-            raw_body = self.rfile.read(length)
-            payload = json.loads(raw_body or b"{}")
-            image = decode_image(payload.get("image", ""))
-            result = build_response(image)
-            body = json.dumps(result).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        except Exception as error:
-            body = json.dumps({"error": str(error)}).encode("utf-8")
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+@app.get("/health")
+def health():
+    return {"ok": True, "service": "workspaceiq-cv-worker"}
+
+
+@app.post("/")
+@app.post("/analyse-room")
+def analyse_room(payload: AnalysePayload):
+    try:
+        image = decode_image(payload.image)
+        return build_response(image)
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error

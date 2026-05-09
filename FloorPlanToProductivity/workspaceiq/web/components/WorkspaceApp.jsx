@@ -1,9 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import UploadScreen from "@/components/UploadScreen";
 import ControlPanel from "@/components/ControlPanel";
+import FloorPlanEditor from "@/components/FloorPlanEditor";
+import FloorPlanEditorBoundary from "@/components/FloorPlanEditorBoundary";
 import ScorePanel from "@/components/ScorePanel";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import {
@@ -15,10 +16,6 @@ import {
   normalizeRotation,
   normalizeShapeKind
 } from "@/lib/roomState";
-
-const FloorPlanEditor = dynamic(() => import("@/components/FloorPlanEditor"), {
-  ssr: false
-});
 
 const API_BASE_URL = "/api";
 
@@ -39,6 +36,22 @@ const DEFAULT_ROOM = {
 
 const defaultPreferences = {
   numPeople: 8
+};
+
+const DEFAULT_ANALYSIS_BOUNDS = {
+  x_percent: 0,
+  y_percent: 0,
+  width_percent: 100,
+  height_percent: 100
+};
+
+const WALL_DETECTION_SETTINGS = {
+  darkPixelThreshold: 42,
+  maxBrightForeground: 235,
+  minHorizontalLengthRatio: 0.18,
+  minVerticalLengthRatio: 0.18,
+  maxBandGapPx: 4,
+  maxSegmentGapPx: 12
 };
 
 function normalizeWallIndex(value, wallsLength) {
@@ -108,6 +121,316 @@ function normalizeRoomData(data) {
     desks: detectedDesks,
     notes: Array.isArray(safeData.notes) ? safeData.notes : []
   };
+}
+
+function wallTouchesBorder(wall, tolerance = 2) {
+  const values = [wall.x1_percent, wall.x2_percent, wall.y1_percent, wall.y2_percent];
+  return values.some((value) => Math.abs(value) <= tolerance || Math.abs(value - 100) <= tolerance);
+}
+
+function wallsLookLikeOuterBorder(walls) {
+  if (!Array.isArray(walls) || walls.length < 4) {
+    return false;
+  }
+
+  const onBorderCount = walls.filter((wall) => wallTouchesBorder(wall)).length;
+  return onBorderCount >= Math.max(4, walls.length - 1);
+}
+
+function mergeAxisSegments(segments, axis, maxBandGapPx, maxSegmentGapPx) {
+  if (!segments.length) {
+    return [];
+  }
+
+  const sorted = [...segments].sort((a, b) => {
+    if (axis === "horizontal") {
+      return a.anchor - b.anchor || a.start - b.start;
+    }
+    return a.anchor - b.anchor || a.start - b.start;
+  });
+
+  const merged = [];
+  for (const segment of sorted) {
+    const last = merged[merged.length - 1];
+    if (
+      last &&
+      Math.abs(last.anchor - segment.anchor) <= maxBandGapPx &&
+      segment.start <= last.end + maxSegmentGapPx
+    ) {
+      last.start = Math.min(last.start, segment.start);
+      last.end = Math.max(last.end, segment.end);
+      last.anchor = (last.anchor + segment.anchor) / 2;
+      last.count += 1;
+    } else {
+      merged.push({ ...segment, count: 1 });
+    }
+  }
+
+  return merged.map(({ anchor, start, end }) => ({ anchor, start, end }));
+}
+
+function normalizeDetectedWalls(segments, width, height) {
+  return segments.map((segment) => {
+    if (segment.axis === "horizontal") {
+      const yPercent = clampPercent((segment.anchor / Math.max(1, height)) * 100);
+      return {
+        x1_percent: clampPercent((segment.start / Math.max(1, width)) * 100),
+        y1_percent: yPercent,
+        x2_percent: clampPercent((segment.end / Math.max(1, width)) * 100),
+        y2_percent: yPercent
+      };
+    }
+
+    const xPercent = clampPercent((segment.anchor / Math.max(1, width)) * 100);
+    return {
+      x1_percent: xPercent,
+      y1_percent: clampPercent((segment.start / Math.max(1, height)) * 100),
+      x2_percent: xPercent,
+      y2_percent: clampPercent((segment.end / Math.max(1, height)) * 100)
+    };
+  });
+}
+
+function detectAxisWallSegments(binaryMask, width, height, axis) {
+  const segments = [];
+  const minLength =
+    axis === "horizontal"
+      ? Math.max(24, Math.round(width * WALL_DETECTION_SETTINGS.minHorizontalLengthRatio))
+      : Math.max(24, Math.round(height * WALL_DETECTION_SETTINGS.minVerticalLengthRatio));
+
+  if (axis === "horizontal") {
+    for (let y = 0; y < height; y += 1) {
+      let runStart = -1;
+      for (let x = 0; x <= width; x += 1) {
+        const isDark = x < width ? binaryMask[y * width + x] === 1 : false;
+        if (isDark) {
+          if (runStart === -1) {
+            runStart = x;
+          }
+        } else if (runStart !== -1) {
+          const runLength = x - runStart;
+          if (runLength >= minLength) {
+            segments.push({ axis, anchor: y, start: runStart, end: x });
+          }
+          runStart = -1;
+        }
+      }
+    }
+  } else {
+    for (let x = 0; x < width; x += 1) {
+      let runStart = -1;
+      for (let y = 0; y <= height; y += 1) {
+        const isDark = y < height ? binaryMask[y * width + x] === 1 : false;
+        if (isDark) {
+          if (runStart === -1) {
+            runStart = y;
+          }
+        } else if (runStart !== -1) {
+          const runLength = y - runStart;
+          if (runLength >= minLength) {
+            segments.push({ axis, anchor: x, start: runStart, end: y });
+          }
+          runStart = -1;
+        }
+      }
+    }
+  }
+
+  return mergeAxisSegments(
+    segments,
+    axis,
+    WALL_DETECTION_SETTINGS.maxBandGapPx,
+    WALL_DETECTION_SETTINGS.maxSegmentGapPx
+  ).map((segment) => ({ ...segment, axis }));
+}
+
+function detectPlanWallsFromImageData(imageData, width, height) {
+  const pixels = imageData.data;
+
+  function samplePixel(x, y) {
+    const offset = (y * width + x) * 4;
+    return {
+      r: pixels[offset],
+      g: pixels[offset + 1],
+      b: pixels[offset + 2]
+    };
+  }
+
+  const cornerSamples = [
+    samplePixel(0, 0),
+    samplePixel(Math.max(0, width - 1), 0),
+    samplePixel(0, Math.max(0, height - 1)),
+    samplePixel(Math.max(0, width - 1), Math.max(0, height - 1))
+  ];
+
+  const background = cornerSamples.reduce(
+    (accumulator, sample) => ({
+      r: accumulator.r + sample.r / cornerSamples.length,
+      g: accumulator.g + sample.g / cornerSamples.length,
+      b: accumulator.b + sample.b / cornerSamples.length
+    }),
+    { r: 0, g: 0, b: 0 }
+  );
+
+  const binaryMask = new Uint8Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const { r, g, b } = samplePixel(x, y);
+      const distance =
+        Math.abs(r - background.r) +
+        Math.abs(g - background.g) +
+        Math.abs(b - background.b);
+      const brightness = (r + g + b) / 3;
+      binaryMask[y * width + x] =
+        distance > WALL_DETECTION_SETTINGS.darkPixelThreshold || brightness < WALL_DETECTION_SETTINGS.maxBrightForeground
+          ? 1
+          : 0;
+    }
+  }
+
+  const horizontalSegments = detectAxisWallSegments(binaryMask, width, height, "horizontal");
+  const verticalSegments = detectAxisWallSegments(binaryMask, width, height, "vertical");
+  return normalizeDetectedWalls([...horizontalSegments, ...verticalSegments], width, height);
+}
+
+function remapWallsIntoOriginalBounds(walls, analysisBounds) {
+  if (!Array.isArray(walls) || !analysisBounds) {
+    return [];
+  }
+
+  return walls.map((wall) => ({
+    x1_percent: remapPercentIntoOriginal(wall.x1_percent, analysisBounds.x_percent, analysisBounds.width_percent),
+    y1_percent: remapPercentIntoOriginal(wall.y1_percent, analysisBounds.y_percent, analysisBounds.height_percent),
+    x2_percent: remapPercentIntoOriginal(wall.x2_percent, analysisBounds.x_percent, analysisBounds.width_percent),
+    y2_percent: remapPercentIntoOriginal(wall.y2_percent, analysisBounds.y_percent, analysisBounds.height_percent)
+  }));
+}
+
+function chooseBestWalls(modelRoom, clientDetectedWalls) {
+  if (!Array.isArray(clientDetectedWalls) || clientDetectedWalls.length < 4) {
+    return modelRoom;
+  }
+
+  const modelWalls = Array.isArray(modelRoom?.walls) ? modelRoom.walls : [];
+  const shouldPreferClientWalls =
+    modelWalls.length < 4 ||
+    wallsLookLikeOuterBorder(modelWalls) ||
+    clientDetectedWalls.length > modelWalls.length + 1;
+
+  if (!shouldPreferClientWalls) {
+    return modelRoom;
+  }
+
+  return {
+    ...modelRoom,
+    walls: clientDetectedWalls
+  };
+}
+
+function remapPercentIntoOriginal(value, startPercent, sizePercent) {
+  return clampPercent(startPercent + (clampPercent(value) / 100) * sizePercent);
+}
+
+function remapRoomToOriginalBounds(room, analysisBounds) {
+  if (!room || !analysisBounds) {
+    return room;
+  }
+
+  const { x_percent: startX, y_percent: startY, width_percent: widthScale, height_percent: heightScale } = analysisBounds;
+  const safeWidthScale = Math.max(1, widthScale);
+  const safeHeightScale = Math.max(1, heightScale);
+
+  return {
+    ...room,
+    walls: Array.isArray(room.walls)
+      ? room.walls.map((wall) => ({
+          ...wall,
+          x1_percent: remapPercentIntoOriginal(wall.x1_percent, startX, safeWidthScale),
+          y1_percent: remapPercentIntoOriginal(wall.y1_percent, startY, safeHeightScale),
+          x2_percent: remapPercentIntoOriginal(wall.x2_percent, startX, safeWidthScale),
+          y2_percent: remapPercentIntoOriginal(wall.y2_percent, startY, safeHeightScale)
+        }))
+      : room.walls,
+    windows: Array.isArray(room.windows)
+      ? room.windows.map((item) =>
+          item && item.x_percent != null && item.y_percent != null
+            ? {
+                ...item,
+                x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
+                y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale)
+              }
+            : item
+        )
+      : room.windows,
+    doors: Array.isArray(room.doors)
+      ? room.doors.map((item) =>
+          item && item.x_percent != null && item.y_percent != null
+            ? {
+                ...item,
+                x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
+                y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale)
+              }
+            : item
+        )
+      : room.doors,
+    furniture: Array.isArray(room.furniture)
+      ? room.furniture.map((item) => ({
+          ...item,
+          x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
+          y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale),
+          width_percent: clampPercent((Number(item.width_percent) || 0) * (safeWidthScale / 100)),
+          height_percent: clampPercent((Number(item.height_percent) || 0) * (safeHeightScale / 100))
+        }))
+      : room.furniture,
+    desks: Array.isArray(room.desks)
+      ? room.desks.map((item) => ({
+          ...item,
+          x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
+          y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale),
+          width_percent: clampPercent((Number(item.width_percent) || 0) * (safeWidthScale / 100)),
+          height_percent: clampPercent((Number(item.height_percent) || 0) * (safeHeightScale / 100))
+        }))
+      : room.desks
+  };
+}
+
+async function prepareImageForAnalysis(file) {
+  const originalDataUrl = await fileToBase64(file);
+
+  try {
+    const processed = await cropImageToLikelyPlanBounds(originalDataUrl);
+    const analysisImage = await loadImage(processed?.analysisDataUrl || originalDataUrl);
+    const wallCanvas = document.createElement("canvas");
+    wallCanvas.width = analysisImage.naturalWidth || analysisImage.width;
+    wallCanvas.height = analysisImage.naturalHeight || analysisImage.height;
+    const wallContext = wallCanvas.getContext("2d", { willReadFrequently: true });
+
+    let detectedWalls = [];
+    if (wallContext) {
+      wallContext.drawImage(analysisImage, 0, 0, wallCanvas.width, wallCanvas.height);
+      const wallImageData = wallContext.getImageData(0, 0, wallCanvas.width, wallCanvas.height);
+      detectedWalls = remapWallsIntoOriginalBounds(
+        detectPlanWallsFromImageData(wallImageData, wallCanvas.width, wallCanvas.height),
+        processed?.analysisBounds || DEFAULT_ANALYSIS_BOUNDS
+      );
+    }
+
+    return {
+      originalDataUrl,
+      analysisDataUrl: processed?.analysisDataUrl || originalDataUrl,
+      analysisBounds: processed?.analysisBounds || DEFAULT_ANALYSIS_BOUNDS,
+      preprocessingNotes: processed?.preprocessingNotes || [],
+      detectedWalls
+    };
+  } catch {
+    return {
+      originalDataUrl,
+      analysisDataUrl: originalDataUrl,
+      analysisBounds: DEFAULT_ANALYSIS_BOUNDS,
+      preprocessingNotes: [],
+      detectedWalls: []
+    };
+  }
 }
 
 function normalizeDeskData(data) {
@@ -305,12 +628,18 @@ export default function WorkspaceApp() {
     setError("");
 
     try {
-      const base64 = await fileToBase64(file);
+      const {
+        originalDataUrl,
+        analysisDataUrl,
+        analysisBounds,
+        preprocessingNotes,
+        detectedWalls
+      } = await prepareImageForAnalysis(file);
 
       const response = await fetch(`${API_BASE_URL}/analyse-room`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64 })
+        body: JSON.stringify({ image: analysisDataUrl })
       });
 
       if (!response.ok) {
@@ -319,12 +648,19 @@ export default function WorkspaceApp() {
       }
 
       const data = await response.json();
-      const normalizedRoom = normalizeRoomData(data);
-      setImagePreview(base64);
+      const normalizedRoom = chooseBestWalls(
+        remapRoomToOriginalBounds(normalizeRoomData(data), analysisBounds),
+        detectedWalls
+      );
+      setImagePreview(originalDataUrl);
       setShowReferenceImage(false);
       setRoom(normalizedRoom);
       setBaseRoom(normalizedRoom);
-      setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
+      setRoomNotes([
+        ...(Array.isArray(data.notes) ? data.notes : []),
+        ...(detectedWalls.length >= 4 ? ["WorkspaceIQ also extracted wall-line candidates directly from the image to avoid snapping only to the photo border."] : []),
+        ...preprocessingNotes
+      ]);
       setLayoutNotes([]);
     } catch (uploadError) {
       setError(uploadError.message || "We couldn't analyse that image. Please try again.");
@@ -445,12 +781,14 @@ export default function WorkspaceApp() {
       ) : (
         <main className="workspace-layout">
           <section className="canvas-column">
-            <FloorPlanEditor
-              room={room}
-              setRoom={setRoom}
-              imagePreview={imagePreview}
-              showReferenceImage={showReferenceImage}
-            />
+            <FloorPlanEditorBoundary>
+              <FloorPlanEditor
+                room={room}
+                setRoom={setRoom}
+                imagePreview={imagePreview}
+                showReferenceImage={showReferenceImage}
+              />
+            </FloorPlanEditorBoundary>
             <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} />
           </section>
 
@@ -651,4 +989,157 @@ function fileToBase64(file) {
     reader.onerror = () => reject(new Error("Could not read the uploaded file."));
     reader.readAsDataURL(file);
   });
+}
+
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not load the uploaded image."));
+    image.src = dataUrl;
+  });
+}
+
+function findNonBackgroundBounds(imageData, width, height) {
+  const pixels = imageData.data;
+
+  function samplePixel(x, y) {
+    const offset = (y * width + x) * 4;
+    return {
+      r: pixels[offset],
+      g: pixels[offset + 1],
+      b: pixels[offset + 2]
+    };
+  }
+
+  const cornerSamples = [
+    samplePixel(0, 0),
+    samplePixel(Math.max(0, width - 1), 0),
+    samplePixel(0, Math.max(0, height - 1)),
+    samplePixel(Math.max(0, width - 1), Math.max(0, height - 1))
+  ];
+
+  const background = cornerSamples.reduce(
+    (accumulator, sample) => ({
+      r: accumulator.r + sample.r / cornerSamples.length,
+      g: accumulator.g + sample.g / cornerSamples.length,
+      b: accumulator.b + sample.b / cornerSamples.length
+    }),
+    { r: 0, g: 0, b: 0 }
+  );
+
+  function isForeground(x, y) {
+    const { r, g, b } = samplePixel(x, y);
+    const distance =
+      Math.abs(r - background.r) +
+      Math.abs(g - background.g) +
+      Math.abs(b - background.b);
+    const brightness = (r + g + b) / 3;
+    return distance > 45 || brightness < 220;
+  }
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!isForeground(x, y)) {
+        continue;
+      }
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return null;
+  }
+
+  const paddingX = Math.max(6, Math.round(width * 0.02));
+  const paddingY = Math.max(6, Math.round(height * 0.02));
+
+  return {
+    x: Math.max(0, minX - paddingX),
+    y: Math.max(0, minY - paddingY),
+    width: Math.min(width, maxX - minX + 1 + paddingX * 2),
+    height: Math.min(height, maxY - minY + 1 + paddingY * 2)
+  };
+}
+
+async function cropImageToLikelyPlanBounds(dataUrl) {
+  const image = await loadImage(dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+
+  if (!context) {
+    throw new Error("Could not prepare the uploaded image.");
+  }
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const bounds = findNonBackgroundBounds(imageData, canvas.width, canvas.height);
+
+  if (!bounds) {
+    return {
+      analysisDataUrl: dataUrl,
+      analysisBounds: DEFAULT_ANALYSIS_BOUNDS,
+      preprocessingNotes: []
+    };
+  }
+
+  const areaRatio = (bounds.width * bounds.height) / Math.max(canvas.width * canvas.height, 1);
+  const hugsEdge =
+    bounds.x <= 2 &&
+    bounds.y <= 2 &&
+    bounds.x + bounds.width >= canvas.width - 2 &&
+    bounds.y + bounds.height >= canvas.height - 2;
+
+  if (areaRatio >= 0.94 || hugsEdge) {
+    return {
+      analysisDataUrl: dataUrl,
+      analysisBounds: DEFAULT_ANALYSIS_BOUNDS,
+      preprocessingNotes: []
+    };
+  }
+
+  const croppedCanvas = document.createElement("canvas");
+  croppedCanvas.width = bounds.width;
+  croppedCanvas.height = bounds.height;
+  const croppedContext = croppedCanvas.getContext("2d");
+
+  if (!croppedContext) {
+    throw new Error("Could not prepare the cropped analysis image.");
+  }
+
+  croppedContext.drawImage(
+    canvas,
+    bounds.x,
+    bounds.y,
+    bounds.width,
+    bounds.height,
+    0,
+    0,
+    bounds.width,
+    bounds.height
+  );
+
+  return {
+    analysisDataUrl: croppedCanvas.toDataURL("image/png"),
+    analysisBounds: {
+      x_percent: (bounds.x / canvas.width) * 100,
+      y_percent: (bounds.y / canvas.height) * 100,
+      width_percent: (bounds.width / canvas.width) * 100,
+      height_percent: (bounds.height / canvas.height) * 100
+    },
+    preprocessingNotes: [
+      "WorkspaceIQ cropped obvious outer margins before analysis so walls are less likely to snap to the image border."
+    ]
+  };
 }

@@ -29,14 +29,20 @@ export const analyseRoomPrompt = [
   "Do not simplify a multi-room floor plan into one empty rectangle.",
   "If a bathroom, restroom, WC, toilet room, ensuite, or shower room is visible, include the enclosing bathroom partition walls and place visible bathroom fixtures as toilet, sink, and/or shower objects inside that room.",
   "If the bathroom is labeled but fixtures are unclear, place a conservative toilet or sink object near the center of that labeled bathroom room.",
-  "If only two or three wall edges are clear, return those clear walls and complete the likely perimeter from the actual drawn room lines, not the image edge.",
+  "If only some wall edges are clear, return the clear outer walls and any visible interior partition walls. Prefer partial but real geometry over inventing a full rectangle.",
+  "After returning walls, do a second explicit opening pass wall by wall. For each returned wall, decide whether there are visible doors, windows, glazing strips, swing arcs, labeled openings, or clear wall gaps on that specific wall.",
+  "If a floor plan already shows a gap or opening in a drawn wall, preserve it on the correct nearest wall instead of moving it to the top wall or clustering openings together.",
+  "Do not default openings to wall_index 0. Spread openings across different wall_index values only when the image actually shows them on different walls.",
+  "Return the actual outer perimeter and visible inner partition walls for multi-room plans, corridors, bathrooms, alcoves, and irregular shapes. Do not collapse them into one large rectangular room.",
+  "Interior doors may be on interior partition walls. Windows are usually on exterior walls, but only return them where the plan visibly shows them.",
   "For windows, return a window only when a visible window symbol, glazing line, labeled window, or clear wall opening is present on a wall.",
   "Do not invent windows, do not spread windows evenly, and return windows: [] when no window is visible.",
   "For doors, actively inspect every wall for swing arcs, quarter-circle arcs, doorway gaps, hinge marks, door leaf lines, labels, or clear wall openings; return a door at the nearest wall_index and position_percent only when one of those visible door cues is present.",
+  "If there are multiple doors or windows, return each one on the correct nearest wall_index with distinct position_percent values; do not stack them at the same wall/location unless the image truly shows that.",
   "For furniture, explicitly detect existing desks, L-shaped desks, meeting tables with chairs, individual chairs, office chairs, armchairs, tables, file cabinets, whiteboards, plants, potted plants, trashcans, toilets, sinks, showers, and similar office or bathroom objects when visible.",
   "If multiple chairs, plants, trashcans, bathroom fixtures, or room objects are visible, return each one separately.",
   "If unsure, choose the closest allowed type and a simple footprint.",
-  "If the exact room shape cannot be inferred, still set is_valid_room to true and return a simple rectangular wall outline around the likely drawn room area.",
+  "Never replace a visible irregular or multi-room plan with a single four-wall box just because the full shape is hard to infer.",
   "Set is_valid_room to false only when there is no credible room, interior, workspace, or floor-plan evidence."
 ].join(" ");
 

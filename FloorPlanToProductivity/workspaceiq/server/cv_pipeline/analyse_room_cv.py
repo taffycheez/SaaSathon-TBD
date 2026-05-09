@@ -138,13 +138,32 @@ def wall_midpoint(wall: Dict) -> Tuple[float, float]:
     )
 
 
+def nearest_point_on_segment(point: Tuple[float, float], wall: Dict) -> Tuple[float, float]:
+    px, py = point
+    dx = wall["x2_percent"] - wall["x1_percent"]
+    dy = wall["y2_percent"] - wall["y1_percent"]
+    length_squared = dx * dx + dy * dy
+
+    if length_squared <= 0:
+        return (wall["x1_percent"], wall["y1_percent"])
+
+    ratio = max(0.0, min(1.0, ((px - wall["x1_percent"]) * dx + (py - wall["y1_percent"]) * dy) / length_squared))
+    return (
+        wall["x1_percent"] + dx * ratio,
+        wall["y1_percent"] + dy * ratio,
+    )
+
+
 def nearest_wall_index(point: Tuple[float, float], walls: List[Dict]) -> int:
     if not walls:
         return 0
 
-    px, py = point
     distances = [
-        (index, (wall_midpoint(wall)[0] - px) ** 2 + (wall_midpoint(wall)[1] - py) ** 2)
+        (
+            index,
+            (nearest_point_on_segment(point, wall)[0] - point[0]) ** 2 +
+            (nearest_point_on_segment(point, wall)[1] - point[1]) ** 2
+        )
         for index, wall in enumerate(walls)
     ]
     return min(distances, key=lambda item: item[1])[0]

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Layer, Line, Rect, Stage, Text, Group, Ellipse, Image as KonvaImage } from "react-konva";
 import useImage from "use-image";
 import { getObjectDefinition } from "../objectCatalog";
+import { deriveOpeningRenderData, snapOpeningToWall } from "../lib/roomState";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
@@ -53,10 +54,14 @@ function fromCanvasPoint(point, roomBox, bounds) {
   };
 }
 
-function clampObjectPosition(pointer, roomBox) {
+function getObjectPosition(pointer, roomBox, options = {}) {
+  const { clampToRoom = true } = options;
+  const xPercent = ((pointer.x - roomBox.x) / roomBox.width) * 100;
+  const yPercent = ((pointer.y - roomBox.y) / roomBox.height) * 100;
+
   return {
-    x_percent: Math.max(0, Math.min(100, ((pointer.x - roomBox.x) / roomBox.width) * 100)),
-    y_percent: Math.max(0, Math.min(100, ((pointer.y - roomBox.y) / roomBox.height) * 100))
+    x_percent: clampToRoom ? Math.max(0, Math.min(100, xPercent)) : xPercent,
+    y_percent: clampToRoom ? Math.max(0, Math.min(100, yPercent)) : yPercent
   };
 }
 
@@ -88,6 +93,19 @@ function getLocalPointFromDrag(event) {
 
 function getLabel(item, fallbackLabel) {
   return getObjectDefinition(item.type).label || fallbackLabel;
+}
+
+function HistoryIcon({ direction = "undo" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`history-button-icon ${direction === "redo" ? "is-redo" : ""}`}
+      aria-hidden="true"
+    >
+      <polyline points="10 6 4 12 10 18" />
+      <path d="M5 12h8c3.87 0 7 3.13 7 7" />
+    </svg>
+  );
 }
 
 function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label }) {
@@ -163,11 +181,14 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
 export default function FloorPlanEditor({
   room,
   setRoom,
+  onRoomPreviewChange,
   imagePreview,
   showReferenceImage = false,
   onActionStart,
   onUndo,
-  canUndo
+  onRedo,
+  canUndo,
+  canRedo
 }) {
   const shellRef = useRef(null);
   const trashRef = useRef(null);
@@ -186,21 +207,29 @@ export default function FloorPlanEditor({
     width: roomSize.width,
     height: roomSize.height
   };
+  const controlColumn = {
+    x: Math.max(12, roomBox.x - 96),
+    y: Math.max(12, roomBox.y + 6)
+  };
   const trashTarget = {
-    x: Math.min(CANVAS_WIDTH - 64, roomBox.x + roomBox.width + 10),
-    y: Math.min(CANVAS_HEIGHT - 64, roomBox.y + roomBox.height - 4),
+    x: controlColumn.x,
+    y: Math.min(CANVAS_HEIGHT - 72, controlColumn.y + 120),
     size: 58
+  };
+  const historyControlsStyle = {
+    left: `${controlColumn.x * stageScale}px`,
+    top: `${controlColumn.y * stageScale}px`,
+    transform: `scale(${stageScale})`
   };
   const trashShellStyle = {
     left: `${trashTarget.x * stageScale}px`,
     top: `${trashTarget.y * stageScale}px`,
     transform: `scale(${stageScale})`
   };
-  const undoButtonStyle = {
-    left: `${trashTarget.x * stageScale}px`,
-    top: `${(trashTarget.y - 54) * stageScale}px`,
-    transform: `scale(${stageScale})`
-  };
+
+  function clearRoomPreview() {
+    onRoomPreviewChange?.(null);
+  }
 
   useEffect(() => {
     const node = shellRef.current;
@@ -216,13 +245,21 @@ export default function FloorPlanEditor({
     return () => observer.disconnect();
   }, []);
 
-  function updatePlacedItem(type, index, updates) {
-    setRoom((currentRoom) => ({
+  function withUpdatedPlacedItem(currentRoom, type, index, updates) {
+    return {
       ...currentRoom,
-      [type]: currentRoom[type].map((item, itemIndex) =>
+      [type]: (currentRoom[type] || []).map((item, itemIndex) =>
         itemIndex === index ? { ...item, ...updates } : item
       )
-    }));
+    };
+  }
+
+  function updatePlacedItem(type, index, updates) {
+    setRoom((currentRoom) => withUpdatedPlacedItem(currentRoom, type, index, updates));
+  }
+
+  function previewPlacedItem(type, index, updates) {
+    onRoomPreviewChange?.(withUpdatedPlacedItem(room, type, index, updates));
   }
 
   function getDragClientPoint(event) {
@@ -271,23 +308,42 @@ export default function FloorPlanEditor({
     setIsTrashHot(isOverTrash(event));
   }
 
-  function removePlacedItem(type, index) {
-    setRoom((currentRoom) => ({
+  function withRemovedPlacedItem(currentRoom, type, index) {
+    return {
       ...currentRoom,
-      [type]: currentRoom[type].filter((_item, itemIndex) => itemIndex !== index)
-    }));
+      [type]: (currentRoom[type] || []).filter((_item, itemIndex) => itemIndex !== index)
+    };
+  }
+
+  function removePlacedItem(type, index) {
+    setRoom((currentRoom) => withRemovedPlacedItem(currentRoom, type, index));
+  }
+
+  function handlePlacedItemDragMove(type, index, event) {
+    updateTrashHover(event);
+
+    if (isOverTrash(event)) {
+      return;
+    }
+
+    previewPlacedItem(
+      type,
+      index,
+      getObjectPosition(event.target.position(), roomBox, { clampToRoom: false })
+    );
   }
 
   function handlePlacedItemDragEnd(type, index, event) {
     const position = event.target.position();
     setIsTrashHot(false);
+    clearRoomPreview();
 
     if (isOverTrash(event)) {
       removePlacedItem(type, index);
       return;
     }
 
-    updatePlacedItem(type, index, clampObjectPosition(position, roomBox));
+    updatePlacedItem(type, index, getObjectPosition(position, roomBox));
   }
 
   function handleResizeDrag(type, index, event) {
@@ -306,6 +362,51 @@ export default function FloorPlanEditor({
     event.cancelBubble = true;
     setIsTrashHot(false);
     event.target.stopDrag();
+  }
+
+  function handleOpeningDragMove(type, openingType, item, index, event) {
+    updateTrashHover(event);
+
+    if (isOverTrash(event)) {
+      return;
+    }
+
+    previewPlacedItem(
+      type,
+      index,
+      snapOpeningToWall(
+        {
+          ...item,
+          ...getObjectPosition(event.target.position(), roomBox)
+        },
+        walls,
+        openingType
+      )
+    );
+  }
+
+  function handleOpeningDragEnd(type, openingType, item, index, event) {
+    const position = event.target.position();
+    setIsTrashHot(false);
+    clearRoomPreview();
+
+    if (isOverTrash(event)) {
+      removePlacedItem(type, index);
+      return;
+    }
+
+    updatePlacedItem(
+      type,
+      index,
+      snapOpeningToWall(
+        {
+          ...item,
+          ...getObjectPosition(position, roomBox)
+        },
+        walls,
+        openingType
+      )
+    );
   }
 
   function moveWall(index, deltaXPercent, deltaYPercent) {
@@ -365,15 +466,28 @@ export default function FloorPlanEditor({
         className="floor-stage-shell"
         style={{ height: CANVAS_HEIGHT * stageScale }}
       >
-        <button
-          type="button"
-          className="undo-button editor-undo-button"
-          style={undoButtonStyle}
-          onClick={onUndo}
-          disabled={!canUndo}
-        >
-          Undo
-        </button>
+        <div className="editor-history-controls" style={historyControlsStyle}>
+          <button
+            type="button"
+            className="undo-button editor-history-button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            aria-label="Undo last change"
+            title="Undo"
+          >
+            <HistoryIcon direction="undo" />
+          </button>
+          <button
+            type="button"
+            className="undo-button editor-history-button"
+            onClick={onRedo}
+            disabled={!canRedo}
+            aria-label="Redo last change"
+            title="Redo"
+          >
+            <HistoryIcon direction="redo" />
+          </button>
+        </div>
         <div ref={trashRef} className="trash-indicator-shell" style={trashShellStyle} aria-hidden="true">
           <div className={`trash-indicator${isTrashHot ? " is-hot" : ""}`}>
             <div className="trash-lid" />
@@ -402,17 +516,6 @@ export default function FloorPlanEditor({
                 </Fragment>
               );
             })}
-
-            <Rect
-              x={roomBox.x}
-              y={roomBox.y}
-              width={roomBox.width}
-              height={roomBox.height}
-              fill="#f8fbff"
-              opacity={0.92}
-              strokeEnabled={false}
-              cornerRadius={6}
-            />
 
             {imagePreview && showReferenceImage ? (
               <>
@@ -453,10 +556,11 @@ export default function FloorPlanEditor({
 
               return (
                 <Group
-                  key={`wall-${index}`}
+                  key={wall.id || `wall-${index}`}
                   draggable
                   onDragStart={() => {
                     onActionStart?.();
+                    clearRoomPreview();
                     setIsTrashHot(false);
                   }}
                   onDragEnd={(event) => {
@@ -482,41 +586,25 @@ export default function FloorPlanEditor({
             })}
 
             {windows.map((windowItem, index) => {
-              const x = roomBox.x + (windowItem.x_percent / 100) * roomBox.width;
-              const y = roomBox.y + (windowItem.y_percent / 100) * roomBox.height;
+              const renderData = deriveOpeningRenderData(windowItem, walls);
+              const x = roomBox.x + (renderData.x_percent / 100) * roomBox.width;
+              const y = roomBox.y + (renderData.y_percent / 100) * roomBox.height;
               return (
                 <Group
-                  key={`window-${index}`}
+                  key={windowItem.id || `window-${index}`}
                   x={x}
                   y={y}
-                  rotation={windowItem.rotation_deg || 0}
+                  rotation={renderData.rotation_deg || 0}
                   offsetX={0}
                   offsetY={0}
                   draggable
                   onDragStart={() => {
                     onActionStart?.();
+                    clearRoomPreview();
                     setIsTrashHot(false);
                   }}
-                  onDragMove={(event) => {
-                    updateTrashHover(event);
-                    const next = clampObjectPosition(event.target.position(), roomBox);
-                    updatePlacedItem("windows", index, next);
-                  }}
-                  onDragEnd={(event) => {
-                    const position = event.target.position();
-                    setIsTrashHot(false);
-
-                    if (isOverTrash(event)) {
-                      removePlacedItem("windows", index);
-                      return;
-                    }
-
-                    updatePlacedItem("windows", index, clampObjectPosition(position, roomBox));
-                  }}
-                  onDblClick={() => {
-                    onActionStart?.();
-                    updatePlacedItem("windows", index, { rotation_deg: ((windowItem.rotation_deg || 0) + 90) % 360 });
-                  }}
+                  onDragMove={(event) => handleOpeningDragMove("windows", "window", windowItem, index, event)}
+                  onDragEnd={(event) => handleOpeningDragEnd("windows", "window", windowItem, index, event)}
                 >
                   <Line
                     points={[-26, 0, 26, 0]}
@@ -529,39 +617,23 @@ export default function FloorPlanEditor({
             })}
 
             {doors.map((doorItem, index) => {
-              const x = roomBox.x + (doorItem.x_percent / 100) * roomBox.width;
-              const y = roomBox.y + (doorItem.y_percent / 100) * roomBox.height;
+              const renderData = deriveOpeningRenderData(doorItem, walls);
+              const x = roomBox.x + (renderData.x_percent / 100) * roomBox.width;
+              const y = roomBox.y + (renderData.y_percent / 100) * roomBox.height;
               return (
                 <Group
-                  key={`door-${index}`}
+                  key={doorItem.id || `door-${index}`}
                   x={x}
                   y={y}
-                  rotation={doorItem.rotation_deg || 0}
+                  rotation={renderData.rotation_deg || 0}
                   draggable
                   onDragStart={() => {
                     onActionStart?.();
+                    clearRoomPreview();
                     setIsTrashHot(false);
                   }}
-                  onDragMove={(event) => {
-                    updateTrashHover(event);
-                    const next = clampObjectPosition(event.target.position(), roomBox);
-                    updatePlacedItem("doors", index, next);
-                  }}
-                  onDragEnd={(event) => {
-                    const position = event.target.position();
-                    setIsTrashHot(false);
-
-                    if (isOverTrash(event)) {
-                      removePlacedItem("doors", index);
-                      return;
-                    }
-
-                    updatePlacedItem("doors", index, clampObjectPosition(position, roomBox));
-                  }}
-                  onDblClick={() => {
-                    onActionStart?.();
-                    updatePlacedItem("doors", index, { rotation_deg: ((doorItem.rotation_deg || 0) + 90) % 360 });
-                  }}
+                  onDragMove={(event) => handleOpeningDragMove("doors", "door", doorItem, index, event)}
+                  onDragEnd={(event) => handleOpeningDragEnd("doors", "door", doorItem, index, event)}
                 >
                   <Line
                     points={[-18, 0, 18, 0]}
@@ -581,7 +653,7 @@ export default function FloorPlanEditor({
 
               return (
                 <Group
-                  key={`furniture-${index}`}
+                  key={item.id || `furniture-${index}`}
                   x={x}
                   y={y}
                   rotation={item.rotation_deg || 0}
@@ -590,9 +662,10 @@ export default function FloorPlanEditor({
                   draggable
                   onDragStart={() => {
                     onActionStart?.();
+                    clearRoomPreview();
                     setIsTrashHot(false);
                   }}
-                  onDragMove={(event) => updateTrashHover(event)}
+                  onDragMove={(event) => handlePlacedItemDragMove("furniture", index, event)}
                   onDragEnd={(event) => handlePlacedItemDragEnd("furniture", index, event)}
                   onDblClick={() => {
                     onActionStart?.();
@@ -643,7 +716,7 @@ export default function FloorPlanEditor({
 
               return (
                 <Group
-                  key={`desk-${index}`}
+                  key={desk.id || `desk-${index}`}
                   x={x}
                   y={y}
                   rotation={desk.rotation_deg}
@@ -652,9 +725,10 @@ export default function FloorPlanEditor({
                   draggable
                   onDragStart={() => {
                     onActionStart?.();
+                    clearRoomPreview();
                     setIsTrashHot(false);
                   }}
-                  onDragMove={(event) => updateTrashHover(event)}
+                  onDragMove={(event) => handlePlacedItemDragMove("desks", index, event)}
                   onDragEnd={(event) => handlePlacedItemDragEnd("desks", index, event)}
                   onDblClick={() => {
                     onActionStart?.();

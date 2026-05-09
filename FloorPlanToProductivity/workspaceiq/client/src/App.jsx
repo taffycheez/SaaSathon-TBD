@@ -9,11 +9,14 @@ import {
   addObjectToRoom,
   addOpeningToRoom,
   clampPercent,
+  pointOnWall,
+  ensureRoomItemId,
   isDeskLikeFurniture,
   normalizeFootprintPoints,
   normalizeFurnitureItem,
   normalizeRotation,
-  normalizeShapeKind
+  normalizeShapeKind,
+  snapOpeningToWall
 } from "./lib/roomState";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
@@ -42,46 +45,11 @@ function cloneValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function normalizeWallIndex(value, wallsLength) {
-  const numeric = Number(value);
-  if (!Number.isInteger(numeric) || wallsLength <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.min(wallsLength - 1, numeric));
-}
-
-function edgeItemFromLegacy(item, walls) {
-  if (item && (item.x_percent != null || item.y_percent != null)) {
-    return {
-      x_percent: clampPercent(item?.x_percent),
-      y_percent: clampPercent(item?.y_percent),
-      rotation_deg: normalizeRotation(item?.rotation_deg)
-    };
-  }
-
-  const wall = walls[normalizeWallIndex(item?.wall_index, walls.length)];
-  const ratio = clampPercent(item?.position_percent) / 100;
-  const x = wall
-    ? wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio
-    : 50;
-  const y = wall
-    ? wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
-    : 50;
-  const rotation = wall
-    ? normalizeRotation(Math.atan2(wall.y2_percent - wall.y1_percent, wall.x2_percent - wall.x1_percent) * 180 / Math.PI)
-    : 0;
-
-  return {
-    x_percent: clampPercent(x),
-    y_percent: clampPercent(y),
-    rotation_deg: rotation
-  };
-}
-
 function normalizeRoomData(data) {
   const safeData = data && typeof data === "object" ? data : {};
   const walls = Array.isArray(safeData.walls) && safeData.walls.length >= 2
     ? safeData.walls.map((wall) => ({
+        id: ensureRoomItemId(wall, "wall"),
         x1_percent: clampPercent(wall?.x1_percent),
         y1_percent: clampPercent(wall?.y1_percent),
         x2_percent: clampPercent(wall?.x2_percent),
@@ -100,10 +68,10 @@ function normalizeRoomData(data) {
     estimated_height_m: Math.max(1, Number(safeData.estimated_height_m) || DEFAULT_ROOM.estimated_height_m),
     walls,
     windows: Array.isArray(safeData.windows)
-      ? safeData.windows.map((item) => edgeItemFromLegacy(item, walls))
+      ? safeData.windows.map((item) => snapOpeningToWall(item, walls, "window"))
       : [],
     doors: Array.isArray(safeData.doors)
-      ? safeData.doors.map((item) => edgeItemFromLegacy(item, walls))
+      ? safeData.doors.map((item) => snapOpeningToWall(item, walls, "door"))
       : [],
     furniture: furniture.filter((item) => !isDeskLikeFurniture(item)),
     desks: detectedDesks,
@@ -120,6 +88,7 @@ function normalizeDeskData(data) {
       const type = normalizeFurnitureItem({ ...desk, type: desk?.type ?? "desk" }).type;
       const definition = getObjectDefinition(type);
       return {
+        id: ensureRoomItemId(desk, type),
         type,
         shape_kind: normalizeShapeKind(desk?.shape_kind, definition.shape_kind),
         x_percent: clampPercent(desk?.x_percent),
@@ -140,24 +109,6 @@ function clamp(value, min, max) {
 
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function pointOnWall(edgeItem, walls) {
-  if (edgeItem && edgeItem.x_percent != null && edgeItem.y_percent != null) {
-    return {
-      x: clampPercent(edgeItem.x_percent),
-      y: clampPercent(edgeItem.y_percent)
-    };
-  }
-  const wall = walls[edgeItem?.wall_index];
-  if (!wall) {
-    return { x: 50, y: 50 };
-  }
-  const ratio = clampPercent(edgeItem?.position_percent) / 100;
-  return {
-    x: wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio,
-    y: wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
-  };
 }
 
 function isNearWindow(desk, windows, walls) {
@@ -258,6 +209,7 @@ function computeScore(room) {
 export default function App() {
   const uploadRef = useRef(null);
   const [room, setRoom] = useState(DEFAULT_ROOM);
+  const [roomPreview, setRoomPreview] = useState(null);
   const [baseRoom, setBaseRoom] = useState(DEFAULT_ROOM);
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
@@ -269,10 +221,12 @@ export default function App() {
   const [layoutNotes, setLayoutNotes] = useState([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const activeRoom = roomPreview ?? room;
 
   const scoreResult = useMemo(
-    () => computeFengShuiScore(room, preferences),
-    [room, preferences]
+    () => computeFengShuiScore(activeRoom, preferences),
+    [activeRoom, preferences]
   );
 
   useEffect(() => {
@@ -287,49 +241,76 @@ export default function App() {
     return () => window.clearTimeout(timeoutId);
   }, [error]);
 
+  function captureHistoryState() {
+    return {
+      room: cloneValue(room),
+      baseRoom: cloneValue(baseRoom),
+      preferences: cloneValue(preferences),
+      imagePreview,
+      showReferenceImage,
+      roomNotes: cloneValue(roomNotes),
+      layoutNotes: cloneValue(layoutNotes)
+    };
+  }
+
+  function restoreHistoryState(snapshot) {
+    setRoomPreview(null);
+    setRoom(snapshot.room);
+    setBaseRoom(snapshot.baseRoom);
+    setPreferences(snapshot.preferences);
+    setImagePreview(snapshot.imagePreview || "");
+    setShowReferenceImage(snapshot.showReferenceImage);
+    setRoomNotes(snapshot.roomNotes || []);
+    setLayoutNotes(snapshot.layoutNotes || []);
+  }
+
   function pushUndoSnapshot() {
+    const snapshot = captureHistoryState();
+    setRedoStack([]);
     setUndoStack((current) => [
       ...current.slice(-39),
-      {
-        room: cloneValue(room),
-        baseRoom: cloneValue(baseRoom),
-        preferences: cloneValue(preferences),
-        showReferenceImage,
-        roomNotes: cloneValue(roomNotes),
-        layoutNotes: cloneValue(layoutNotes)
-      }
+      snapshot
     ]);
   }
 
   function undoLastAction() {
-    setUndoStack((current) => {
-      if (!current.length) {
-        return current;
-      }
+    if (!undoStack.length) {
+      return;
+    }
 
-      const previous = current[current.length - 1];
-      setRoom(previous.room);
-      setBaseRoom(previous.baseRoom);
-      setPreferences(previous.preferences);
-      setShowReferenceImage(previous.showReferenceImage);
-      setRoomNotes(previous.roomNotes);
-      setLayoutNotes(previous.layoutNotes);
+    const previous = undoStack[undoStack.length - 1];
+    const currentSnapshot = captureHistoryState();
+    setRedoStack((current) => [...current.slice(-39), currentSnapshot]);
+    setUndoStack((current) => current.slice(0, -1));
+    restoreHistoryState(previous);
+  }
 
-      return current.slice(0, -1);
-    });
+  function redoLastAction() {
+    if (!redoStack.length) {
+      return;
+    }
+
+    const next = redoStack[redoStack.length - 1];
+    const currentSnapshot = captureHistoryState();
+    setUndoStack((current) => [...current.slice(-39), currentSnapshot]);
+    setRedoStack((current) => current.slice(0, -1));
+    restoreHistoryState(next);
   }
 
   function addObject(type) {
+    setRoomPreview(null);
     pushUndoSnapshot();
     setRoom((currentRoom) => addObjectToRoom(currentRoom, type));
   }
 
   function addWindow() {
+    setRoomPreview(null);
     pushUndoSnapshot();
     setRoom((currentRoom) => addOpeningToRoom(currentRoom, "window"));
   }
 
   function addDoor() {
+    setRoomPreview(null);
     pushUndoSnapshot();
     setRoom((currentRoom) => addOpeningToRoom(currentRoom, "door"));
   }
@@ -354,6 +335,7 @@ export default function App() {
 
       const data = await response.json();
       const normalizedRoom = normalizeRoomData(data);
+      setRoomPreview(null);
       setImagePreview(base64);
       setShowReferenceImage(false);
       setRoom(normalizedRoom);
@@ -361,6 +343,7 @@ export default function App() {
       setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
       setLayoutNotes([]);
       setUndoStack([]);
+      setRedoStack([]);
     } catch (uploadError) {
       setError(uploadError.message || "We couldn't analyse that image. Please try again.");
     } finally {
@@ -388,6 +371,7 @@ export default function App() {
       }
 
       pushUndoSnapshot();
+      setRoomPreview(null);
       const { desks, notes } = normalizeDeskData(await response.json());
       setRoom((currentRoom) => ({
         ...currentRoom,
@@ -402,6 +386,7 @@ export default function App() {
   }
 
   function updateRoomDimensions(dimension, value) {
+    setRoomPreview(null);
     pushUndoSnapshot();
     setRoom((currentRoom) => ({
       ...currentRoom,
@@ -415,6 +400,7 @@ export default function App() {
 
   function goHome() {
     setShowResetConfirm(false);
+    setRoomPreview(null);
     setRoom(DEFAULT_ROOM);
     setBaseRoom(DEFAULT_ROOM);
     setPreferences(defaultPreferences);
@@ -424,10 +410,12 @@ export default function App() {
     setRoomNotes([]);
     setLayoutNotes([]);
     setUndoStack([]);
+    setRedoStack([]);
   }
 
   function confirmResetWorkspace() {
     setShowResetConfirm(false);
+    setRoomPreview(null);
     pushUndoSnapshot();
 
     if (imagePreview) {
@@ -493,18 +481,22 @@ export default function App() {
         <main className="workspace-layout">
             <section className="canvas-column">
             <FloorPlanEditor
-              room={room}
+              room={activeRoom}
               setRoom={setRoom}
+              onRoomPreviewChange={setRoomPreview}
               imagePreview={imagePreview}
               showReferenceImage={showReferenceImage}
               onActionStart={pushUndoSnapshot}
               onUndo={undoLastAction}
+              onRedo={redoLastAction}
               canUndo={Boolean(undoStack.length)}
+              canRedo={Boolean(redoStack.length)}
             />
             <ScorePanel
               score={scoreResult.score}
               breakdown={scoreResult.breakdown}
               advice={scoreResult.advice}
+              isPreviewing={Boolean(roomPreview)}
             />
             </section>
 
@@ -512,6 +504,7 @@ export default function App() {
               <ControlPanel
                 preferences={preferences}
                 setPreferences={(updater) => {
+                  setRoomPreview(null);
                   pushUndoSnapshot();
                   setPreferences(updater);
                 }}
@@ -519,6 +512,7 @@ export default function App() {
                 updateRoomDimensions={updateRoomDimensions}
                 showReferenceImage={showReferenceImage}
                 setShowReferenceImage={(updater) => {
+                  setRoomPreview(null);
                   pushUndoSnapshot();
                   setShowReferenceImage(updater);
                 }}
