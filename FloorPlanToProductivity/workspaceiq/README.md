@@ -7,12 +7,6 @@
 - `web/`: Next.js app deployed on Vercel
 - `web/python-worker/`: Python CV worker deployed separately and called by the web app
 
-## Legacy code
-
-- `client/` and `server/` are legacy prototype folders kept only for reference while the team finishes migration work.
-- Do not build, run, or extend them.
-- All new work should happen in `web/`.
-
 ## Start the active app
 
 From this folder:

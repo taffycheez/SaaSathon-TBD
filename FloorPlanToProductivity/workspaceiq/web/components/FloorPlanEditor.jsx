@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getObjectDefinition } from "@/lib/objectCatalog";
-import { normalizeWallGraph, snapEdgeItemToWalls } from "@/lib/roomGeometry";
-import { updateEdgeItemPosition, updatePlacedObjectPosition, updateWallEndpoint } from "@/lib/roomState";
+import { getScaledItemDimensions, normalizeObjectScale, normalizeWallGraph, snapEdgeItemToWalls } from "@/lib/roomGeometry";
+import {
+  getSnappedWallPoint,
+  moveWallByDelta,
+  updateEdgeItemPosition,
+  updatePlacedObject,
+  updateWallEndpoint
+} from "@/lib/roomState";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
@@ -65,9 +71,10 @@ function pointerToRoomPosition(pointer, roomBox, shouldClamp = true) {
 }
 
 function objectPixelSize(item, roomBox) {
+  const dimensions = getScaledItemDimensions(item);
   return {
-    width: Math.max(18, (item.width_percent / 100) * roomBox.width),
-    height: Math.max(14, (item.height_percent / 100) * roomBox.height)
+    width: Math.max(18, (dimensions.width_percent / 100) * roomBox.width),
+    height: Math.max(14, (dimensions.height_percent / 100) * roomBox.height)
   };
 }
 
@@ -312,6 +319,9 @@ export default function FloorPlanEditor({
   onRoomPreviewChange,
   imagePreview,
   showReferenceImage = false,
+  wallToolMode = "select",
+  setWallToolMode,
+  onAddWall,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -324,12 +334,22 @@ export default function FloorPlanEditor({
   const wallsRef = useRef([]);
   const [dragState, setDragState] = useState(null);
   const [selectedWallIndex, setSelectedWallIndex] = useState(null);
+  const [selectedPlacedItem, setSelectedPlacedItem] = useState(null);
+  const [pendingWallStart, setPendingWallStart] = useState(null);
   const wallGraph = useMemo(() => normalizeWallGraph(room.walls || []), [room.walls]);
   const walls = wallGraph.walls.length ? wallGraph.walls : Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
   const doors = Array.isArray(room.doors) ? room.doors : [];
   const furniture = Array.isArray(room.furniture) ? room.furniture : [];
   const desks = Array.isArray(room.desks) ? room.desks : [];
+  const selectedItem =
+    selectedPlacedItem && (selectedPlacedItem.type === "furniture" || selectedPlacedItem.type === "desks")
+      ? room?.[selectedPlacedItem.type]?.[selectedPlacedItem.index]
+      : null;
+  const selectedItemLabel = selectedItem
+    ? `${getLabel(selectedItem, "Object")}${selectedPlacedItem.type === "desks" ? ` ${selectedPlacedItem.index + 1}` : ""}`
+    : "";
+  const selectedItemScale = normalizeObjectScale(selectedItem?.scale);
   const roomSize = useMemo(() => getRoomPixelSize(walls), [walls]);
   const roomBox = {
     x: (CANVAS_WIDTH - roomSize.width) / 2,
@@ -350,6 +370,22 @@ export default function FloorPlanEditor({
       setSelectedWallIndex(null);
     }
   }, [selectedWallIndex, walls.length]);
+
+  useEffect(() => {
+    if (!selectedPlacedItem) {
+      return;
+    }
+    const items = selectedPlacedItem.type === "furniture" ? furniture : desks;
+    if (selectedPlacedItem.index < 0 || selectedPlacedItem.index >= items.length) {
+      setSelectedPlacedItem(null);
+    }
+  }, [selectedPlacedItem, furniture.length, desks.length]);
+
+  useEffect(() => {
+    if (wallToolMode !== "add" && pendingWallStart) {
+      setPendingWallStart(null);
+    }
+  }, [pendingWallStart, wallToolMode]);
 
   function withUpdatedPlacedItem(currentRoom, type, index, updates) {
     return {
@@ -374,8 +410,16 @@ export default function FloorPlanEditor({
         return updateEdgeItemPosition(currentRoom, type, index, updates);
       }
 
-      return updatePlacedObjectPosition(currentRoom, type, index, updates);
+      return updatePlacedObject(currentRoom, type, index, updates);
     }, options);
+  }
+
+  function updateSelectedItemScale(scale) {
+    if (!selectedPlacedItem) {
+      return;
+    }
+
+    updatePlacedItem(selectedPlacedItem.type, selectedPlacedItem.index, { scale });
   }
 
   function previewWallUpdate(wallIndex, endpoint, point) {
@@ -386,6 +430,28 @@ export default function FloorPlanEditor({
   function commitWallUpdate(wallIndex, endpoint, point, options) {
     const previewPosition = pointerToRoomPosition(point, roomBoxRef.current, false);
     setRoom((currentRoom) => updateWallEndpoint(currentRoom, wallIndex, endpoint, previewPosition), options);
+  }
+
+  function wallDragDeltaToRoomPercent(startPoint, point) {
+    const startPosition = pointerToRoomPosition(startPoint, roomBoxRef.current, false);
+    const endPosition = pointerToRoomPosition(point, roomBoxRef.current, false);
+    return {
+      x_percent: endPosition.x_percent - startPosition.x_percent,
+      y_percent: endPosition.y_percent - startPosition.y_percent
+    };
+  }
+
+  function previewWallMove(wallIndex, startPoint, point) {
+    onRoomPreviewChange?.(
+      moveWallByDelta(room, wallIndex, wallDragDeltaToRoomPercent(startPoint, point))
+    );
+  }
+
+  function commitWallMove(wallIndex, startPoint, point, options) {
+    setRoom(
+      (currentRoom) => moveWallByDelta(currentRoom, wallIndex, wallDragDeltaToRoomPercent(startPoint, point)),
+      options
+    );
   }
 
   function removePlacedItem(type, index) {
@@ -447,6 +513,12 @@ export default function FloorPlanEditor({
     event.stopPropagation();
 
     const point = getSvgPointFromClient(event.clientX, event.clientY);
+    if (type === "furniture" || type === "desks") {
+      setSelectedPlacedItem({ type, index });
+      setSelectedWallIndex(null);
+    } else {
+      setSelectedPlacedItem(null);
+    }
     setDragState({
       kind: "item",
       type,
@@ -462,6 +534,7 @@ export default function FloorPlanEditor({
     event.stopPropagation();
 
     const point = getSvgPointFromClient(event.clientX, event.clientY);
+    setSelectedPlacedItem(null);
     setSelectedWallIndex(wallIndex);
     setDragState({
       kind: "wall-handle",
@@ -471,6 +544,26 @@ export default function FloorPlanEditor({
       point,
       overTrash: false
     });
+  }
+
+  function startWallMoveDrag(wallIndex, event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    setSelectedPlacedItem(null);
+    setSelectedWallIndex(wallIndex);
+    setDragState({
+      kind: "wall-move",
+      wallIndex,
+      startPoint: point,
+      point,
+      overTrash: false
+    });
+  }
+
+  function snapWallEditorPoint(point) {
+    return getSnappedWallPoint(room, pointerToRoomPosition(point, roomBoxRef.current, false));
   }
 
   function finishDrag(clientX, clientY) {
@@ -496,8 +589,22 @@ export default function FloorPlanEditor({
       return;
     }
 
+    if (currentDrag.kind === "wall-move") {
+      if (dragDistance >= DRAG_THRESHOLD) {
+        commitWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
+      }
+      setDragState(null);
+      return;
+    }
+
     if (overTrash) {
       removePlacedItem(currentDrag.type, currentDrag.index);
+      if (
+        selectedPlacedItem?.type === currentDrag.type &&
+        selectedPlacedItem?.index === currentDrag.index
+      ) {
+        setSelectedPlacedItem(null);
+      }
       setDragState(null);
       return;
     }
@@ -529,6 +636,8 @@ export default function FloorPlanEditor({
       const currentDrag = dragStateRef.current;
       if (currentDrag?.kind === "wall-handle") {
         previewWallUpdate(currentDrag.wallIndex, currentDrag.endpoint, point);
+      } else if (currentDrag?.kind === "wall-move") {
+        previewWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
       } else {
         const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
 
@@ -611,14 +720,57 @@ export default function FloorPlanEditor({
         </div>
       </div>
 
+      {selectedItem ? (
+        <div
+          className="object-scale-panel"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <label className="object-scale-field">
+            <span>
+              <strong>{selectedItemLabel}</strong>
+              <small>Scale {Math.round(selectedItemScale * 100)}%</small>
+            </span>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.05"
+              value={selectedItemScale}
+              onChange={(event) => updateSelectedItemScale(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="object-scale-reset"
+            onClick={() => updateSelectedItemScale(1)}
+            disabled={selectedItemScale === 1}
+          >
+            Reset
+          </button>
+        </div>
+      ) : null}
+
       <div className="floor-stage-shell">
         <svg
           ref={svgRef}
           className="floor-stage-svg"
           viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
-          onPointerDown={() => {
+          onPointerDown={(event) => {
+            if (wallToolMode === "add") {
+              const point = getSvgPointFromClient(event.clientX, event.clientY);
+              const snappedPoint = snapWallEditorPoint(point);
+              if (!pendingWallStart) {
+                setPendingWallStart(snappedPoint);
+              } else {
+                onAddWall?.(pendingWallStart, snappedPoint);
+                setPendingWallStart(null);
+              }
+              setSelectedWallIndex(null);
+              return;
+            }
             if (!dragStateRef.current) {
               setSelectedWallIndex(null);
+              setSelectedPlacedItem(null);
             }
           }}
         >
@@ -691,10 +843,7 @@ export default function FloorPlanEditor({
                   stroke="transparent"
                   strokeWidth="16"
                   strokeLinecap="round"
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    setSelectedWallIndex(index);
-                  }}
+                  onPointerDown={(event) => startWallMoveDrag(index, event)}
                 />
                 {selectedWallIndex === index ? (
                   <>
@@ -725,6 +874,26 @@ export default function FloorPlanEditor({
               </g>
             );
           })}
+
+          {pendingWallStart ? (
+            <g pointerEvents="none">
+              <circle
+                cx={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).x}
+                cy={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).y}
+                r="6"
+                fill="#10233d"
+                opacity="0.85"
+              />
+              <text
+                x={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).x + 10}
+                y={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).y - 10}
+                fill="#10233d"
+                fontSize="12"
+              >
+                Click another point to finish the wall
+              </text>
+            </g>
+          ) : null}
 
           {windows.map((windowItem, index) => {
             const renderedWindow = getPreviewItem("windows", index, windowItem);
@@ -776,9 +945,9 @@ export default function FloorPlanEditor({
                 key={`furniture-${index}`}
                 transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${renderedItem.rotation_deg || 0} ${width / 2} ${height / 2})`}
                 onPointerDown={(event) => startDrag("furniture", index, event)}
-                onDoubleClick={() => updatePlacedItem("furniture", index, { rotation_deg: (item.rotation_deg + 90) % 360 })}
+                onDoubleClick={() => updatePlacedItem("furniture", index, { rotation_deg: ((item.rotation_deg || 0) + 90) % 360 })}
               >
-                <g className={`workspace-object workspace-object--${item.type.replace(/_/g, "-")}${dragState?.type === "furniture" && dragState?.index === index ? " is-dragging" : ""}`}>
+                <g className={`workspace-object workspace-object--${item.type.replace(/_/g, "-")}${dragState?.type === "furniture" && dragState?.index === index ? " is-dragging" : ""}${selectedPlacedItem?.type === "furniture" && selectedPlacedItem?.index === index ? " is-selected" : ""}`}>
                   <SvgObjectShape
                     item={renderedItem}
                     roomBox={roomBox}
@@ -804,9 +973,9 @@ export default function FloorPlanEditor({
                 key={`desk-${index}`}
                 transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${renderedDesk.rotation_deg || 0} ${width / 2} ${height / 2})`}
                 onPointerDown={(event) => startDrag("desks", index, event)}
-                onDoubleClick={() => updatePlacedItem("desks", index, { rotation_deg: (desk.rotation_deg + 90) % 360 })}
+                onDoubleClick={() => updatePlacedItem("desks", index, { rotation_deg: ((desk.rotation_deg || 0) + 90) % 360 })}
               >
-                <g className={`workspace-object workspace-object--${desk.type.replace(/_/g, "-")}${dragState?.type === "desks" && dragState?.index === index ? " is-dragging" : ""}`}>
+                <g className={`workspace-object workspace-object--${desk.type.replace(/_/g, "-")}${dragState?.type === "desks" && dragState?.index === index ? " is-dragging" : ""}${selectedPlacedItem?.type === "desks" && selectedPlacedItem?.index === index ? " is-selected" : ""}`}>
                   <SvgObjectShape
                     item={renderedDesk}
                     roomBox={roomBox}

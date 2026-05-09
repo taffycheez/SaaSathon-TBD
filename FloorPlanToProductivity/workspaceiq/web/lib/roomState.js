@@ -1,8 +1,13 @@
 import { canonicalizeObjectType, getObjectDefinition, isDeskType } from "./objectCatalog.js";
 import {
   findFirstFreeObjectPlacement,
+  findNearestValidObjectPlacement,
+  normalizeObjectScale,
+  insertConnectedWall,
   isPlacementValid,
+  lineAngleDegrees,
   normalizeWallGraph,
+  snapEditorPointToWalls,
   snapEdgeItemToWalls
 } from "./roomGeometry.js";
 
@@ -75,6 +80,7 @@ export function createPlacedObject(type, seedIndex = 0) {
     y_percent: 28 + (Math.floor(seedIndex / 4) % 3) * 16,
     width_percent: definition.width_percent,
     height_percent: definition.height_percent,
+    scale: 1,
     rotation_deg: 0,
     footprint_points: normalizeFootprintPoints(definition.footprint_points, definition.footprint_points)
   };
@@ -112,6 +118,7 @@ export function normalizeFurnitureItem(item) {
     y_percent: clampPercent(item?.y_percent),
     width_percent: Math.max(2, clampPercent(item?.width_percent ?? definition.width_percent)),
     height_percent: Math.max(2, clampPercent(item?.height_percent ?? definition.height_percent)),
+    scale: normalizeObjectScale(item?.scale),
     rotation_deg: normalizeRotation(item?.rotation_deg),
     footprint_points: normalizeFootprintPoints(item?.footprint_points, definition.footprint_points)
   };
@@ -184,6 +191,10 @@ export function updateEdgeItemPosition(room, collectionType, index, pointerPosit
 }
 
 export function updatePlacedObjectPosition(room, collectionType, index, pointerPosition) {
+  return updatePlacedObject(room, collectionType, index, pointerPosition);
+}
+
+export function updatePlacedObject(room, collectionType, index, updates) {
   const items = Array.isArray(room?.[collectionType]) ? room[collectionType] : [];
   const currentItem = items[index];
   if (!currentItem) {
@@ -191,10 +202,37 @@ export function updatePlacedObjectPosition(room, collectionType, index, pointerP
   }
 
   const nextItem = {
-    ...currentItem,
-    x_percent: clampPercent(pointerPosition?.x_percent),
-    y_percent: clampPercent(pointerPosition?.y_percent)
+    ...currentItem
   };
+
+  if (updates?.x_percent != null) {
+    nextItem.x_percent = clampPercent(updates.x_percent);
+  }
+  if (updates?.y_percent != null) {
+    nextItem.y_percent = clampPercent(updates.y_percent);
+  }
+  if (updates?.rotation_deg != null) {
+    nextItem.rotation_deg = normalizeRotation(updates.rotation_deg);
+  }
+  if (updates?.scale != null) {
+    nextItem.scale = normalizeObjectScale(updates.scale);
+  }
+  if (updates?.width_percent != null) {
+    nextItem.width_percent = Math.max(2, clampPercent(updates.width_percent));
+  }
+  if (updates?.height_percent != null) {
+    nextItem.height_percent = Math.max(2, clampPercent(updates.height_percent));
+  }
+
+  if (!isPlacementValid(room, collectionType, index, nextItem)) {
+    if (updates?.scale != null || updates?.width_percent != null || updates?.height_percent != null) {
+      const placement = findNearestValidObjectPlacement(room, nextItem, collectionType, index);
+      if (placement) {
+        nextItem.x_percent = placement.x_percent;
+        nextItem.y_percent = placement.y_percent;
+      }
+    }
+  }
 
   if (!isPlacementValid(room, collectionType, index, nextItem)) {
     return room;
@@ -245,4 +283,85 @@ export function updateWallEndpoint(room, wallIndex, endpoint, pointerPosition) {
       return nextWall;
     })
   });
+}
+
+function applyDeltaToPoint(point, delta) {
+  return {
+    x: clampPercent(point.x + delta.x),
+    y: clampPercent(point.y + delta.y)
+  };
+}
+
+export function moveWallByDelta(room, wallIndex, rawDelta) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  const targetWall = walls[wallIndex];
+  if (!targetWall) {
+    return room;
+  }
+
+  const start = { x: Number(targetWall.x1_percent), y: Number(targetWall.y1_percent) };
+  const end = { x: Number(targetWall.x2_percent), y: Number(targetWall.y2_percent) };
+  const wallAngleRadians = (lineAngleDegrees(targetWall) * Math.PI) / 180;
+  const normal = {
+    x: -Math.sin(wallAngleRadians),
+    y: Math.cos(wallAngleRadians)
+  };
+  const requestedDelta = {
+    x: Number(rawDelta?.x_percent) || 0,
+    y: Number(rawDelta?.y_percent) || 0
+  };
+  const projectedMagnitude = requestedDelta.x * normal.x + requestedDelta.y * normal.y;
+  const delta = {
+    x: normal.x * projectedMagnitude,
+    y: normal.y * projectedMagnitude
+  };
+
+  return normalizeRoomLayout({
+    ...room,
+    walls: walls.map((wall) => {
+      const nextWall = { ...wall };
+
+      if (endpointMatches(nextWall, "start", start)) {
+        const moved = applyDeltaToPoint(start, delta);
+        nextWall.x1_percent = moved.x;
+        nextWall.y1_percent = moved.y;
+      }
+      if (endpointMatches(nextWall, "end", start)) {
+        const moved = applyDeltaToPoint(start, delta);
+        nextWall.x2_percent = moved.x;
+        nextWall.y2_percent = moved.y;
+      }
+      if (endpointMatches(nextWall, "start", end)) {
+        const moved = applyDeltaToPoint(end, delta);
+        nextWall.x1_percent = moved.x;
+        nextWall.y1_percent = moved.y;
+      }
+      if (endpointMatches(nextWall, "end", end)) {
+        const moved = applyDeltaToPoint(end, delta);
+        nextWall.x2_percent = moved.x;
+        nextWall.y2_percent = moved.y;
+      }
+
+      return nextWall;
+    })
+  });
+}
+
+export function addWallToRoom(room, startPoint, endPoint) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  return normalizeRoomLayout({
+    ...room,
+    walls: insertConnectedWall(walls, startPoint, endPoint)
+  });
+}
+
+export function getSnappedWallPoint(room, pointerPosition) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  return snapEditorPointToWalls(
+    {
+      x_percent: pointerPosition?.x_percent,
+      y_percent: pointerPosition?.y_percent
+    },
+    walls
+  ).point;
 }

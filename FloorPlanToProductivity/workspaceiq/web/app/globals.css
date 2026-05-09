@@ -65,30 +65,13 @@ button:disabled {
   width: 100%;
   margin: 0 0 18px;
   min-height: 76px;
-  position: sticky;
-  top: 0;
-  z-index: 20;
   display: flex;
   justify-content: space-between;
   gap: 18px;
   align-items: center;
   border: 0;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  background: rgba(255, 255, 255, 0.92);
+  background: transparent;
   padding: 14px max(18px, calc((100vw - 1440px) / 2 + 18px));
-  box-shadow: 0 14px 34px rgba(24, 63, 150, 0.1);
-  backdrop-filter: blur(18px);
-  transform: translateY(0);
-  transition: transform 220ms ease, opacity 220ms ease, box-shadow 220ms ease;
-  will-change: transform;
-}
-
-.app-header-hidden {
-  opacity: 0;
-  pointer-events: none;
-  box-shadow: none;
-  transform: translateY(calc(-100% - 18px));
 }
 
 .app-header h1 {
@@ -185,7 +168,7 @@ button:disabled {
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(360px, 0.68fr);
   gap: 28px;
-  align-items: center;
+  align-items: start;
   padding: 28px max(18px, calc((100vw - 1440px) / 2 + 18px)) 56px;
 }
 
@@ -210,6 +193,28 @@ button:disabled {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 26px;
+}
+
+.hero-swoop {
+  width: 100vw;
+  margin-top: 10px;
+  margin-left: calc(50% - 50vw);
+  opacity: 1;
+  pointer-events: none;
+}
+
+.hero-swoop svg {
+  display: block;
+  width: 100%;
+  height: 92px;
+  overflow: visible;
+}
+
+.hero-swoop-line {
+  stroke: #111111;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .primary-link,
@@ -243,7 +248,7 @@ button:disabled {
   border-radius: 8px;
   padding: 14px;
   background:
-    radial-gradient(circle at top right, rgba(255, 210, 79, 0.28), transparent 34%),
+    radial-gradient(circle at top right, rgba(164, 205, 255, 0.28), transparent 36%),
     linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
   box-shadow: 0 28px 70px rgba(24, 63, 150, 0.14);
 }
@@ -669,6 +674,49 @@ button:disabled {
   opacity: 0.82;
 }
 
+.object-scale-panel {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.object-scale-field {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.32fr) minmax(180px, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.object-scale-field span {
+  display: grid;
+  gap: 2px;
+}
+
+.object-scale-field strong {
+  font-size: 0.92rem;
+}
+
+.object-scale-field small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.object-scale-reset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #ffffff;
+  color: var(--accent-dark);
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .field,
 .field-row {
   display: grid;
@@ -751,6 +799,10 @@ button:disabled {
 
 .workspace-object:hover {
   filter: drop-shadow(0 4px 10px rgba(23, 32, 47, 0.14));
+}
+
+.workspace-object.is-selected {
+  filter: drop-shadow(0 0 0.25rem rgba(36, 99, 235, 0.55)) drop-shadow(0 7px 14px rgba(23, 32, 47, 0.16));
 }
 
 .workspace-object--chair:hover,
@@ -1336,6 +1388,11 @@ input[type="range"] {
   .editor-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .object-scale-panel,
+  .object-scale-field {
+    grid-template-columns: 1fr;
   }
 
   .trash-drop-zone {

@@ -3,10 +3,18 @@ import { forwardRef, useImperativeHandle, useRef } from "react";
 const UploadScreen = forwardRef(function UploadScreen({ onUpload, isLoading, error }, ref) {
   const inputRef = useRef(null);
 
-  useImperativeHandle(ref, () => ({
-    openPicker() {
-      inputRef.current?.click();
+  function openPicker() {
+    if (!inputRef.current) {
+      return;
     }
+
+    // Allow re-selecting the same file by clearing the prior value first.
+    inputRef.current.value = "";
+    inputRef.current.click();
+  }
+
+  useImperativeHandle(ref, () => ({
+    openPicker
   }));
 
   function handleFileSelection(event) {
@@ -30,7 +38,13 @@ const UploadScreen = forwardRef(function UploadScreen({ onUpload, isLoading, err
         className="upload-card"
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
+        onClick={openPicker}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPicker();
+          }
+        }}
         role="button"
         tabIndex={0}
       >
@@ -38,7 +52,15 @@ const UploadScreen = forwardRef(function UploadScreen({ onUpload, isLoading, err
         <p className="upload-kicker">Step 1</p>
         <h2>Upload an office photo</h2>
         <p>Drop an image here or click to browse. WorkspaceIQ estimates the room and opens an editable floor plan.</p>
-        <button type="button" className="primary-button" disabled={isLoading}>
+        <button
+          type="button"
+          className="primary-button"
+          disabled={isLoading}
+          onClick={(event) => {
+            event.stopPropagation();
+            openPicker();
+          }}
+        >
           {isLoading ? "Analysing..." : "Choose Image"}
         </button>
         <input
