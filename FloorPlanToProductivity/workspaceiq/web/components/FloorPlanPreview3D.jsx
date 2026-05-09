@@ -11,6 +11,7 @@ const WALL_THICKNESS_M = 0.16;
 const DOOR_HEIGHT_M = 2.1;
 const WINDOW_HEIGHT_M = 1.25;
 const WINDOW_SILL_M = 0.95;
+const MIN_WALL_SEGMENT_PERCENT = 0.8;
 const OBJECT_HEIGHTS_M = {
   desk: 0.75,
   l_shaped_desk: 0.75,
@@ -87,6 +88,44 @@ function toWorldPoint(point, bounds, scale) {
   );
 }
 
+function interpolateWorldPoint(start, end, positionPercent) {
+  const ratio = clampRange(positionPercent / 100, 0, 1);
+  return start.clone().lerp(end, ratio);
+}
+
+function getWallLengthPercent(wall) {
+  return Math.hypot(
+    clampNumber(wall?.x2_percent) - clampNumber(wall?.x1_percent),
+    clampNumber(wall?.y2_percent) - clampNumber(wall?.y1_percent)
+  );
+}
+
+function getOpeningRangePercent(item, wall, defaultWidthPercent) {
+  const wallLengthPercent = Math.max(getWallLengthPercent(wall), 1);
+  const widthPercent = Math.max(4, clampNumber(item?.width_percent, defaultWidthPercent));
+  const spanPercent = Math.min(92, (widthPercent / wallLengthPercent) * 100);
+  const positionPercent = clampRange(clampNumber(item?.position_percent, 50), 0, 100);
+  const openingAnchor = item?.opening_anchor === "edge" ? "edge" : "center";
+  const hingeSide = item?.hinge_side === "end" ? "end" : "start";
+
+  if (openingAnchor === "edge") {
+    return hingeSide === "end"
+      ? {
+          start: clampRange(positionPercent - spanPercent, 0, 100),
+          end: clampRange(positionPercent, 0, 100)
+        }
+      : {
+          start: clampRange(positionPercent, 0, 100),
+          end: clampRange(positionPercent + spanPercent, 0, 100)
+        };
+  }
+
+  return {
+    start: clampRange(positionPercent - spanPercent / 2, 0, 100),
+    end: clampRange(positionPercent + spanPercent / 2, 0, 100)
+  };
+}
+
 function lerpColor(startHex, endHex, t) {
   const parse = (hex) => {
     const safe = hex.replace("#", "");
@@ -110,6 +149,8 @@ function getSunState(timeOfDay, northDirectionDeg, lightingStrength = 1) {
   const ambientStrength = 0.5 + strength * 0.5;
 
   return {
+    daylight,
+    lightingStrength: strength,
     ambient: (0.12 + daylight * 0.9) * ambientStrength,
     keyLight: (0.06 + daylight * 1.85) * strength,
     fillLight: (0.04 + daylight * 0.52) * (0.7 + strength * 0.3),
@@ -167,20 +208,85 @@ function createFloorMesh(points, bounds, scale, color) {
   return mesh;
 }
 
-function createWallMesh(wall, bounds, scale) {
+function createWallSegmentMesh(wall, bounds, scale, startPercent, endPercent, minY, maxY) {
+  if (endPercent - startPercent < MIN_WALL_SEGMENT_PERCENT || maxY <= minY) {
+    return null;
+  }
+
   const start = toWorldPoint({ x: wall.x1_percent, y: wall.y1_percent }, bounds, scale);
   const end = toWorldPoint({ x: wall.x2_percent, y: wall.y2_percent }, bounds, scale);
-  const center = start.clone().add(end).multiplyScalar(0.5);
-  const length = start.distanceTo(end);
+  const segmentStart = interpolateWorldPoint(start, end, startPercent);
+  const segmentEnd = interpolateWorldPoint(start, end, endPercent);
+  const center = segmentStart.clone().add(segmentEnd).multiplyScalar(0.5);
+  const length = segmentStart.distanceTo(segmentEnd);
   const angle = Math.atan2(end.z - start.z, end.x - start.x);
-  const geometry = new THREE.BoxGeometry(length, WALL_HEIGHT_M, WALL_THICKNESS_M);
+  const geometry = new THREE.BoxGeometry(length, maxY - minY, WALL_THICKNESS_M);
   const material = new THREE.MeshStandardMaterial({ color: "#d1c1a6", roughness: 0.92 });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(center.x, WALL_HEIGHT_M / 2, center.z);
+  mesh.position.set(center.x, minY + (maxY - minY) / 2, center.z);
   mesh.rotation.y = -angle;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
+}
+
+function createWallMesh(wall, wallIndex, bounds, scale, openings = []) {
+  const group = new THREE.Group();
+  const wallOpenings = openings
+    .filter((opening) => Number(opening.item?.wall_index) === wallIndex)
+    .map((opening) => ({
+      ...opening,
+      range: getOpeningRangePercent(
+        opening.item,
+        wall,
+        opening.kind === "windows" ? 14 : 10
+      )
+    }))
+    .filter((opening) => opening.range.end - opening.range.start >= MIN_WALL_SEGMENT_PERCENT)
+    .sort((a, b) => a.range.start - b.range.start);
+
+  let cursor = 0;
+  wallOpenings.forEach((opening) => {
+    const startPercent = Math.max(cursor, opening.range.start);
+    const endPercent = Math.max(startPercent, opening.range.end);
+    const beforeMesh = createWallSegmentMesh(wall, bounds, scale, cursor, startPercent, 0, WALL_HEIGHT_M);
+    if (beforeMesh) {
+      group.add(beforeMesh);
+    }
+
+    if (opening.kind === "windows") {
+      const belowMesh = createWallSegmentMesh(wall, bounds, scale, startPercent, endPercent, 0, WINDOW_SILL_M);
+      const aboveMesh = createWallSegmentMesh(
+        wall,
+        bounds,
+        scale,
+        startPercent,
+        endPercent,
+        WINDOW_SILL_M + WINDOW_HEIGHT_M,
+        WALL_HEIGHT_M
+      );
+      if (belowMesh) {
+        group.add(belowMesh);
+      }
+      if (aboveMesh) {
+        group.add(aboveMesh);
+      }
+    } else {
+      const headerMesh = createWallSegmentMesh(wall, bounds, scale, startPercent, endPercent, DOOR_HEIGHT_M, WALL_HEIGHT_M);
+      if (headerMesh) {
+        group.add(headerMesh);
+      }
+    }
+
+    cursor = Math.max(cursor, endPercent);
+  });
+
+  const afterMesh = createWallSegmentMesh(wall, bounds, scale, cursor, 100, 0, WALL_HEIGHT_M);
+  if (afterMesh) {
+    group.add(afterMesh);
+  }
+
+  return group.children.length ? group : createWallSegmentMesh(wall, bounds, scale, 0, 100, 0, WALL_HEIGHT_M);
 }
 
 function createOpeningMesh(item, kind, bounds, scale) {
@@ -197,12 +303,98 @@ function createOpeningMesh(item, kind, bounds, scale) {
   const material = new THREE.MeshStandardMaterial({
     color,
     transparent: kind === "windows",
-    opacity: kind === "windows" ? 0.58 : 0.96
+    opacity: kind === "windows" ? 0.5 : 0.96,
+    emissive: kind === "windows" ? "#bfeeff" : "#000000",
+    emissiveIntensity: kind === "windows" ? 0.28 : 0,
+    roughness: kind === "windows" ? 0.2 : 0.72,
+    metalness: kind === "windows" ? 0.02 : 0
   });
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   mesh.position.set(point.x, y, point.z);
   mesh.rotation.y = angle;
+  mesh.castShadow = kind !== "windows";
+  mesh.receiveShadow = true;
   return mesh;
+}
+
+function getInsideWallNormal(wall, bounds, scale) {
+  const start = toWorldPoint({ x: wall.x1_percent, y: wall.y1_percent }, bounds, scale);
+  const end = toWorldPoint({ x: wall.x2_percent, y: wall.y2_percent }, bounds, scale);
+  const center = start.clone().add(end).multiplyScalar(0.5);
+  const direction = end.clone().sub(start).setY(0).normalize();
+  const normalA = new THREE.Vector3(-direction.z, 0, direction.x);
+  const normalB = new THREE.Vector3(direction.z, 0, -direction.x);
+  const towardRoom = new THREE.Vector3(-center.x, 0, -center.z).normalize();
+  return normalA.dot(towardRoom) >= normalB.dot(towardRoom) ? normalA : normalB;
+}
+
+function createSunPatchGeometry(origin, rayDirection, width, length) {
+  const tangent = new THREE.Vector3(-rayDirection.z, 0, rayDirection.x).normalize();
+  const start = origin.clone().add(rayDirection.clone().multiplyScalar(0.22));
+  const end = start.clone().add(rayDirection.clone().multiplyScalar(length));
+  const halfWidth = width / 2;
+  const vertices = new Float32Array([
+    start.x - tangent.x * halfWidth, 0.035, start.z - tangent.z * halfWidth,
+    start.x + tangent.x * halfWidth, 0.035, start.z + tangent.z * halfWidth,
+    end.x + tangent.x * halfWidth * 0.68, 0.035, end.z + tangent.z * halfWidth * 0.68,
+    end.x - tangent.x * halfWidth * 0.68, 0.035, end.z - tangent.z * halfWidth * 0.68
+  ]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createWindowDaylightGroup(item, wall, bounds, scale, sun) {
+  if (!wall || sun.daylight < 0.12) {
+    return null;
+  }
+
+  const rayDirection = sun.sunPosition.clone().multiplyScalar(-1).setY(0);
+  if (rayDirection.lengthSq() <= 0.0001) {
+    return null;
+  }
+  rayDirection.normalize();
+
+  const insideNormal = getInsideWallNormal(wall, bounds, scale);
+  const exposure = clampRange(rayDirection.dot(insideNormal), 0, 1);
+  if (exposure <= 0.08) {
+    return null;
+  }
+
+  const windowPoint = toWorldPoint({ x: item.x_percent, y: item.y_percent }, bounds, scale);
+  const width = Math.max(
+    0.45,
+    ((clampNumber(item.width_percent, 14)) / 100) * Math.min(scale.widthMeters, scale.depthMeters)
+  );
+  const length = clampRange(1.2 + exposure * sun.daylight * 5.2, 1.2, 6.2);
+  const opacity = clampRange(0.06 + exposure * sun.daylight * sun.lightingStrength * 0.28, 0.04, 0.34);
+  const group = new THREE.Group();
+
+  const patch = new THREE.Mesh(
+    createSunPatchGeometry(windowPoint, rayDirection, width * 1.35, length),
+    new THREE.MeshBasicMaterial({
+      color: sun.sunColor,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    })
+  );
+  patch.renderOrder = 4;
+  group.add(patch);
+
+  const glow = new THREE.PointLight(sun.sunColor, opacity * 4.8, Math.max(2, length * 1.35), 2);
+  glow.position.set(
+    windowPoint.x + insideNormal.x * 0.18,
+    WINDOW_SILL_M + WINDOW_HEIGHT_M * 0.52,
+    windowPoint.z + insideNormal.z * 0.18
+  );
+  group.add(glow);
+
+  return group;
 }
 
 function createFurnitureMesh(item, bounds, scale) {
@@ -507,6 +699,12 @@ export default function FloorPlanPreview3D({ room }) {
       ...(Array.isArray(room?.furniture) ? room.furniture : []),
       ...(Array.isArray(room?.desks) ? room.desks : [])
     ];
+    const windowItems = Array.isArray(room?.windows) ? room.windows : [];
+    const doorItems = Array.isArray(room?.doors) ? room.doors : [];
+    const openings = [
+      ...windowItems.map((item) => ({ kind: "windows", item })),
+      ...doorItems.map((item) => ({ kind: "doors", item }))
+    ];
 
     const scene = sceneRef.current;
     const previousRoot = scene.getObjectByName("room-root");
@@ -526,19 +724,46 @@ export default function FloorPlanPreview3D({ room }) {
 
     const keyLight = new THREE.DirectionalLight(sun.sunColor, sun.keyLight);
     keyLight.position.copy(sun.sunPosition);
+    keyLight.target.position.set(0, 0, 0);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 2048;
     keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.camera.near = 0.1;
+    keyLight.shadow.camera.far = 40;
+    keyLight.shadow.camera.left = -Math.max(scale.widthMeters, scale.depthMeters) - 5;
+    keyLight.shadow.camera.right = Math.max(scale.widthMeters, scale.depthMeters) + 5;
+    keyLight.shadow.camera.top = Math.max(scale.widthMeters, scale.depthMeters) + 5;
+    keyLight.shadow.camera.bottom = -Math.max(scale.widthMeters, scale.depthMeters) - 5;
+    keyLight.shadow.bias = -0.00018;
+    keyLight.shadow.normalBias = 0.035;
     root.add(keyLight);
+    root.add(keyLight.target);
 
     const fillLight = new THREE.DirectionalLight("#f4f1ea", sun.fillLight);
     fillLight.position.set(-6, 5, -4);
     root.add(fillLight);
 
     root.add(createFloorMesh(floorPoints, bounds, scale, sun.floor));
-    normalizedWalls.forEach((wall) => root.add(createWallMesh(wall, bounds, scale)));
-    (room?.windows || []).forEach((windowItem) => root.add(createOpeningMesh(windowItem, "windows", bounds, scale)));
-    (room?.doors || []).forEach((doorItem) => root.add(createOpeningMesh(doorItem, "doors", bounds, scale)));
+    normalizedWalls.forEach((wall, wallIndex) => {
+      const wallMesh = createWallMesh(wall, wallIndex, bounds, scale, openings);
+      if (wallMesh) {
+        root.add(wallMesh);
+      }
+    });
+    windowItems.forEach((windowItem) => {
+      const daylight = createWindowDaylightGroup(
+        windowItem,
+        normalizedWalls[Number(windowItem?.wall_index)],
+        bounds,
+        scale,
+        sun
+      );
+      if (daylight) {
+        root.add(daylight);
+      }
+      root.add(createOpeningMesh(windowItem, "windows", bounds, scale));
+    });
+    doorItems.forEach((doorItem) => root.add(createOpeningMesh(doorItem, "doors", bounds, scale)));
     objects.forEach((item) => root.add(createFurnitureMesh(item, bounds, scale)));
 
     const gridSize = Math.max(scale.widthMeters, scale.depthMeters) + 6;
