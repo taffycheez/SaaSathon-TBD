@@ -35,6 +35,10 @@ const defaultPreferences = {
   numPeople: 8
 };
 
+function cloneValue(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function normalizeWallIndex(value, wallsLength) {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || wallsLength <= 0) {
@@ -261,6 +265,7 @@ export default function App() {
   const [roomNotes, setRoomNotes] = useState([]);
   const [layoutNotes, setLayoutNotes] = useState([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [undoStack, setUndoStack] = useState([]);
 
   const scoreResult = useMemo(() => computeScore(room), [room]);
 
@@ -276,11 +281,45 @@ export default function App() {
     return () => window.clearTimeout(timeoutId);
   }, [error]);
 
+  function pushUndoSnapshot() {
+    setUndoStack((current) => [
+      ...current.slice(-39),
+      {
+        room: cloneValue(room),
+        baseRoom: cloneValue(baseRoom),
+        preferences: cloneValue(preferences),
+        showReferenceImage,
+        roomNotes: cloneValue(roomNotes),
+        layoutNotes: cloneValue(layoutNotes)
+      }
+    ]);
+  }
+
+  function undoLastAction() {
+    setUndoStack((current) => {
+      if (!current.length) {
+        return current;
+      }
+
+      const previous = current[current.length - 1];
+      setRoom(previous.room);
+      setBaseRoom(previous.baseRoom);
+      setPreferences(previous.preferences);
+      setShowReferenceImage(previous.showReferenceImage);
+      setRoomNotes(previous.roomNotes);
+      setLayoutNotes(previous.layoutNotes);
+
+      return current.slice(0, -1);
+    });
+  }
+
   function addObject(type) {
+    pushUndoSnapshot();
     setRoom((currentRoom) => addObjectToRoom(currentRoom, type));
   }
 
   function addWindow() {
+    pushUndoSnapshot();
     setRoom((currentRoom) => ({
       ...currentRoom,
       windows: [
@@ -320,6 +359,7 @@ export default function App() {
       setBaseRoom(normalizedRoom);
       setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
       setLayoutNotes([]);
+      setUndoStack([]);
     } catch (uploadError) {
       setError(uploadError.message || "We couldn't analyse that image. Please try again.");
     } finally {
@@ -346,6 +386,7 @@ export default function App() {
         throw new Error("Layout generation failed.");
       }
 
+      pushUndoSnapshot();
       const { desks, notes } = normalizeDeskData(await response.json());
       setRoom((currentRoom) => ({
         ...currentRoom,
@@ -360,6 +401,7 @@ export default function App() {
   }
 
   function updateRoomDimensions(dimension, value) {
+    pushUndoSnapshot();
     setRoom((currentRoom) => ({
       ...currentRoom,
       [dimension]: Number(value) || 0
@@ -372,6 +414,7 @@ export default function App() {
 
   function confirmResetWorkspace() {
     setShowResetConfirm(false);
+    pushUndoSnapshot();
 
     if (imagePreview) {
       setRoom(baseRoom);
@@ -390,6 +433,7 @@ export default function App() {
     setError("");
     setRoomNotes([]);
     setLayoutNotes([]);
+    setUndoStack([]);
   }
 
   function cancelResetWorkspace() {
@@ -426,7 +470,6 @@ export default function App() {
           </button>
         ) : null}
       </header>
-
       {isAnalysing ? <LoadingScreen /> : null}
 
       {!imagePreview ? (
@@ -438,54 +481,63 @@ export default function App() {
         />
       ) : (
         <main className="workspace-layout">
-          <section className="canvas-column">
+            <section className="canvas-column">
             <FloorPlanEditor
               room={room}
               setRoom={setRoom}
               imagePreview={imagePreview}
               showReferenceImage={showReferenceImage}
+              onActionStart={pushUndoSnapshot}
+              onUndo={undoLastAction}
+              canUndo={Boolean(undoStack.length)}
             />
             <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} />
-          </section>
+            </section>
 
-          <aside className="sidebar-column">
-            <ControlPanel
-              preferences={preferences}
-              setPreferences={setPreferences}
-              room={room}
-              updateRoomDimensions={updateRoomDimensions}
-              showReferenceImage={showReferenceImage}
-              setShowReferenceImage={setShowReferenceImage}
-              onAddWindow={addWindow}
-              onAddTable={addTable}
-              onAddObject={addObject}
-              onGenerateLayout={handleGenerateLayout}
-              onReset={resetWorkspace}
-              isGenerating={isGenerating}
-            />
-            {roomNotes.length ? (
-              <div className="note-card">
-                <p className="upload-kicker">Room notes</p>
-                <ul className="note-list">
-                  {roomNotes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {layoutNotes.length ? (
-              <div className="note-card">
-                <p className="upload-kicker">Layout notes</p>
-                <ul className="note-list">
-                  {layoutNotes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {error ? <p className="error-banner">{error}</p> : null}
-          </aside>
-        </main>
+            <aside className="sidebar-column">
+              <ControlPanel
+                preferences={preferences}
+                setPreferences={(updater) => {
+                  pushUndoSnapshot();
+                  setPreferences(updater);
+                }}
+                room={room}
+                updateRoomDimensions={updateRoomDimensions}
+                showReferenceImage={showReferenceImage}
+                setShowReferenceImage={(updater) => {
+                  pushUndoSnapshot();
+                  setShowReferenceImage(updater);
+                }}
+                onAddWindow={addWindow}
+                onAddTable={addTable}
+                onAddObject={addObject}
+                onGenerateLayout={handleGenerateLayout}
+                onReset={resetWorkspace}
+                isGenerating={isGenerating}
+              />
+              {roomNotes.length ? (
+                <div className="note-card">
+                  <p className="upload-kicker">Room notes</p>
+                  <ul className="note-list">
+                    {roomNotes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {layoutNotes.length ? (
+                <div className="note-card">
+                  <p className="upload-kicker">Layout notes</p>
+                  <ul className="note-list">
+                    {layoutNotes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {error ? <p className="error-banner">{error}</p> : null}
+            </aside>
+          </main>
       )}
       <Footer />
       {showResetConfirm ? (
