@@ -195,7 +195,6 @@ export default function App() {
 
     try {
       const base64 = await fileToBase64(file);
-      setImagePreview(base64);
 
       const response = await fetch(`${API_BASE_URL}/analyse-room`, {
         method: "POST",
@@ -204,10 +203,12 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Room analysis failed.");
+        const failure = await response.json().catch(() => null);
+        throw new Error(failure?.error || "Room analysis failed.");
       }
 
       const data = await response.json();
+      setImagePreview(base64);
       setRoom(normalizeRoomData(data));
       setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
       setLayoutNotes([]);

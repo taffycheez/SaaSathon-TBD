@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test",
+    "test:images": "RUN_OPENAI_IMAGE_TESTS=1 node --test test/imageClassification.integration.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
