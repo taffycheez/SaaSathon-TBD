@@ -65,30 +65,13 @@ button:disabled {
   width: 100%;
   margin: 0 0 18px;
   min-height: 76px;
-  position: sticky;
-  top: 0;
-  z-index: 20;
   display: flex;
   justify-content: space-between;
   gap: 18px;
   align-items: center;
   border: 0;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  background: rgba(255, 255, 255, 0.92);
+  background: transparent;
   padding: 14px max(18px, calc((100vw - 1440px) / 2 + 18px));
-  box-shadow: 0 14px 34px rgba(24, 63, 150, 0.1);
-  backdrop-filter: blur(18px);
-  transform: translateY(0);
-  transition: transform 220ms ease, opacity 220ms ease, box-shadow 220ms ease;
-  will-change: transform;
-}
-
-.app-header-hidden {
-  opacity: 0;
-  pointer-events: none;
-  box-shadow: none;
-  transform: translateY(calc(-100% - 18px));
 }
 
 .app-header h1 {
@@ -212,6 +195,36 @@ button:disabled {
   margin-top: 26px;
 }
 
+.hero-swoop {
+  width: 240px;
+  margin-top: 10px;
+  margin-left: 12px;
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.hero-swoop svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.hero-swoop-line {
+  stroke: rgba(24, 63, 150, 0.34);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 4 8;
+}
+
+.hero-swoop-arrow {
+  stroke: rgba(24, 63, 150, 0.34);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .primary-link,
 .secondary-link {
   display: inline-flex;
@@ -243,7 +256,7 @@ button:disabled {
   border-radius: 8px;
   padding: 14px;
   background:
-    radial-gradient(circle at top right, rgba(255, 210, 79, 0.28), transparent 34%),
+    radial-gradient(circle at top right, rgba(164, 205, 255, 0.28), transparent 36%),
     linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
   box-shadow: 0 28px 70px rgba(24, 63, 150, 0.14);
 }

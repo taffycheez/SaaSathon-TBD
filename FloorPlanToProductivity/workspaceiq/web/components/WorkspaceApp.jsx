@@ -1092,6 +1092,18 @@ function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, he
               See upload area
             </button>
           </div>
+          <div className="hero-swoop" aria-hidden="true">
+            <svg viewBox="0 0 240 92" fill="none" role="presentation">
+              <path
+                d="M16 20C53 11 88 20 111 36C132 51 146 73 169 75C188 77 206 66 224 48"
+                className="hero-swoop-line"
+              />
+              <path
+                d="M205 47C213 46 220 47 224 48C222 53 218 59 213 63"
+                className="hero-swoop-arrow"
+              />
+            </svg>
+          </div>
         </div>
 
         <div className="hero-visual" aria-label="WorkspaceIQ floor plan preview">
