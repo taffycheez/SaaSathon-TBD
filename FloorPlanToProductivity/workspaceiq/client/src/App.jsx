@@ -473,15 +473,6 @@ function LoadingScreen() {
 }
 
 function HomePage({ uploadRef, onUpload, isLoading, error }) {
-  const marqueeItems = [
-    "Room photo analysis",
-    "Desk placement",
-    "Natural light scoring",
-    "Quiet zones",
-    "Corridor checks",
-    "Editable floor plans"
-  ];
-
   return (
     <main className="home-page">
       <section className="hero-section" id="home">
@@ -522,14 +513,6 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
             <span>Flow +15</span>
             <span>Focus +18</span>
           </div>
-        </div>
-      </section>
-
-      <section className="marquee-section" aria-label="WorkspaceIQ capabilities">
-        <div className="marquee-track">
-          {[...marqueeItems, ...marqueeItems].map((item, index) => (
-            <span key={`${item}-${index}`}>{item}</span>
-          ))}
         </div>
       </section>
 

@@ -313,40 +313,6 @@ button:disabled {
   text-align: center;
 }
 
-.marquee-section {
-  width: 100%;
-  overflow: hidden;
-  border-block: 1px solid var(--border);
-  background: var(--ink);
-  color: white;
-}
-
-.marquee-track {
-  display: flex;
-  width: max-content;
-  animation: marquee-scroll 24s linear infinite;
-}
-
-.marquee-track span {
-  padding: 14px 24px;
-  white-space: nowrap;
-  color: #f2f7f3;
-  font-size: 0.92rem;
-  font-weight: 850;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-@keyframes marquee-scroll {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(-50%);
-  }
-}
-
 .feature-section {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
