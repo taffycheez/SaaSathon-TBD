@@ -13,17 +13,13 @@ This package is the cloud-ready Next.js + TypeScript app for WorkspaceIQ.
 ## Environment variables
 
 ```env
-ANALYSIS_MODE=backend
-ANALYSIS_BACKEND_URL=http://127.0.0.1:3001
 ANALYSIS_WORKER_URL=
+OPENROUTER_API_KEY=
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=openai/gpt-4o
 ```
 
-### Modes
-
-- `ANALYSIS_MODE=backend`
-  - `app/api/analyse` proxies to the existing Express backend
-- `ANALYSIS_MODE=worker`
-  - `app/api/analyse` proxies to the Python worker endpoint
+If `ANALYSIS_WORKER_URL` is set, `app/api/analyse-room` will try the Python CV backend first and fall back to the LLM route if the worker is unavailable.
 
 ## Local development
 
@@ -48,8 +44,27 @@ FloorPlanToProductivity/workspaceiq/web
 Recommended production setup:
 
 1. Deploy this `web/` package to Vercel.
-2. Point `ANALYSIS_WORKER_URL` at a separately deployed Python worker endpoint if you want CV analysis.
-3. Keep the Node route handlers as the public API boundary for the app.
+2. Deploy `web/python-worker/` as a separate Python service.
+3. Point `ANALYSIS_WORKER_URL` at that public backend URL.
+4. Keep the Node route handlers as the public API boundary for the app.
+
+### Recommended backend host
+
+Use a separate Docker web service for the Python worker. Render is a good fit for this CV backend in a monorepo because it can build Docker services and manage them from a Blueprint file.
+
+This repo already includes a Render Blueprint at:
+
+```text
+FloorPlanToProductivity/workspaceiq/render.yaml
+```
+
+That Blueprint points Render at:
+
+```text
+FloorPlanToProductivity/workspaceiq/web/python-worker
+```
+
+and configures a `/health` health check for the worker.
 
 ## Notes
 
@@ -57,3 +72,44 @@ Recommended production setup:
 - `app/api/layout/route.ts` proxies layout generation.
 - The heavy Python CV worker is intentionally not bundled into this Vercel app.
 - Deploy the worker separately and set `ANALYSIS_WORKER_URL` to that public endpoint.
+
+## Python worker
+
+The backend CV service lives in:
+
+```text
+web/python-worker
+```
+
+It exposes:
+
+- `GET /health`
+- `POST /analyse-room`
+
+It is Docker-ready via:
+
+```text
+web/python-worker/Dockerfile
+```
+
+Example env for the worker:
+
+```env
+CV_SEGMENTATION_MODEL=yolov8n-seg.pt
+```
+
+## Deploy the Python worker
+
+1. In Render, create a new Blueprint from this repo.
+2. Use `FloorPlanToProductivity/workspaceiq/render.yaml` as the Blueprint file path.
+3. Let Render create the `workspaceiq-cv-worker` web service.
+4. After the service is live, copy its public URL.
+5. In Vercel, set:
+
+```env
+ANALYSIS_WORKER_URL=https://your-worker-url
+```
+
+6. Redeploy the Vercel app.
+
+After that, uploads will try the Python CV backend first before falling back to the LLM route.
