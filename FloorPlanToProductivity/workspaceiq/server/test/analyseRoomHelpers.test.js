@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildRoomNotes,
   fallbackRoom,
+  normalizeAnalysisResult,
   normalizeRoomDescription
 } from "../lib/analyseRoomHelpers.js";
 
@@ -26,4 +27,14 @@ test("fallback room produces useful fallback notes", () => {
   const notes = buildRoomNotes(fallbackRoom, true);
   assert.equal(notes.length >= 2, true);
   assert.match(notes[0], /starter room/i);
+});
+
+test("normalizeAnalysisResult preserves explicit room rejection", () => {
+  const result = normalizeAnalysisResult({
+    is_valid_room: false,
+    rejection_reason: "The image shows a piece of fruit, not a room."
+  });
+
+  assert.equal(result.is_valid_room, false);
+  assert.match(result.rejection_reason, /fruit/i);
 });

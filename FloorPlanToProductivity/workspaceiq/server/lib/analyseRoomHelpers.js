@@ -50,6 +50,21 @@ export function normalizeRoomDescription(payload) {
   };
 }
 
+export function normalizeAnalysisResult(payload) {
+  const safePayload = payload && typeof payload === "object" ? payload : {};
+  const isValidRoom = safePayload.is_valid_room !== false;
+  const rejectionReason =
+    typeof safePayload.rejection_reason === "string" && safePayload.rejection_reason.trim()
+      ? safePayload.rejection_reason.trim()
+      : "This image does not appear to show an office or room layout we can analyse.";
+
+  return {
+    is_valid_room: isValidRoom,
+    rejection_reason: isValidRoom ? "" : rejectionReason,
+    room: normalizeRoomDescription(safePayload)
+  };
+}
+
 export function buildRoomNotes(room, isFallback) {
   const notes = [];
   const windowCount = room.windows.length;
