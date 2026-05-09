@@ -32,8 +32,7 @@ const DEFAULT_ROOM = {
 };
 
 const defaultPreferences = {
-  numPeople: 8,
-  workStyle: "balanced"
+  numPeople: 8
 };
 
 function normalizeWallIndex(value, wallsLength) {
@@ -42,6 +41,34 @@ function normalizeWallIndex(value, wallsLength) {
     return 0;
   }
   return Math.max(0, Math.min(wallsLength - 1, numeric));
+}
+
+function edgeItemFromLegacy(item, walls) {
+  if (item && (item.x_percent != null || item.y_percent != null)) {
+    return {
+      x_percent: clampPercent(item?.x_percent),
+      y_percent: clampPercent(item?.y_percent),
+      rotation_deg: normalizeRotation(item?.rotation_deg)
+    };
+  }
+
+  const wall = walls[normalizeWallIndex(item?.wall_index, walls.length)];
+  const ratio = clampPercent(item?.position_percent) / 100;
+  const x = wall
+    ? wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio
+    : 50;
+  const y = wall
+    ? wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
+    : 50;
+  const rotation = wall
+    ? normalizeRotation(Math.atan2(wall.y2_percent - wall.y1_percent, wall.x2_percent - wall.x1_percent) * 180 / Math.PI)
+    : 0;
+
+  return {
+    x_percent: clampPercent(x),
+    y_percent: clampPercent(y),
+    rotation_deg: rotation
+  };
 }
 
 function normalizeRoomData(data) {
@@ -66,16 +93,10 @@ function normalizeRoomData(data) {
     estimated_height_m: Math.max(1, Number(safeData.estimated_height_m) || DEFAULT_ROOM.estimated_height_m),
     walls,
     windows: Array.isArray(safeData.windows)
-      ? safeData.windows.map((item) => ({
-          wall_index: normalizeWallIndex(item?.wall_index, walls.length),
-          position_percent: clampPercent(item?.position_percent)
-        }))
+      ? safeData.windows.map((item) => edgeItemFromLegacy(item, walls))
       : [],
     doors: Array.isArray(safeData.doors)
-      ? safeData.doors.map((item) => ({
-          wall_index: normalizeWallIndex(item?.wall_index, walls.length),
-          position_percent: clampPercent(item?.position_percent)
-        }))
+      ? safeData.doors.map((item) => edgeItemFromLegacy(item, walls))
       : [],
     furniture: furniture.filter((item) => !isDeskLikeFurniture(item)),
     desks: detectedDesks,
@@ -115,12 +136,17 @@ function distance(a, b) {
 }
 
 function pointOnWall(edgeItem, walls) {
-  const wall = walls[edgeItem.wall_index];
+  if (edgeItem && edgeItem.x_percent != null && edgeItem.y_percent != null) {
+    return {
+      x: clampPercent(edgeItem.x_percent),
+      y: clampPercent(edgeItem.y_percent)
+    };
+  }
+  const wall = walls[edgeItem?.wall_index];
   if (!wall) {
     return { x: 50, y: 50 };
   }
-
-  const ratio = clampPercent(edgeItem.position_percent) / 100;
+  const ratio = clampPercent(edgeItem?.position_percent) / 100;
   return {
     x: wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio,
     y: wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
@@ -182,28 +208,7 @@ function hasQuietZone(desks, doors, walls) {
   return farDesks.length >= Math.max(2, Math.ceil(desks.length / 2));
 }
 
-function hasCollaborationZone(desks, workStyle) {
-  if (workStyle !== "collaborative") {
-    return true;
-  }
-  if (desks.length < 3) {
-    return false;
-  }
-  let clusteredPairs = 0;
-  for (let i = 0; i < desks.length; i += 1) {
-    for (let j = i + 1; j < desks.length; j += 1) {
-      if (distance(
-        { x: desks[i].x_percent, y: desks[i].y_percent },
-        { x: desks[j].x_percent, y: desks[j].y_percent }
-      ) < 16) {
-        clusteredPairs += 1;
-      }
-    }
-  }
-  return clusteredPairs >= 2;
-}
-
-function computeScore(room, preferences) {
+function computeScore(room) {
   const desks = room.desks || [];
   const walls = room.walls || [];
   const windows = room.windows || [];
@@ -229,10 +234,6 @@ function computeScore(room, preferences) {
   score += quietPoints;
   breakdown.push(`${quietPoints ? "Quiet zone present" : "Quiet zone missing"}: +${quietPoints}`);
 
-  const collaborationPoints = hasCollaborationZone(desks, preferences.workStyle) ? 10 : 0;
-  score += collaborationPoints;
-  breakdown.push(`${preferences.workStyle === "collaborative" ? "Collaboration zone check" : "Collaboration bonus not required"}: +${collaborationPoints}`);
-
   const areaPerDesk =
     desks.length > 0
       ? (room.estimated_width_m * room.estimated_height_m) / desks.length
@@ -250,6 +251,7 @@ function computeScore(room, preferences) {
 export default function App() {
   const uploadRef = useRef(null);
   const [room, setRoom] = useState(DEFAULT_ROOM);
+  const [baseRoom, setBaseRoom] = useState(DEFAULT_ROOM);
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
   const [showReferenceImage, setShowReferenceImage] = useState(false);
@@ -258,8 +260,9 @@ export default function App() {
   const [error, setError] = useState("");
   const [roomNotes, setRoomNotes] = useState([]);
   const [layoutNotes, setLayoutNotes] = useState([]);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  const scoreResult = useMemo(() => computeScore(room, preferences), [room, preferences]);
+  const scoreResult = useMemo(() => computeScore(room), [room]);
 
   useEffect(() => {
     if (!error) {
@@ -275,6 +278,20 @@ export default function App() {
 
   function addObject(type) {
     setRoom((currentRoom) => addObjectToRoom(currentRoom, type));
+  }
+
+  function addWindow() {
+    setRoom((currentRoom) => ({
+      ...currentRoom,
+      windows: [
+        ...(currentRoom.windows || []),
+        { x_percent: 50, y_percent: 12, rotation_deg: 0 }
+      ]
+    }));
+  }
+
+  function addTable() {
+    addObject("table");
   }
 
   async function handleUpload(file) {
@@ -296,9 +313,11 @@ export default function App() {
       }
 
       const data = await response.json();
+      const normalizedRoom = normalizeRoomData(data);
       setImagePreview(base64);
       setShowReferenceImage(false);
-      setRoom(normalizeRoomData(data));
+      setRoom(normalizedRoom);
+      setBaseRoom(normalizedRoom);
       setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
       setLayoutNotes([]);
     } catch (uploadError) {
@@ -319,7 +338,7 @@ export default function App() {
         body: JSON.stringify({
           room,
           num_people: preferences.numPeople,
-          work_style: preferences.workStyle
+          work_style: "balanced"
         })
       });
 
@@ -348,7 +367,23 @@ export default function App() {
   }
 
   function resetWorkspace() {
+    setShowResetConfirm(true);
+  }
+
+  function confirmResetWorkspace() {
+    setShowResetConfirm(false);
+
+    if (imagePreview) {
+      setRoom(baseRoom);
+      setPreferences(defaultPreferences);
+      setShowReferenceImage(false);
+      setError("");
+      setLayoutNotes([]);
+      return;
+    }
+
     setRoom(DEFAULT_ROOM);
+    setBaseRoom(DEFAULT_ROOM);
     setPreferences(defaultPreferences);
     setImagePreview("");
     setShowReferenceImage(false);
@@ -357,13 +392,21 @@ export default function App() {
     setLayoutNotes([]);
   }
 
+  function cancelResetWorkspace() {
+    setShowResetConfirm(false);
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <button
           type="button"
           className="brand-lockup brand-home-button"
-          onClick={resetWorkspace}
+          onClick={() => {
+            if (!imagePreview) {
+              resetWorkspace();
+            }
+          }}
           aria-label="Go to WorkspaceIQ home"
         >
           <span className="brand-mark">WIQ</span>
@@ -413,6 +456,8 @@ export default function App() {
               updateRoomDimensions={updateRoomDimensions}
               showReferenceImage={showReferenceImage}
               setShowReferenceImage={setShowReferenceImage}
+              onAddWindow={addWindow}
+              onAddTable={addTable}
               onAddObject={addObject}
               onGenerateLayout={handleGenerateLayout}
               onReset={resetWorkspace}
@@ -443,6 +488,35 @@ export default function App() {
         </main>
       )}
       <Footer />
+      {showResetConfirm ? (
+        <div className="modal-backdrop" role="presentation" onClick={cancelResetWorkspace}>
+          <div
+            className="confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-confirm-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="upload-kicker">Confirm reset</p>
+            <h2 id="reset-confirm-title">
+              {imagePreview ? "Restore the analysed floor plan?" : "Reset this workspace?"}
+            </h2>
+            <p>
+              {imagePreview
+                ? "This will remove your current edits and bring the layout back to the analysed starting point."
+                : "This will clear the current workspace and return to the default starting state."}
+            </p>
+            <div className="confirm-actions">
+              <button type="button" className="secondary-button modal-button" onClick={cancelResetWorkspace}>
+                Keep editing
+              </button>
+              <button type="button" className="primary-button modal-button" onClick={confirmResetWorkspace}>
+                Yes, reset
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -525,7 +599,7 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
         <article>
           <span>02</span>
           <h3>Generate layouts</h3>
-          <p>Create desk arrangements based on headcount and the work style your space needs to support.</p>
+          <p>Create desk arrangements based on headcount and the practical flow your space needs to support.</p>
         </article>
         <article>
           <span>03</span>

@@ -7,17 +7,13 @@ export default function ControlPanel({
   updateRoomDimensions,
   showReferenceImage,
   setShowReferenceImage,
+  onAddWindow,
+  onAddTable,
   onAddObject,
   onGenerateLayout,
   onReset,
   isGenerating
 }) {
-  const workStyles = [
-    { value: "focus", label: "Focus" },
-    { value: "balanced", label: "Balanced" },
-    { value: "collaborative", label: "Team" }
-  ];
-
   return (
     <div className="panel-card">
       <p className="upload-kicker">Step 3</p>
@@ -42,41 +38,6 @@ export default function ControlPanel({
         />
       </label>
 
-      <div className="field">
-        <span>Work style</span>
-        <div className="segmented-control" role="group" aria-label="Work style">
-          {workStyles.map((style) => (
-            <button
-              key={style.value}
-              type="button"
-              className={preferences.workStyle === style.value ? "active" : ""}
-              onClick={() =>
-                setPreferences((current) => ({
-                  ...current,
-                  workStyle: style.value
-                }))
-              }
-            >
-              {style.label}
-            </button>
-          ))}
-        </div>
-        <select
-          className="sr-only"
-          value={preferences.workStyle}
-          onChange={(event) =>
-            setPreferences((current) => ({
-              ...current,
-              workStyle: event.target.value
-            }))
-          }
-        >
-          <option value="focus">Focus-heavy</option>
-          <option value="balanced">Balanced</option>
-          <option value="collaborative">Collaborative</option>
-        </select>
-      </div>
-
       <div className="field-row">
         <label className="field">
           <span>Width (m)</span>
@@ -99,6 +60,18 @@ export default function ControlPanel({
             onChange={(event) => updateRoomDimensions("estimated_height_m", event.target.value)}
           />
         </label>
+      </div>
+
+      <div className="field">
+        <span>Quick add</span>
+        <div className="quick-add-row">
+          <button type="button" className="object-chip quick-add-chip" onClick={onAddWindow}>
+            Add Window
+          </button>
+          <button type="button" className="object-chip quick-add-chip" onClick={onAddTable}>
+            Add Table
+          </button>
+        </div>
       </div>
 
       <div className="field">
@@ -136,7 +109,7 @@ export default function ControlPanel({
         {isGenerating ? "Generating..." : "Generate Layout"}
       </button>
       <button type="button" className="secondary-button" onClick={onReset}>
-        Reset
+        Reset Edits
       </button>
     </div>
   );
