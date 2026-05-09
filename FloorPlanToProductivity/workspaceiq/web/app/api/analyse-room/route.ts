@@ -1,5 +1,5 @@
 import { getCvWorkerUrl } from "@/lib/config";
-import { createAiClient, openRouterAnalysisModel, openRouterApiKey } from "@/lib/server/ai";
+import { aiProviderName, createAiClient, openRouterAnalysisModel, openRouterApiKey } from "@/lib/server/ai";
 import {
   buildRoomNotes,
   mergeRoomAnalyses,
@@ -47,6 +47,19 @@ function buildWorkerAnalyseUrl(workerUrl: string) {
 function formatFailureReason(source: string, error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "Unknown error";
   return `${source}: ${message}`;
+}
+
+function formatLlmFailureReason(error: unknown) {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "Unknown error";
+  if (/401/i.test(message) && /user not found/i.test(message)) {
+    return `${aiProviderName} rejected the API key (401 User not found). Check Vercel has OPENROUTER_API_KEY set to a valid OpenRouter key, then redeploy.`;
+  }
+
+  if (/401/i.test(message)) {
+    return `${aiProviderName} rejected the API key (${message}). Check the API key env var and redeploy.`;
+  }
+
+  return formatFailureReason("llm", error);
 }
 
 function getAnalysisPipelineMode(value: unknown): AnalysisPipelineMode {
@@ -209,7 +222,7 @@ export async function POST(request: Request) {
     if (!analysis && pipelineMode !== "cv") {
       try {
         if (!openRouterApiKey) {
-          throw new Error("OPENROUTER_API_KEY is missing. Add it to web/.env.local before running AI analysis locally.");
+          throw new Error("OPENROUTER_API_KEY is missing. Add a valid OpenRouter key in Vercel or web/.env.local before running AI analysis.");
         }
 
         analysis = await measureTiming(
@@ -223,7 +236,7 @@ export async function POST(request: Request) {
         );
         analysisSource = "llm";
       } catch (llmError) {
-        failureReasons.push(formatFailureReason("llm", llmError));
+        failureReasons.push(formatLlmFailureReason(llmError));
         throw new Error(failureReasons.join(" | "));
       }
     }

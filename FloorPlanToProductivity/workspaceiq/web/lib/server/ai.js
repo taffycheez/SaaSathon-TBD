@@ -17,16 +17,42 @@ function sanitizeBaseUrl(value) {
   }
 }
 
+function readEnv(names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (typeof value === "string" && value.trim() && value.trim() !== "...") {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
 const normalizedOpenRouterBaseUrl = sanitizeBaseUrl(process.env.OPENROUTER_BASE_URL);
 const normalizedOpenAiBaseUrl = sanitizeBaseUrl(process.env.OPENAI_BASE_URL);
-const usingOpenRouter = Boolean(process.env.OPENROUTER_API_KEY || normalizedOpenRouterBaseUrl);
+const openRouterKey = readEnv([
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_APIKEY",
+  "OPENROUTERAPIKEY",
+  "openrouterapikey",
+  "openrouterApiKey"
+]);
+const openAiKey = readEnv([
+  "OPENAI_API_KEY",
+  "OPENAI_APIKEY",
+  "OPENAIAPIKEY",
+  "openaiapikey",
+  "openaiApiKey"
+]);
+const usingOpenRouter = Boolean(openRouterKey || normalizedOpenRouterBaseUrl);
 const defaultOpenRouterModel = "openai/gpt-5.5";
 const defaultOpenAiModel = "gpt-5.5";
 
-export const openRouterApiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || "";
+export const openRouterApiKey = usingOpenRouter ? openRouterKey : openAiKey;
 export const openRouterBaseUrl = usingOpenRouter
   ? normalizedOpenRouterBaseUrl || "https://openrouter.ai/api/v1"
   : normalizedOpenAiBaseUrl || undefined;
+export const aiProviderName = usingOpenRouter ? "OpenRouter" : "OpenAI";
 export const openRouterModel =
   process.env.OPENROUTER_MODEL ||
   process.env.OPENAI_MODEL ||
