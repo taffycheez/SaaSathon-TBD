@@ -1,16 +1,12 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getObjectDefinition } from "@/lib/objectCatalog";
-import { normalizeWallGraph } from "@/lib/roomGeometry";
+import { normalizeWallGraph, snapEdgeItemToWalls } from "@/lib/roomGeometry";
 import { updateEdgeItemPosition, updatePlacedObjectPosition } from "@/lib/roomState";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
 const PADDING = 40;
-const TRASH_TARGET = {
-  x: CANVAS_WIDTH - PADDING - 70,
-  y: CANVAS_HEIGHT - PADDING - 70,
-  size: 58
-};
+const DRAG_THRESHOLD = 6;
 
 function getWallBounds(walls) {
   const points = walls.flatMap((wall) => [
@@ -51,10 +47,20 @@ function toCanvasPoint(point, roomBox, bounds) {
   };
 }
 
-function clampObjectPosition(pointer, roomBox) {
+function pointerToRoomPosition(pointer, roomBox, shouldClamp = true) {
+  const xPercent = ((pointer.x - roomBox.x) / roomBox.width) * 100;
+  const yPercent = ((pointer.y - roomBox.y) / roomBox.height) * 100;
+
+  if (!shouldClamp) {
+    return {
+      x_percent: xPercent,
+      y_percent: yPercent
+    };
+  }
+
   return {
-    x_percent: Math.max(0, Math.min(100, ((pointer.x - roomBox.x) / roomBox.width) * 100)),
-    y_percent: Math.max(0, Math.min(100, ((pointer.y - roomBox.y) / roomBox.height) * 100))
+    x_percent: Math.max(0, Math.min(100, xPercent)),
+    y_percent: Math.max(0, Math.min(100, yPercent))
   };
 }
 
@@ -270,38 +276,52 @@ function SvgObjectShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
   );
 }
 
-function TrashTarget() {
-  const centerX = TRASH_TARGET.x + TRASH_TARGET.size / 2;
-  const top = TRASH_TARGET.y + 18;
-  const left = TRASH_TARGET.x + 18;
-  const right = TRASH_TARGET.x + TRASH_TARGET.size - 18;
-  const bottom = TRASH_TARGET.y + TRASH_TARGET.size - 14;
-
+function UndoIcon() {
   return (
-    <g pointerEvents="none">
-      <rect
-        x={TRASH_TARGET.x}
-        y={TRASH_TARGET.y}
-        width={TRASH_TARGET.size}
-        height={TRASH_TARGET.size}
-        fill="#fff2f2"
-        stroke="#f0b9b9"
-        strokeWidth={2}
-        rx={8}
-      />
-      <line x1={left - 2} y1={top} x2={right + 2} y2={top} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
-      <line x1={centerX - 8} y1={top - 6} x2={centerX + 8} y2={top - 6} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
-      <line x1={left} y1={top + 7} x2={left + 4} y2={bottom} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
-      <line x1={right} y1={top + 7} x2={right - 4} y2={bottom} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
-      <line x1={left + 4} y1={bottom} x2={right - 4} y2={bottom} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
-      <line x1={centerX - 7} y1={top + 12} x2={centerX - 5} y2={bottom - 6} stroke="#a83b3b" strokeWidth={2} strokeLinecap="round" />
-      <line x1={centerX + 7} y1={top + 12} x2={centerX + 5} y2={bottom - 6} stroke="#a83b3b" strokeWidth={2} strokeLinecap="round" />
-    </g>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 7H4v5" />
+      <path d="M4 12a8 8 0 1 0 2.34-5.66L4 8" />
+    </svg>
   );
 }
 
-export default function FloorPlanEditor({ room, setRoom, imagePreview, showReferenceImage = false }) {
+function RedoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 7h5v5" />
+      <path d="M20 12a8 8 0 1 1-2.34-5.66L20 8" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
+  );
+}
+
+export default function FloorPlanEditor({
+  room,
+  setRoom,
+  onRoomPreviewChange,
+  imagePreview,
+  showReferenceImage = false,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo
+}) {
   const svgRef = useRef(null);
+  const trashRef = useRef(null);
+  const dragStateRef = useRef(null);
+  const roomBoxRef = useRef(null);
+  const wallsRef = useRef([]);
   const [dragState, setDragState] = useState(null);
   const wallGraph = useMemo(() => normalizeWallGraph(room.walls || []), [room.walls]);
   const walls = wallGraph.walls.length ? wallGraph.walls : Array.isArray(room.walls) ? room.walls : [];
@@ -317,14 +337,35 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
     height: roomSize.height
   };
 
-  function updatePlacedItem(type, index, updates) {
+  dragStateRef.current = dragState;
+  roomBoxRef.current = roomBox;
+  wallsRef.current = walls;
+
+  function withUpdatedPlacedItem(currentRoom, type, index, updates) {
+    return {
+      ...currentRoom,
+      [type]: (currentRoom[type] || []).map((item, itemIndex) => (
+        itemIndex === index ? { ...item, ...updates } : item
+      ))
+    };
+  }
+
+  function clearRoomPreview() {
+    onRoomPreviewChange?.(null);
+  }
+
+  function previewPlacedItem(type, index, updates) {
+    onRoomPreviewChange?.(withUpdatedPlacedItem(room, type, index, updates));
+  }
+
+  function updatePlacedItem(type, index, updates, options) {
     setRoom((currentRoom) => {
       if (type === "windows" || type === "doors") {
         return updateEdgeItemPosition(currentRoom, type, index, updates);
       }
 
       return updatePlacedObjectPosition(currentRoom, type, index, updates);
-    });
+    }, options);
   }
 
   function removePlacedItem(type, index) {
@@ -334,7 +375,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
     }));
   }
 
-  function getSvgPoint(event) {
+  function getSvgPointFromClient(clientX, clientY) {
     const svg = svgRef.current;
     if (!svg) {
       return { x: 0, y: 0 };
@@ -342,46 +383,138 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
 
     const rect = svg.getBoundingClientRect();
     return {
-      x: ((event.clientX - rect.left) / rect.width) * CANVAS_WIDTH,
-      y: ((event.clientY - rect.top) / rect.height) * CANVAS_HEIGHT
+      x: ((clientX - rect.left) / rect.width) * CANVAS_WIDTH,
+      y: ((clientY - rect.top) / rect.height) * CANVAS_HEIGHT
     };
+  }
+
+  function isOverTrash(clientX, clientY) {
+    const rect = trashRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return false;
+    }
+
+    return (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    );
+  }
+
+  function buildPreviewItem(item, type, point) {
+    const previewPosition = pointerToRoomPosition(point, roomBoxRef.current, false);
+    if (type === "windows" || type === "doors") {
+      return snapEdgeItemToWalls({ ...item, ...previewPosition }, wallsRef.current);
+    }
+
+    return {
+      ...item,
+      ...previewPosition
+    };
+  }
+
+  function getPreviewItem(type, index, item) {
+    if (!dragState || dragState.type !== type || dragState.index !== index) {
+      return item;
+    }
+
+    return buildPreviewItem(item, type, dragState.point);
   }
 
   function startDrag(type, index, event) {
     event.preventDefault();
     event.stopPropagation();
-    const point = getSvgPoint(event);
-    setDragState({ type, index, point });
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    setDragState({
+      type,
+      index,
+      startPoint: point,
+      point,
+      overTrash: isOverTrash(event.clientX, event.clientY)
+    });
   }
 
-  function handlePointerMove(event) {
-    if (!dragState) {
+  function finishDrag(clientX, clientY) {
+    const currentDrag = dragStateRef.current;
+    if (!currentDrag) {
       return;
     }
 
-    const point = getSvgPoint(event);
-    const next = clampObjectPosition(point, roomBox);
-    updatePlacedItem(dragState.type, dragState.index, next);
-  }
+    const point = getSvgPointFromClient(clientX, clientY);
+    const overTrash = isOverTrash(clientX, clientY);
+    const dragDistance = Math.hypot(
+      point.x - currentDrag.startPoint.x,
+      point.y - currentDrag.startPoint.y
+    );
 
-  function handlePointerUp(event) {
-    if (!dragState) {
-      return;
-    }
-
-    const point = getSvgPoint(event);
-    const overTrash =
-      point.x >= TRASH_TARGET.x &&
-      point.x <= TRASH_TARGET.x + TRASH_TARGET.size &&
-      point.y >= TRASH_TARGET.y &&
-      point.y <= TRASH_TARGET.y + TRASH_TARGET.size;
+    clearRoomPreview();
 
     if (overTrash) {
-      removePlacedItem(dragState.type, dragState.index);
+      removePlacedItem(currentDrag.type, currentDrag.index);
+      setDragState(null);
+      return;
     }
 
+    if (dragDistance < DRAG_THRESHOLD) {
+      setDragState(null);
+      return;
+    }
+
+    updatePlacedItem(
+      currentDrag.type,
+      currentDrag.index,
+      pointerToRoomPosition(point, roomBoxRef.current, false)
+    );
     setDragState(null);
   }
+
+  const isDragging = Boolean(dragState);
+
+  useEffect(() => {
+    if (!isDragging) {
+      clearRoomPreview();
+      return undefined;
+    }
+
+    function handleWindowPointerMove(event) {
+      const point = getSvgPointFromClient(event.clientX, event.clientY);
+      const overTrash = isOverTrash(event.clientX, event.clientY);
+      const currentDrag = dragStateRef.current;
+      const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
+
+      if (currentDrag && currentItem && !overTrash) {
+        previewPlacedItem(currentDrag.type, currentDrag.index, buildPreviewItem(currentItem, currentDrag.type, point));
+      } else {
+        clearRoomPreview();
+      }
+
+      setDragState((current) => (
+        current
+          ? {
+              ...current,
+              point,
+              overTrash
+            }
+          : current
+      ));
+    }
+
+    function handleWindowPointerUp(event) {
+      finishDrag(event.clientX, event.clientY);
+    }
+
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerUp);
+    };
+  }, [isDragging]);
 
   return (
     <div className="editor-card">
@@ -390,6 +523,43 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
           <p className="upload-kicker">Step 2</p>
           <h2>Fine-tune the floor plan</h2>
         </div>
+        <div className="editor-actions">
+          <button
+            type="button"
+            className="editor-icon-button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            aria-label="Undo the last room edit"
+          >
+            <span className="editor-icon">
+              <UndoIcon />
+            </span>
+          </button>
+          <button
+            type="button"
+            className="editor-icon-button"
+            onClick={onRedo}
+            disabled={!canRedo}
+            aria-label="Redo the last room edit"
+          >
+            <span className="editor-icon">
+              <RedoIcon />
+            </span>
+          </button>
+          <div
+            ref={trashRef}
+            className={`trash-drop-zone${dragState ? " is-dragging" : ""}${dragState?.overTrash ? " is-active" : ""}`}
+            aria-live="polite"
+          >
+            <span className="editor-icon">
+              <TrashIcon />
+            </span>
+            <div className="trash-drop-copy">
+              <strong>{dragState?.overTrash ? "Release to delete" : "Trash"}</strong>
+              <span>{dragState ? "Drag an item here to remove it." : "Drop items here to delete."}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="floor-stage-shell">
@@ -397,9 +567,6 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
           ref={svgRef}
           className="floor-stage-svg"
           viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
         >
           {Array.from({ length: 19 }).map((_, index) => {
             const x = PADDING + index * ((CANVAS_WIDTH - PADDING * 2) / 18);
@@ -458,34 +625,22 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                 y1={start.y}
                 x2={end.x}
                 y2={end.y}
-                stroke={wallGraph.isValid ? "#10233d" : "#b03a3a"}
+                stroke="#10233d"
                 strokeWidth="4"
                 strokeLinecap="round"
               />
             );
           })}
 
-          {wallGraph.nodes.map((node, index) => {
-            const point = toCanvasPoint(node, roomBox, roomSize.bounds);
-            return (
-              <circle
-                key={`wall-node-${index}`}
-                cx={point.x}
-                cy={point.y}
-                r="4"
-                fill={wallGraph.isValid ? "#10233d" : "#b03a3a"}
-              />
-            );
-          })}
-
           {windows.map((windowItem, index) => {
-            const x = roomBox.x + (windowItem.x_percent / 100) * roomBox.width;
-            const y = roomBox.y + (windowItem.y_percent / 100) * roomBox.height;
+            const renderedWindow = getPreviewItem("windows", index, windowItem);
+            const x = roomBox.x + (renderedWindow.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (renderedWindow.y_percent / 100) * roomBox.height;
             return (
               <g
                 key={`window-${index}`}
                 className={`workspace-opening${dragState?.type === "windows" && dragState?.index === index ? " is-dragging" : ""}`}
-                transform={`translate(${x} ${y}) rotate(${windowItem.rotation_deg || 0})`}
+                transform={`translate(${x} ${y}) rotate(${renderedWindow.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("windows", index, event)}
                 onDoubleClick={() =>
                   updatePlacedItem("windows", index, { rotation_deg: ((windowItem.rotation_deg || 0) + 90) % 360 })
@@ -497,13 +652,14 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
           })}
 
           {doors.map((doorItem, index) => {
-            const x = roomBox.x + (doorItem.x_percent / 100) * roomBox.width;
-            const y = roomBox.y + (doorItem.y_percent / 100) * roomBox.height;
+            const renderedDoor = getPreviewItem("doors", index, doorItem);
+            const x = roomBox.x + (renderedDoor.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (renderedDoor.y_percent / 100) * roomBox.height;
             return (
               <g
                 key={`door-${index}`}
                 className={`workspace-opening${dragState?.type === "doors" && dragState?.index === index ? " is-dragging" : ""}`}
-                transform={`translate(${x} ${y}) rotate(${doorItem.rotation_deg || 0})`}
+                transform={`translate(${x} ${y}) rotate(${renderedDoor.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("doors", index, event)}
                 onDoubleClick={() =>
                   updatePlacedItem("doors", index, { rotation_deg: ((doorItem.rotation_deg || 0) + 90) % 360 })
@@ -515,60 +671,60 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
           })}
 
           {furniture.map((item, index) => {
+            const renderedItem = getPreviewItem("furniture", index, item);
             const definition = getObjectDefinition(item.type);
-            const { width, height } = objectPixelSize(item, roomBox);
-            const x = roomBox.x + (item.x_percent / 100) * roomBox.width;
-            const y = roomBox.y + (item.y_percent / 100) * roomBox.height;
+            const { width, height } = objectPixelSize(renderedItem, roomBox);
+            const x = roomBox.x + (renderedItem.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (renderedItem.y_percent / 100) * roomBox.height;
 
             return (
               <g
                 key={`furniture-${index}`}
-                transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${item.rotation_deg || 0} ${width / 2} ${height / 2})`}
+                transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${renderedItem.rotation_deg || 0} ${width / 2} ${height / 2})`}
                 onPointerDown={(event) => startDrag("furniture", index, event)}
                 onDoubleClick={() => updatePlacedItem("furniture", index, { rotation_deg: (item.rotation_deg + 90) % 360 })}
               >
                 <g className={`workspace-object workspace-object--${item.type.replace(/_/g, "-")}${dragState?.type === "furniture" && dragState?.index === index ? " is-dragging" : ""}`}>
-                <SvgObjectShape
-                  item={item}
-                  roomBox={roomBox}
-                  fill={definition.tone}
-                  stroke={definition.stroke}
-                  strokeWidth={1.5}
-                  label={getLabel(item, "Object")}
-                />
+                  <SvgObjectShape
+                    item={renderedItem}
+                    roomBox={roomBox}
+                    fill={definition.tone}
+                    stroke={definition.stroke}
+                    strokeWidth={1.5}
+                    label={getLabel(item, "Object")}
+                  />
                 </g>
               </g>
             );
           })}
 
           {desks.map((desk, index) => {
+            const renderedDesk = getPreviewItem("desks", index, desk);
             const definition = getObjectDefinition(desk.type);
-            const { width, height } = objectPixelSize(desk, roomBox);
-            const x = roomBox.x + (desk.x_percent / 100) * roomBox.width;
-            const y = roomBox.y + (desk.y_percent / 100) * roomBox.height;
+            const { width, height } = objectPixelSize(renderedDesk, roomBox);
+            const x = roomBox.x + (renderedDesk.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (renderedDesk.y_percent / 100) * roomBox.height;
 
             return (
               <g
                 key={`desk-${index}`}
-                transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${desk.rotation_deg || 0} ${width / 2} ${height / 2})`}
+                transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${renderedDesk.rotation_deg || 0} ${width / 2} ${height / 2})`}
                 onPointerDown={(event) => startDrag("desks", index, event)}
                 onDoubleClick={() => updatePlacedItem("desks", index, { rotation_deg: (desk.rotation_deg + 90) % 360 })}
               >
                 <g className={`workspace-object workspace-object--${desk.type.replace(/_/g, "-")}${dragState?.type === "desks" && dragState?.index === index ? " is-dragging" : ""}`}>
-                <SvgObjectShape
-                  item={desk}
-                  roomBox={roomBox}
-                  fill={definition.tone}
-                  stroke={definition.stroke}
-                  strokeWidth={2}
-                  label={`${getLabel(desk, "Desk")} ${index + 1}`}
-                />
+                  <SvgObjectShape
+                    item={renderedDesk}
+                    roomBox={roomBox}
+                    fill={definition.tone}
+                    stroke={definition.stroke}
+                    strokeWidth={2}
+                    label={`${getLabel(desk, "Desk")} ${index + 1}`}
+                  />
                 </g>
               </g>
             );
           })}
-
-          <TrashTarget />
         </svg>
       </div>
     </div>

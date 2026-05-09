@@ -33,6 +33,26 @@ test("normalizeRoomLayout snaps nearly connected wall endpoints together", () =>
   assert.equal(room.walls[3].y2_percent, 0);
 });
 
+test("normalizeRoomLayout snaps wall angles to multiples of 45 degrees while keeping joints connected", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    walls: [
+      { x1_percent: 0, y1_percent: 0, x2_percent: 28, y2_percent: 18 },
+      { x1_percent: 28, y1_percent: 18, x2_percent: 58, y2_percent: 18 }
+    ]
+  });
+
+  const firstWall = room.walls[0];
+  const secondWall = room.walls[1];
+  const firstAngle = Math.round((Math.atan2(firstWall.y2_percent - firstWall.y1_percent, firstWall.x2_percent - firstWall.x1_percent) * 180) / Math.PI);
+  const secondAngle = Math.round((Math.atan2(secondWall.y2_percent - secondWall.y1_percent, secondWall.x2_percent - secondWall.x1_percent) * 180) / Math.PI);
+
+  assert.equal(firstAngle % 45, 0);
+  assert.equal(secondAngle % 45, 0);
+  assert.equal(firstWall.x2_percent, secondWall.x1_percent);
+  assert.equal(firstWall.y2_percent, secondWall.y1_percent);
+});
+
 test("createWindowForRoom attaches a new window to a wall", () => {
   const room = normalizeRoomLayout(BASE_ROOM);
   const windowItem = createWindowForRoom(room);

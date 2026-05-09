@@ -61,17 +61,29 @@ npm.cmd test
 
 ## Local environment
 
-For local web development, put app secrets in:
+For local web development, use this file:
 
 ```text
 web/.env.local
 ```
 
-Start from:
+This file now exists in the repo folder on your machine already.
+
+Use this as your template/reference:
 
 ```text
 web/.env.local.example
 ```
+
+Ignore these old paths:
+
+```text
+workspaceiq/.env
+workspaceiq/.env.example
+repo-root .env.local
+```
+
+They are legacy or stray files and are not part of the active app workflow anymore.
 
 Use `ANALYSIS_WORKER_URL=https://your-render-worker-url` in `web/.env.local` if you want localhost to match production.
 
@@ -95,7 +107,9 @@ TEAM_WORKFLOW.md
 
 ## Environment variables
 
-For the Vercel web app:
+For local development, edit `web/.env.local`.
+
+For the Vercel web app, set these in the Vercel dashboard instead of a file:
 
 ```env
 ANALYSIS_WORKER_URL=
