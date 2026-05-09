@@ -587,8 +587,11 @@ function computeScore(room) {
 
 export default function WorkspaceApp() {
   const uploadRef = useRef(null);
-  const [room, setRoom] = useState(DEFAULT_ROOM);
+  const roomRef = useRef(DEFAULT_ROOM);
+  const [room, setRoomState] = useState(DEFAULT_ROOM);
   const [baseRoom, setBaseRoom] = useState(DEFAULT_ROOM);
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
   const [showReferenceImage, setShowReferenceImage] = useState(false);
@@ -612,6 +615,63 @@ export default function WorkspaceApp() {
 
     return () => window.clearTimeout(timeoutId);
   }, [error]);
+
+  function syncRoomState(nextRoom) {
+    roomRef.current = nextRoom;
+    setRoomState(nextRoom);
+    return nextRoom;
+  }
+
+  function setRoom(update, options = {}) {
+    const { recordHistory = true, resetHistory = false } = options;
+    const currentRoom = roomRef.current;
+    const nextRoom = typeof update === "function" ? update(currentRoom) : update;
+
+    if (!nextRoom || nextRoom === currentRoom) {
+      if (resetHistory) {
+        setUndoStack([]);
+        setRedoStack([]);
+      }
+      return currentRoom;
+    }
+
+    if (resetHistory) {
+      setUndoStack([]);
+      setRedoStack([]);
+      return syncRoomState(nextRoom);
+    }
+
+    if (recordHistory) {
+      setUndoStack((current) => [...current.slice(-49), currentRoom]);
+      setRedoStack([]);
+    }
+
+    return syncRoomState(nextRoom);
+  }
+
+  function undoRoomChange() {
+    if (!undoStack.length) {
+      return;
+    }
+
+    const previousRoom = undoStack[undoStack.length - 1];
+    const currentRoom = roomRef.current;
+    setUndoStack((current) => current.slice(0, -1));
+    setRedoStack((current) => [...current.slice(-49), currentRoom]);
+    syncRoomState(previousRoom);
+  }
+
+  function redoRoomChange() {
+    if (!redoStack.length) {
+      return;
+    }
+
+    const nextRoom = redoStack[redoStack.length - 1];
+    const currentRoom = roomRef.current;
+    setRedoStack((current) => current.slice(0, -1));
+    setUndoStack((current) => [...current.slice(-49), currentRoom]);
+    syncRoomState(nextRoom);
+  }
 
   function addObject(type) {
     setRoom((currentRoom) => addObjectToRoom(currentRoom, type));
@@ -670,7 +730,7 @@ export default function WorkspaceApp() {
       );
       setImagePreview(originalDataUrl);
       setShowReferenceImage(false);
-      setRoom(normalizedRoom);
+      setRoom(normalizedRoom, { recordHistory: false, resetHistory: true });
       setBaseRoom(normalizedRoom);
       setRoomNotes([
         ...(Array.isArray(data.notes) ? data.notes : []),
@@ -743,7 +803,7 @@ export default function WorkspaceApp() {
       return;
     }
 
-    setRoom(DEFAULT_ROOM);
+    setRoom(DEFAULT_ROOM, { recordHistory: false, resetHistory: true });
     setBaseRoom(DEFAULT_ROOM);
     setPreferences(defaultPreferences);
     setImagePreview("");
@@ -806,6 +866,10 @@ export default function WorkspaceApp() {
                 setRoom={setRoom}
                 imagePreview={imagePreview}
                 showReferenceImage={showReferenceImage}
+                canUndo={undoStack.length > 0}
+                canRedo={redoStack.length > 0}
+                onUndo={undoRoomChange}
+                onRedo={redoRoomChange}
               />
             </FloorPlanEditorBoundary>
             <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} advice={scoreResult.advice} />
