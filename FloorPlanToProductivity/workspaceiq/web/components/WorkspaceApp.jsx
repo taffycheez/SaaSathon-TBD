@@ -54,7 +54,7 @@ const DEFAULT_ROOM = {
 };
 
 const defaultPreferences = {
-  numPeople: 8,
+  numPeople: 1,
   workStyle: "balanced"
 };
 
@@ -581,6 +581,15 @@ function normalizeDeskData(data) {
   };
 }
 
+function preferencesForRoom(room, currentPreferences = defaultPreferences) {
+  const deskCount = Array.isArray(room?.desks) ? room.desks.length : 0;
+
+  return {
+    ...currentPreferences,
+    numPeople: Math.max(1, deskCount)
+  };
+}
+
 export default function WorkspaceApp() {
   const uploadRef = useRef(null);
   const roomRef = useRef(DEFAULT_ROOM);
@@ -913,6 +922,7 @@ export default function WorkspaceApp() {
       setScaleToolActive(false);
       setRoom(normalizedRoom, { recordHistory: false, resetHistory: true });
       setBaseRoom(normalizedRoom);
+      setPreferences((current) => preferencesForRoom(normalizedRoom, current));
       setScoreExplanation(null);
       setRoomNotes([
         ...(Array.isArray(data.notes) ? data.notes : []),
@@ -972,7 +982,7 @@ export default function WorkspaceApp() {
 
     if (imagePreview) {
       setRoom(baseRoom, { recordHistory: false, resetHistory: true });
-      setPreferences(defaultPreferences);
+      setPreferences((current) => preferencesForRoom(baseRoom, current));
       setShowReferenceImage(false);
       setShowZones(true);
       setWallToolMode("select");
