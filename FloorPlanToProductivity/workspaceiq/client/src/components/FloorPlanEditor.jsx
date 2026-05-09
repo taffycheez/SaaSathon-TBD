@@ -153,6 +153,7 @@ export default function FloorPlanEditor({
   const shellRef = useRef(null);
   const trashRef = useRef(null);
   const [stageScale, setStageScale] = useState(1);
+  const [isTrashHot, setIsTrashHot] = useState(false);
   const walls = Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
   const doors = Array.isArray(room.doors) ? room.doors : [];
@@ -165,6 +166,21 @@ export default function FloorPlanEditor({
     y: (CANVAS_HEIGHT - roomSize.height) / 2,
     width: roomSize.width,
     height: roomSize.height
+  };
+  const trashTarget = {
+    x: Math.min(CANVAS_WIDTH - 64, roomBox.x + roomBox.width + 10),
+    y: Math.min(CANVAS_HEIGHT - 64, roomBox.y + roomBox.height - 4),
+    size: 58
+  };
+  const trashShellStyle = {
+    left: `${trashTarget.x * stageScale}px`,
+    top: `${trashTarget.y * stageScale}px`,
+    transform: `scale(${stageScale})`
+  };
+  const undoButtonStyle = {
+    left: `${trashTarget.x * stageScale}px`,
+    top: `${(trashTarget.y - 54) * stageScale}px`,
+    transform: `scale(${stageScale})`
   };
 
   useEffect(() => {
@@ -232,6 +248,10 @@ export default function FloorPlanEditor({
     );
   }
 
+  function updateTrashHover(event) {
+    setIsTrashHot(isOverTrash(event));
+  }
+
   function removePlacedItem(type, index) {
     setRoom((currentRoom) => ({
       ...currentRoom,
@@ -241,6 +261,7 @@ export default function FloorPlanEditor({
 
   function handlePlacedItemDragEnd(type, index, event) {
     const position = event.target.position();
+    setIsTrashHot(false);
 
     if (isOverTrash(event)) {
       removePlacedItem(type, index);
@@ -310,17 +331,20 @@ export default function FloorPlanEditor({
         <button
           type="button"
           className="undo-button editor-undo-button"
+          style={undoButtonStyle}
           onClick={onUndo}
           disabled={!canUndo}
         >
           Undo
         </button>
-        <div ref={trashRef} className="trash-indicator" aria-hidden="true">
-          <div className="trash-lid" />
-          <div className="trash-handle" />
-          <div className="trash-body">
-            <span />
-            <span />
+        <div ref={trashRef} className="trash-indicator-shell" style={trashShellStyle} aria-hidden="true">
+          <div className={`trash-indicator${isTrashHot ? " is-hot" : ""}`}>
+            <div className="trash-lid" />
+            <div className="trash-handle" />
+            <div className="trash-body">
+              <span />
+              <span />
+            </div>
           </div>
         </div>
         <Stage
@@ -394,8 +418,12 @@ export default function FloorPlanEditor({
                 <Group
                   key={`wall-${index}`}
                   draggable
-                  onDragStart={() => onActionStart?.()}
+                  onDragStart={() => {
+                    onActionStart?.();
+                    setIsTrashHot(false);
+                  }}
                   onDragEnd={(event) => {
+                    setIsTrashHot(false);
                     const deltaXPercent = (event.target.x() / roomBox.width) * (roomSize.bounds.maxX - roomSize.bounds.minX);
                     const deltaYPercent = (event.target.y() / roomBox.height) * (roomSize.bounds.maxY - roomSize.bounds.minY);
                     moveWall(index, deltaXPercent, deltaYPercent);
@@ -428,10 +456,25 @@ export default function FloorPlanEditor({
                   offsetX={0}
                   offsetY={0}
                   draggable
-                  onDragStart={() => onActionStart?.()}
+                  onDragStart={() => {
+                    onActionStart?.();
+                    setIsTrashHot(false);
+                  }}
                   onDragMove={(event) => {
+                    updateTrashHover(event);
                     const next = clampObjectPosition(event.target.position(), roomBox);
                     updatePlacedItem("windows", index, next);
+                  }}
+                  onDragEnd={(event) => {
+                    const position = event.target.position();
+                    setIsTrashHot(false);
+
+                    if (isOverTrash(event)) {
+                      removePlacedItem("windows", index);
+                      return;
+                    }
+
+                    updatePlacedItem("windows", index, clampObjectPosition(position, roomBox));
                   }}
                   onDblClick={() => {
                     onActionStart?.();
@@ -458,10 +501,25 @@ export default function FloorPlanEditor({
                   y={y}
                   rotation={doorItem.rotation_deg || 0}
                   draggable
-                  onDragStart={() => onActionStart?.()}
+                  onDragStart={() => {
+                    onActionStart?.();
+                    setIsTrashHot(false);
+                  }}
                   onDragMove={(event) => {
+                    updateTrashHover(event);
                     const next = clampObjectPosition(event.target.position(), roomBox);
                     updatePlacedItem("doors", index, next);
+                  }}
+                  onDragEnd={(event) => {
+                    const position = event.target.position();
+                    setIsTrashHot(false);
+
+                    if (isOverTrash(event)) {
+                      removePlacedItem("doors", index);
+                      return;
+                    }
+
+                    updatePlacedItem("doors", index, clampObjectPosition(position, roomBox));
                   }}
                   onDblClick={() => {
                     onActionStart?.();
@@ -493,7 +551,11 @@ export default function FloorPlanEditor({
                   offsetX={width / 2}
                   offsetY={height / 2}
                   draggable
-                  onDragStart={() => onActionStart?.()}
+                  onDragStart={() => {
+                    onActionStart?.();
+                    setIsTrashHot(false);
+                  }}
+                  onDragMove={(event) => updateTrashHover(event)}
                   onDragEnd={(event) => handlePlacedItemDragEnd("furniture", index, event)}
                   onDblClick={() => {
                     onActionStart?.();
@@ -527,7 +589,11 @@ export default function FloorPlanEditor({
                   offsetX={width / 2}
                   offsetY={height / 2}
                   draggable
-                  onDragStart={() => onActionStart?.()}
+                  onDragStart={() => {
+                    onActionStart?.();
+                    setIsTrashHot(false);
+                  }}
+                  onDragMove={(event) => updateTrashHover(event)}
                   onDragEnd={(event) => handlePlacedItemDragEnd("desks", index, event)}
                   onDblClick={() => {
                     onActionStart?.();
