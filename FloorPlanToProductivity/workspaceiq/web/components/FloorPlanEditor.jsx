@@ -1080,13 +1080,52 @@ export default function FloorPlanEditor({
     return getSnappedWallPoint(room, pointerToRoomPosition(point, roomBoxRef.current, false));
   }
 
+  function buildWallDraftRoom(startWallPoint, dragPoint) {
+    const snappedEndPoint = snapWallEditorPoint(dragPoint);
+    if (
+      Math.hypot(
+        snappedEndPoint.x_percent - startWallPoint.x_percent,
+        snappedEndPoint.y_percent - startWallPoint.y_percent
+      ) < 2
+    ) {
+      return null;
+    }
+
+    return addWallToRoom(room, startWallPoint, snappedEndPoint);
+  }
+
+  function buildRectangleDraftRoom(startRoomPoint, dragPoint) {
+    const snappedEndPoint = snapWallEditorPoint(dragPoint);
+    if (
+      Math.abs(snappedEndPoint.x_percent - startRoomPoint.x_percent) < 2 ||
+      Math.abs(snappedEndPoint.y_percent - startRoomPoint.y_percent) < 2
+    ) {
+      return null;
+    }
+
+    return addRectangleRoomToRoom(room, startRoomPoint, snappedEndPoint);
+  }
+
+  function resolveFinalDragPoint(currentDrag, fallbackClientX, fallbackClientY) {
+    if (currentDrag?.point && (
+      currentDrag.kind === "wall-draw" ||
+      currentDrag.kind === "room-rect" ||
+      currentDrag.kind === "scale-measure" ||
+      currentDrag.kind === "north-set"
+    )) {
+      return currentDrag.point;
+    }
+
+    return getSvgPointFromClient(fallbackClientX, fallbackClientY);
+  }
+
   function finishDrag(clientX, clientY) {
     const currentDrag = dragStateRef.current;
     if (!currentDrag) {
       return;
     }
 
-    const point = getSvgPointFromClient(clientX, clientY);
+    const point = resolveFinalDragPoint(currentDrag, clientX, clientY);
     const overTrash = isOverTrash(clientX, clientY);
     const dragDistance = Math.hypot(
       point.x - currentDrag.startPoint.x,
@@ -1120,26 +1159,18 @@ export default function FloorPlanEditor({
     }
 
     if (currentDrag.kind === "wall-draw") {
-      const snappedEndPoint = snapWallEditorPoint(point);
-      if (
-        Math.hypot(
-          snappedEndPoint.x_percent - currentDrag.startWallPoint.x_percent,
-          snappedEndPoint.y_percent - currentDrag.startWallPoint.y_percent
-        ) >= 2
-      ) {
-        onAddWall?.(currentDrag.startWallPoint, snappedEndPoint);
+      const previewRoom = buildWallDraftRoom(currentDrag.startWallPoint, point);
+      if (previewRoom) {
+        setRoom(previewRoom);
       }
       setLiveDragState(null);
       return;
     }
 
     if (currentDrag.kind === "room-rect") {
-      const snappedEndPoint = snapWallEditorPoint(point);
-      if (
-        Math.abs(snappedEndPoint.x_percent - currentDrag.startRoomPoint.x_percent) >= 2 &&
-        Math.abs(snappedEndPoint.y_percent - currentDrag.startRoomPoint.y_percent) >= 2
-      ) {
-        onAddRectangleRoom?.(currentDrag.startRoomPoint, snappedEndPoint);
+      const previewRoom = buildRectangleDraftRoom(currentDrag.startRoomPoint, point);
+      if (previewRoom) {
+        setRoom(previewRoom);
       }
       setLiveDragState(null);
       return;
@@ -1164,7 +1195,6 @@ export default function FloorPlanEditor({
     if (currentDrag.kind === "north-set") {
       const nextPosition = pointerToBoundedRoomPosition(point, roomBoxRef.current, roomSize.bounds, false);
       onApplyNorthDirection?.(northAngleFromPoint(nextPosition, roomSize.bounds));
-      setNorthToolActive?.(false);
       setLiveDragState(null);
       return;
     }
@@ -1214,10 +1244,10 @@ export default function FloorPlanEditor({
         previewRoomResize(currentDrag.handle, point);
       } else if (currentDrag?.kind === "wall-draw") {
         updateWallDrawPointer(point);
-        clearRoomPreview();
+        onRoomPreviewChange?.(buildWallDraftRoom(currentDrag.startWallPoint, point));
       } else if (currentDrag?.kind === "room-rect") {
         updateRectangleRoomPointer(point);
-        clearRoomPreview();
+        onRoomPreviewChange?.(buildRectangleDraftRoom(currentDrag.startRoomPoint, point));
       } else if (currentDrag?.kind === "scale-measure") {
         updateScalePointer(point);
         clearRoomPreview();
@@ -1500,6 +1530,20 @@ export default function FloorPlanEditor({
             <strong>Set north</strong>
             <small>Drag anywhere on the room to rotate the compass. The 3D daylight will use this north direction.</small>
           </div>
+          <label className="field">
+            <span className="field-label">
+              North direction
+              <strong>{Math.round(currentNorthAngle)}°</strong>
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="359"
+              step="1"
+              value={Math.round(currentNorthAngle)}
+              onChange={(event) => onApplyNorthDirection?.(Number(event.target.value))}
+            />
+          </label>
           <div className="object-scale-actions">
             <button type="button" className="object-scale-reset" onClick={() => nudgeNorthAngle(-15)}>
               Turn Left 15°
@@ -1559,23 +1603,33 @@ export default function FloorPlanEditor({
       ) : null}
 
       <div className="floor-stage-shell">
-        <div className="stage-overlay-controls">
+        <div className="stage-view-controls" role="group" aria-label="Sandpit view controls">
+          <div className="stage-view-controls__label">
+            <span>View</span>
+            <small>Choose what appears on the plan</small>
+          </div>
+          <div className="stage-view-controls__actions">
           {imagePreview ? (
             <button
               type="button"
-              className={`editor-toggle-button${showReferenceImage ? " is-active" : ""}`}
+              className={`editor-toggle-button editor-toggle-button--view${showReferenceImage ? " is-active" : ""}`}
               onClick={() => setShowReferenceImage?.((current) => !current)}
+              aria-pressed={showReferenceImage}
             >
-              {showReferenceImage ? "Hide Original" : "Show Original"}
+              <span className="editor-toggle-button__eyebrow">Reference</span>
+              <strong>{showReferenceImage ? "Original On" : "Original Off"}</strong>
             </button>
           ) : null}
           <button
             type="button"
-            className={`editor-toggle-button${showZones ? " is-active" : ""}`}
+            className={`editor-toggle-button editor-toggle-button--view${showZones ? " is-active" : ""}`}
             onClick={() => setShowZones?.((current) => !current)}
+            aria-pressed={showZones}
           >
-            {showZones ? "Hide Zones" : "Show Zones"}
+            <span className="editor-toggle-button__eyebrow">Zoning</span>
+            <strong>{showZones ? "Zones On" : "Zones Off"}</strong>
           </button>
+        </div>
         </div>
         <svg
           ref={svgRef}
@@ -1633,33 +1687,37 @@ export default function FloorPlanEditor({
             </filter>
           </defs>
 
-          <g className={`editor-compass${northToolActive ? " is-active" : ""}`}>
-            {(() => {
-              const compassCenter = {
-                x: roomBox.x + roomBox.width - 44,
-                y: roomBox.y + 44
-              };
-              const compassRadius = 24;
-              const radians = (currentNorthAngle * Math.PI) / 180;
-              const arrowX = compassCenter.x + Math.sin(radians) * compassRadius;
-              const arrowY = compassCenter.y - Math.cos(radians) * compassRadius;
-              return (
-                <>
-                  <circle cx={compassCenter.x} cy={compassCenter.y} r="26" fill="rgba(255,255,255,0.84)" stroke="#a98c68" strokeWidth="2" />
-                  <circle cx={compassCenter.x} cy={compassCenter.y} r="4" fill="#7b5d3f" />
-                  <line x1={compassCenter.x} y1={compassCenter.y} x2={arrowX} y2={arrowY} stroke="#7b5d3f" strokeWidth="3" strokeLinecap="round" />
-                  <polygon
-                    points={`${arrowX},${arrowY - 6} ${arrowX + 5},${arrowY + 6} ${arrowX - 5},${arrowY + 6}`}
-                    fill="#7b5d3f"
-                    transform={`rotate(${currentNorthAngle} ${arrowX} ${arrowY})`}
-                  />
-                  <text x={compassCenter.x} y={compassCenter.y - 33} textAnchor="middle" fill="#7b5d3f" fontSize="11" fontWeight="800">
-                    N
-                  </text>
-                </>
-              );
-            })()}
-          </g>
+          {northToolActive ? (
+            <g className="editor-compass is-active">
+              {(() => {
+                const compassCenter = {
+                  x: roomBox.x + roomBox.width - 44,
+                  y: roomBox.y + 44
+                };
+                const compassRadius = 24;
+                const radians = (currentNorthAngle * Math.PI) / 180;
+                const arrowX = compassCenter.x + Math.sin(radians) * compassRadius;
+                const arrowY = compassCenter.y - Math.cos(radians) * compassRadius;
+                const labelX = compassCenter.x + Math.sin(radians) * (compassRadius + 14);
+                const labelY = compassCenter.y - Math.cos(radians) * (compassRadius + 14);
+                return (
+                  <>
+                    <circle cx={compassCenter.x} cy={compassCenter.y} r="26" fill="rgba(255,255,255,0.84)" stroke="#a98c68" strokeWidth="2" />
+                    <circle cx={compassCenter.x} cy={compassCenter.y} r="4" fill="#7b5d3f" />
+                    <line x1={compassCenter.x} y1={compassCenter.y} x2={arrowX} y2={arrowY} stroke="#7b5d3f" strokeWidth="3" strokeLinecap="round" />
+                    <polygon
+                      points={`${arrowX},${arrowY - 6} ${arrowX + 5},${arrowY + 6} ${arrowX - 5},${arrowY + 6}`}
+                      fill="#7b5d3f"
+                      transform={`rotate(${currentNorthAngle} ${arrowX} ${arrowY})`}
+                    />
+                    <text x={labelX} y={labelY + 4} textAnchor="middle" fill="#7b5d3f" fontSize="11" fontWeight="800">
+                      N
+                    </text>
+                  </>
+                );
+              })()}
+            </g>
+          ) : null}
 
           {zones.map((zone) => {
             const center = toCanvasPoint({ x: zone.center.x, y: zone.center.y }, roomBox, roomSize.bounds);

@@ -827,7 +827,6 @@ export default function WorkspaceApp() {
 
   function applyNorthAngle(angleDeg) {
     setRoom((currentRoom) => applyNorthDirection(currentRoom, angleDeg));
-    setNorthToolActive(false);
   }
 
   function updateZoneOverride(zoneId, nextType) {

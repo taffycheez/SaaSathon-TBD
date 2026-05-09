@@ -558,10 +558,36 @@ button:disabled {
   box-shadow: 0 10px 24px rgba(23, 32, 47, 0.08);
 }
 
+.editor-toggle-button--view {
+  min-width: 138px;
+  padding: 10px 15px;
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  text-align: left;
+}
+
+.editor-toggle-button__eyebrow {
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5d6f8b;
+}
+
+.editor-toggle-button--view strong {
+  font-size: 0.92rem;
+  line-height: 1.1;
+}
+
 .editor-toggle-button.is-active {
   background: linear-gradient(135deg, var(--accent) 0%, #4a86ff 100%);
   border-color: transparent;
   color: #ffffff;
+}
+
+.editor-toggle-button.is-active .editor-toggle-button__eyebrow {
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .editor-icon-button {
@@ -802,16 +828,42 @@ button:disabled {
   position: relative;
 }
 
-.stage-overlay-controls {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 6;
+.stage-view-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(247, 250, 248, 0.96) 100%);
+  border-bottom: 1px solid rgba(35, 64, 111, 0.08);
+}
+
+.stage-view-controls__label {
+  display: grid;
+  gap: 3px;
+}
+
+.stage-view-controls__label span {
+  color: var(--accent-dark);
+  font-size: 0.82rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.stage-view-controls__label small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.stage-view-controls__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: flex-end;
-  max-width: min(100%, 420px);
+  max-width: min(100%, 460px);
 }
 
 .floor-stage-svg {
@@ -1151,6 +1203,20 @@ button:disabled {
   display: block;
   width: 100%;
   height: 340px !important;
+  pointer-events: auto;
+}
+
+.preview3d-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.preview3d-canvas canvas:active {
+  cursor: grabbing;
 }
 
 .preview3d-empty {
@@ -1236,7 +1302,7 @@ button:disabled {
 .loading-panel {
   width: min(520px, 100%);
   display: grid;
-  justify-items: center;
+  place-items: center;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 28px;
@@ -1247,16 +1313,18 @@ button:disabled {
 
 .loading-visual {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: min(520px, 100vw);
+  width: min(640px, calc(100vw - 96px));
+  max-width: 100%;
   height: 360px;
   margin: 0 auto 14px;
   overflow: visible;
 }
 
 .loading-plan {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 2;
   width: min(220px, 70vw);
   aspect-ratio: 1.28;

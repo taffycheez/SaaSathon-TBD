@@ -207,6 +207,19 @@ def point_inside_rect(point: Tuple[float, float], rect: Tuple[float, float, floa
     return (x1 - padding) <= x <= (x2 + padding) and (y1 - padding) <= y <= (y2 + padding)
 
 
+def segment_overlaps_rect(segment: Dict, rect: Tuple[float, float, float, float], padding: float = 0.0) -> bool:
+    sample_count = max(4, int(round(segment_length(segment) / 4.0)))
+    for sample_index in range(sample_count + 1):
+        ratio = sample_index / max(sample_count, 1)
+        point = (
+            segment["x1_percent"] + ((segment["x2_percent"] - segment["x1_percent"]) * ratio),
+            segment["y1_percent"] + ((segment["y2_percent"] - segment["y1_percent"]) * ratio),
+        )
+        if point_inside_rect(point, rect, padding):
+            return True
+    return False
+
+
 def point_on_segment(point: Tuple[float, float], segment: Dict, tolerance: float = 1.8) -> bool:
     px, py = point
     x1, y1, x2, y2 = (
@@ -249,12 +262,19 @@ def point_near_border(point: Tuple[float, float], tolerance: float = STRUCTURAL_
     )
 
 
-def endpoint_anchor_score(segment: Dict, walls: List[Dict], tolerance: float = STRUCTURAL_ENDPOINT_TOLERANCE_PERCENT) -> int:
+def endpoint_anchor_score(
+    segment: Dict,
+    walls: List[Dict],
+    tolerance: float = STRUCTURAL_ENDPOINT_TOLERANCE_PERCENT,
+    reference_walls: List[Dict] = None,
+) -> int:
     endpoints = [
         (segment["x1_percent"], segment["y1_percent"]),
         (segment["x2_percent"], segment["y2_percent"]),
     ]
     score = 0
+    candidates = list(walls or [])
+    candidates.extend(reference_walls or [])
 
     for endpoint in endpoints:
         if point_near_border(endpoint, tolerance):
@@ -262,7 +282,7 @@ def endpoint_anchor_score(segment: Dict, walls: List[Dict], tolerance: float = S
             continue
 
         anchored = False
-        for candidate in walls:
+        for candidate in candidates:
             if candidate is segment:
                 continue
 
@@ -311,7 +331,12 @@ def wall_connection_score(segment: Dict, walls: List[Dict], tolerance: float = W
     return score
 
 
-def filter_structural_walls(walls: List[Dict], room_rect: Tuple[int, int, int, int], blocked_rects: List[Tuple[float, float, float, float]]) -> List[Dict]:
+def filter_structural_walls(
+    walls: List[Dict],
+    room_rect: Tuple[int, int, int, int],
+    blocked_rects: List[Tuple[float, float, float, float]],
+    reference_walls: List[Dict] = None,
+) -> List[Dict]:
     if not walls:
         return []
 
@@ -336,9 +361,11 @@ def filter_structural_walls(walls: List[Dict], room_rect: Tuple[int, int, int, i
         wall_midpoint = midpoint(wall)
         if any(point_inside_rect(wall_midpoint, rect, 3.5) for rect in blocked_percent_rects):
             continue
+        if any(segment_overlaps_rect(wall, rect, 2.5) for rect in blocked_percent_rects):
+            continue
 
         connection_score = wall_connection_score(wall, walls)
-        anchor_score = endpoint_anchor_score(wall, walls)
+        anchor_score = endpoint_anchor_score(wall, walls, reference_walls=reference_walls)
         if wall_near_border(wall):
             filtered.append(wall)
             continue
@@ -351,7 +378,7 @@ def filter_structural_walls(walls: List[Dict], room_rect: Tuple[int, int, int, i
             filtered.append(wall)
             continue
 
-        if length >= 24 and (anchor_score >= 1 or connection_score >= 1):
+        if length >= 28 and anchor_score >= 2:
             filtered.append(wall)
 
     return filtered
@@ -441,6 +468,7 @@ def detect_wall_segments(
     room_rect: Tuple[int, int, int, int],
     blocked_rects: List[Tuple[float, float, float, float]] = None,
     room_features: Dict[str, np.ndarray] = None,
+    reference_walls: List[Dict] = None,
 ) -> List[Dict]:
     rx, ry, rw, rh = room_rect
     room_crop = image[ry:ry + rh, rx:rx + rw]
@@ -470,7 +498,7 @@ def detect_wall_segments(
             vertical_segments.append((x, y_start, y_end))
 
     merged = merge_axis_aligned_segments(horizontal_segments, "horizontal", room_rect) + merge_axis_aligned_segments(vertical_segments, "vertical", room_rect)
-    return filter_structural_walls(merged, room_rect, blocked_rects or [])
+    return filter_structural_walls(merged, room_rect, blocked_rects or [], reference_walls)
 
 
 def dedupe_walls(walls: List[Dict]) -> List[Dict]:
@@ -1202,6 +1230,50 @@ def gap_has_door_arc_support(
     return False
 
 
+def gap_hinge_side_from_arc_support(
+    edge_mask: np.ndarray,
+    wall: Dict,
+    start_percent: float,
+    end_percent: float,
+) -> str | None:
+    if edge_mask.size == 0:
+        return None
+
+    start_x, start_y = wall_gap_center_local(wall, start_percent, edge_mask.shape)
+    end_x, end_y = wall_gap_center_local(wall, end_percent, edge_mask.shape)
+    gap_length_px = max(
+        12,
+        int(
+            round(
+                ((abs(end_percent - start_percent) / 100.0) * max(edge_mask.shape[0], edge_mask.shape[1]))
+            )
+        ),
+    )
+    radius = max(8, int(round(gap_length_px * 0.45)))
+
+    def endpoint_support(center_x: int, center_y: int) -> int:
+        x1 = max(0, center_x - radius)
+        x2 = min(edge_mask.shape[1], center_x + radius + 1)
+        y1 = max(0, center_y - radius)
+        y2 = min(edge_mask.shape[0], center_y + radius + 1)
+        if x2 <= x1 or y2 <= y1:
+            return 0
+        region = edge_mask[y1:y2, x1:x2]
+        return int(np.count_nonzero(region))
+
+    start_support = endpoint_support(start_x, start_y)
+    end_support = endpoint_support(end_x, end_y)
+    strongest = max(start_support, end_support)
+    weakest = min(start_support, end_support)
+
+    if strongest < 10:
+        return None
+    if strongest < weakest * 1.15 + 3:
+        return None
+
+    return "start" if start_support >= end_support else "end"
+
+
 def detect_door_openings_from_wall_gaps(
     wall_map: np.ndarray,
     edge_mask: np.ndarray,
@@ -1213,12 +1285,15 @@ def detect_door_openings_from_wall_gaps(
         for start_percent, end_percent in sample_wall_gap_runs(wall_map, wall):
             if not gap_has_door_arc_support(edge_mask, wall, start_percent, end_percent):
                 continue
+            hinge_side = gap_hinge_side_from_arc_support(edge_mask, wall, start_percent, end_percent)
+            if hinge_side is None:
+                continue
 
             doors.append({
                 "wall_index": wall_index,
                 "position_percent": round((start_percent + end_percent) / 2.0, 2),
                 "opening_anchor": "edge",
-                "hinge_side": "end" if ((start_percent + end_percent) / 2.0) >= 50 else "start",
+                "hinge_side": hinge_side,
                 "swing_direction": 1,
             })
 
@@ -1264,14 +1339,16 @@ def build_response(image: np.ndarray) -> Dict:
     contour, room_rect = choose_room_contour(image)
     room_crop = image[room_rect[1]:room_rect[1] + room_rect[3], room_rect[0]:room_rect[0] + room_rect[2]]
     room_features = build_room_features(room_crop) if room_crop.size != 0 else None
-    preblocked_rects = detect_object_candidate_rects(room_crop, room_rect, room_features)
-    blocked_detected_walls = detect_wall_segments(image, room_rect, preblocked_rects, room_features)
-    unblocked_detected_walls = detect_wall_segments(image, room_rect, [], room_features)
-    detected_walls = blocked_detected_walls
-    if wall_quality_score(unblocked_detected_walls) > wall_quality_score(blocked_detected_walls) * 1.15:
-        detected_walls = unblocked_detected_walls
     contour_walls = contour_to_walls(contour, room_rect)
-    walls = dedupe_walls(detected_walls if len(detected_walls) >= 4 else contour_walls + detected_walls)
+    preblocked_rects = detect_object_candidate_rects(room_crop, room_rect, room_features)
+    blocked_detected_walls = detect_wall_segments(image, room_rect, preblocked_rects, room_features, contour_walls)
+    unblocked_detected_walls = detect_wall_segments(image, room_rect, [], room_features, contour_walls)
+    detected_walls = blocked_detected_walls
+    if not blocked_detected_walls and wall_quality_score(unblocked_detected_walls) > 0:
+        detected_walls = unblocked_detected_walls
+    elif len(blocked_detected_walls) < 2 and wall_quality_score(unblocked_detected_walls) > wall_quality_score(blocked_detected_walls) * 1.35:
+        detected_walls = unblocked_detected_walls
+    walls = dedupe_walls(contour_walls + detected_walls)
     furniture = []
     blocked_rects: List[Tuple[float, float, float, float]] = list(preblocked_rects)
 
@@ -1281,9 +1358,9 @@ def build_response(image: np.ndarray) -> Dict:
             furniture, segmentation_rects = detect_objects_with_segmentation(model, image, room_rect, walls)
             if segmentation_rects:
                 blocked_rects.extend(segmentation_rects)
-                refined_walls = detect_wall_segments(image, room_rect, blocked_rects, room_features)
+                refined_walls = detect_wall_segments(image, room_rect, blocked_rects, room_features, contour_walls)
                 if refined_walls:
-                    walls = dedupe_walls(refined_walls if len(refined_walls) >= 4 else walls + refined_walls)
+                    walls = dedupe_walls(contour_walls + refined_walls)
 
     symbol_fixtures, symbol_rects = detect_symbol_fixtures(image, room_rect, walls, blocked_rects, room_features)
     if symbol_fixtures:
