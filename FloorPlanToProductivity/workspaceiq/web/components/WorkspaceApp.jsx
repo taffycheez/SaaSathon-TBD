@@ -124,6 +124,23 @@ const HERO_LAYOUT_SCENES = [
   }
 ];
 
+function buildHeroSwoopPath(width) {
+  const safeWidth = Math.max(420, Math.round(width || 0));
+  const loopEndX = 190;
+  const tailStartX = Math.min(loopEndX + 28, safeWidth * 0.44);
+  const tailMidX = Math.max(tailStartX + 40, safeWidth * 0.72);
+  const endX = safeWidth;
+
+  return [
+    "M0 60",
+    "C42 28 82 16 115 24",
+    "C142 31 153 59 133 71",
+    "C113 83 92 61 107 43",
+    `C125 21 154 21 ${loopEndX} 36`,
+    `C${tailStartX} 49 ${tailMidX} 50 ${endX} 48`
+  ].join(" ");
+}
+
 function normalizeWallIndex(value, wallsLength) {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || wallsLength <= 0) {
@@ -1076,6 +1093,9 @@ function LoadingScreen() {
 
 function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, heroSceneIndex }) {
   const [pointerLight, setPointerLight] = useState({ x: 50, y: 50, active: false });
+  const heroSwoopRef = useRef(null);
+  const [heroSwoopWidth, setHeroSwoopWidth] = useState(1440);
+  const heroSwoopPath = useMemo(() => buildHeroSwoopPath(heroSwoopWidth), [heroSwoopWidth]);
 
   function handlePlanPointerMove(event) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1087,6 +1107,25 @@ function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, he
       active: true
     });
   }
+
+  useEffect(() => {
+    const node = heroSwoopRef.current;
+    if (!node || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const nextWidth = Math.round(entry?.contentRect?.width || 0);
+      if (nextWidth > 0) {
+        setHeroSwoopWidth(nextWidth);
+      }
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <main className="home-page">
       <section className="hero-section" id="home">
@@ -1106,19 +1145,12 @@ function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, he
             >
               {isLoading ? "Analysing..." : "Start with a photo"}
             </button>
-            <button type="button" className="secondary-link" onClick={() => onHome("upload")}>
-              See upload area
-            </button>
           </div>
-          <div className="hero-swoop" aria-hidden="true">
-            <svg viewBox="0 0 240 92" fill="none" role="presentation">
+          <div ref={heroSwoopRef} className="hero-swoop" aria-hidden="true">
+            <svg viewBox={`0 0 ${heroSwoopWidth} 92`} fill="none" role="presentation">
               <path
-                d="M16 20C53 11 88 20 111 36C132 51 146 73 169 75C188 77 206 66 224 48"
+                d={heroSwoopPath}
                 className="hero-swoop-line"
-              />
-              <path
-                d="M205 47C213 46 220 47 224 48C222 53 218 59 213 63"
-                className="hero-swoop-arrow"
               />
             </svg>
           </div>

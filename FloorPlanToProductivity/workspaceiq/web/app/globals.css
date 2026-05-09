@@ -168,7 +168,7 @@ button:disabled {
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(360px, 0.68fr);
   gap: 28px;
-  align-items: center;
+  align-items: start;
   padding: 28px max(18px, calc((100vw - 1440px) / 2 + 18px)) 56px;
 }
 
@@ -196,31 +196,23 @@ button:disabled {
 }
 
 .hero-swoop {
-  width: 240px;
+  width: 100vw;
   margin-top: 10px;
-  margin-left: 12px;
-  opacity: 0.78;
+  margin-left: calc(50% - 50vw);
+  opacity: 1;
   pointer-events: none;
 }
 
 .hero-swoop svg {
   display: block;
   width: 100%;
-  height: auto;
+  height: 92px;
   overflow: visible;
 }
 
 .hero-swoop-line {
-  stroke: rgba(24, 63, 150, 0.34);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 4 8;
-}
-
-.hero-swoop-arrow {
-  stroke: rgba(24, 63, 150, 0.34);
-  stroke-width: 2.5;
+  stroke: #111111;
+  stroke-width: 4.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
