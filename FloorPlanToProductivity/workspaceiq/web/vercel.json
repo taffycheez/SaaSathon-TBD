@@ -3,9 +3,6 @@
   "functions": {
     "app/api/**/*.ts": {
       "maxDuration": 60
-    },
-    "api/**/*.py": {
-      "maxDuration": 60
     }
   }
 }

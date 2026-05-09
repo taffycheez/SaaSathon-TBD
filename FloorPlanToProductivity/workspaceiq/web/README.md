@@ -48,11 +48,12 @@ FloorPlanToProductivity/workspaceiq/web
 Recommended production setup:
 
 1. Deploy this `web/` package to Vercel.
-2. Point `ANALYSIS_WORKER_URL` at a deployed Python worker endpoint.
+2. Point `ANALYSIS_WORKER_URL` at a separately deployed Python worker endpoint if you want CV analysis.
 3. Keep the Node route handlers as the public API boundary for the app.
 
 ## Notes
 
 - `app/api/analyse/route.ts` is the public analysis endpoint for the web app.
 - `app/api/layout/route.ts` proxies layout generation.
-- `api/cv_worker.py` is a deployable Python worker entrypoint for Vercel-style Python functions.
+- The heavy Python CV worker is intentionally not bundled into this Vercel app.
+- Deploy the worker separately and set `ANALYSIS_WORKER_URL` to that public endpoint.
