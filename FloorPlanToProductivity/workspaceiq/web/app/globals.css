@@ -1071,9 +1071,9 @@ button:disabled {
 .preview3d-toolbar {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  align-items: center;
+  align-items: start;
 }
 
 .preview3d-slider {
@@ -1090,14 +1090,49 @@ button:disabled {
   color: var(--ink);
 }
 
+.preview3d-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preview3d-preset {
+  border: 1px solid var(--warm-border);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--accent-dark);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.preview3d-preset:hover {
+  transform: translateY(-1px);
+}
+
+.preview3d-preset.is-active {
+  background: #6f4e37;
+  border-color: #6f4e37;
+  color: #fffaf2;
+}
+
 .preview3d-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  color: var(--accent-dark);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.preview3d-meta span {
   border: 1px solid var(--warm-border);
   border-radius: 999px;
   padding: 8px 12px;
   background: rgba(255, 255, 255, 0.72);
-  color: var(--accent-dark);
-  font-size: 0.84rem;
-  font-weight: 800;
 }
 
 .preview3d-shell {

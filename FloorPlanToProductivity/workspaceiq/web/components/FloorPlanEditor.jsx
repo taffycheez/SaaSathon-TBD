@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import { FloorPlanObjectIcon } from "@/components/FloorPlanIconPack";
-import { getScaledItemDimensions, normalizeObjectScale, normalizeWallGraph, snapEdgeItemToWalls } from "@/lib/roomGeometry";
+import {
+  getScaledItemDimensions,
+  normalizeObjectScale,
+  normalizeWallGraph,
+  pointInPolygon,
+  snapEdgeItemToWalls
+} from "@/lib/roomGeometry";
 import {
   deleteWallFromRoom,
   getSnappedWallPoint,
@@ -357,6 +363,40 @@ function DoorShape({ hingeSide = "start", swingDirection = 1 }) {
       <circle cx="0" cy="0" r="2.1" fill="#8b5e34" />
     </>
   );
+}
+
+function getRenderedDoorSwingDirection(door, outerPolygon) {
+  const swingDirection = Number(door?.swing_direction) === -1 ? -1 : 1;
+  if (!Array.isArray(outerPolygon) || outerPolygon.length < 3) {
+    return swingDirection;
+  }
+
+  const probeDistance = Math.max(4, Math.min(12, Number(door?.width_percent) || 10));
+  const angleRadians = ((Number(door?.rotation_deg) || 0) * Math.PI) / 180;
+  const rotated = (direction) => ({
+    x: (Math.cos(angleRadians + Math.PI / 2) * probeDistance * direction),
+    y: (Math.sin(angleRadians + Math.PI / 2) * probeDistance * direction)
+  });
+  const currentProbe = rotated(swingDirection);
+  const oppositeProbe = rotated(-swingDirection);
+  const hingePoint = {
+    x: Number(door?.x_percent) || 0,
+    y: Number(door?.y_percent) || 0
+  };
+  const currentInside = pointInPolygon(
+    { x: hingePoint.x + currentProbe.x, y: hingePoint.y + currentProbe.y },
+    outerPolygon
+  );
+  const oppositeInside = pointInPolygon(
+    { x: hingePoint.x + oppositeProbe.x, y: hingePoint.y + oppositeProbe.y },
+    outerPolygon
+  );
+
+  if (!currentInside && oppositeInside) {
+    return -swingDirection;
+  }
+
+  return swingDirection;
 }
 
 export default function FloorPlanEditor({
@@ -1862,6 +1902,7 @@ export default function FloorPlanEditor({
 
           {doors.map((doorItem, index) => {
             const renderedDoor = getPreviewItem("doors", index, doorItem);
+            const renderedSwingDirection = getRenderedDoorSwingDirection(renderedDoor, wallGraph.outerPolygon);
             const x = roomBox.x + (renderedDoor.x_percent / 100) * roomBox.width;
             const y = roomBox.y + (renderedDoor.y_percent / 100) * roomBox.height;
             return (
@@ -1876,7 +1917,7 @@ export default function FloorPlanEditor({
               >
                 <DoorShape
                   hingeSide={renderedDoor.hinge_side}
-                  swingDirection={renderedDoor.swing_direction}
+                  swingDirection={renderedSwingDirection}
                 />
               </g>
             );

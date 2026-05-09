@@ -30,6 +30,12 @@ const OBJECT_HEIGHTS_M = {
   kitchenette: 0.95,
   shower: 2
 };
+const TIME_OF_DAY_PRESETS = [
+  { label: "Morning", value: 8 },
+  { label: "Noon", value: 12 },
+  { label: "Evening", value: 17 },
+  { label: "Night", value: 20 }
+];
 
 function clampRange(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -95,20 +101,27 @@ function lerpColor(startHex, endHex, t) {
 function getSunState(timeOfDay, northDirectionDeg) {
   const daylight = clampRange(Math.sin(((timeOfDay - 6) / 12) * Math.PI), 0, 1);
   const duskBlend = clampRange(1 - daylight, 0, 1);
+  const nightBlend = clampRange((8 - timeOfDay) / 4, 0, 1) + clampRange((timeOfDay - 18) / 4, 0, 1);
   const azimuthDeg = northDirectionDeg + 90 + ((timeOfDay - 6) / 12) * 180;
   const azimuth = (azimuthDeg * Math.PI) / 180;
   const distance = 12;
   const elevation = 1.2 + daylight * 8.4;
 
   return {
-    ambient: 0.28 + daylight * 0.72,
-    keyLight: 0.18 + daylight * 1.55,
-    fillLight: 0.12 + daylight * 0.38,
+    ambient: 0.12 + daylight * 0.9,
+    keyLight: 0.06 + daylight * 1.85,
+    fillLight: 0.04 + daylight * 0.52,
     sunPosition: new THREE.Vector3(Math.sin(azimuth) * distance, elevation, -Math.cos(azimuth) * distance),
-    background: lerpColor("#2a3147", "#f4ecdd", daylight),
-    fog: lerpColor("#3a4258", "#f4ecdd", daylight),
-    floor: lerpColor("#b9ab93", "#eadfca", daylight),
-    sunColor: daylight > 0.55 ? "#fff4d7" : duskBlend > 0.75 ? "#c9d3ff" : "#ffd0a6"
+    background: nightBlend > 0.25
+      ? lerpColor("#151c2f", "#35507d", clampRange(nightBlend, 0, 1))
+      : lerpColor("#c88252", "#f4ecdd", daylight),
+    fog: nightBlend > 0.25
+      ? lerpColor("#182238", "#46618d", clampRange(nightBlend, 0, 1))
+      : lerpColor("#8f5b44", "#f4ecdd", daylight),
+    floor: nightBlend > 0.25
+      ? lerpColor("#6f5d4b", "#9b8a74", clampRange(nightBlend, 0, 1))
+      : lerpColor("#9f7d5f", "#eadfca", daylight),
+    sunColor: daylight > 0.6 ? "#fff4d7" : duskBlend > 0.65 ? "#ffbf8e" : "#8db6ff"
   };
 }
 
@@ -269,12 +282,20 @@ export default function FloorPlanPreview3D({ room }) {
     camera.position.set(7.5, 7.2, 7.5);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enablePan = true;
+    controls.enableRotate = true;
+    controls.enablePan = false;
     controls.enableZoom = true;
+    controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+    controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+    controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+    controls.touches.ONE = THREE.TOUCH.ROTATE;
+    controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
     controls.minDistance = 6;
     controls.maxDistance = 22;
     controls.maxPolarAngle = Math.PI / 2.1;
     controls.minPolarAngle = Math.PI / 5;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
     controls.target.set(0, 0.8, 0);
     controls.update();
 
@@ -425,8 +446,21 @@ export default function FloorPlanPreview3D({ room }) {
             onChange={(event) => setTimeOfDay(Number(event.target.value))}
           />
         </label>
+        <div className="preview3d-presets" role="group" aria-label="Choose a time of day preset">
+          {TIME_OF_DAY_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              className={`preview3d-preset${timeOfDay === preset.value ? " is-active" : ""}`}
+              onClick={() => setTimeOfDay(preset.value)}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
         <div className="preview3d-meta">
           <span>North {northDirection} deg</span>
+          <span>Drag to orbit</span>
         </div>
       </div>
       <div className="preview3d-shell" aria-label="3D preview of the current floor plan">
