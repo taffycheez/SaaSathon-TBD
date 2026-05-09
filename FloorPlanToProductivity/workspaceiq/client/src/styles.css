@@ -642,6 +642,28 @@ button:disabled {
   text-align: center;
 }
 
+.toggle-field {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.toggle-button {
+  min-width: 72px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.toggle-button.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: white;
+}
+
 .segmented-control {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -666,6 +688,28 @@ button:disabled {
   background: var(--ink);
   color: white;
   box-shadow: 0 8px 18px rgba(23, 32, 47, 0.14);
+}
+
+.object-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.object-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 11px;
+  background: white;
+  color: var(--ink);
+  font-size: 0.87rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.object-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-dark);
 }
 
 .sr-only {

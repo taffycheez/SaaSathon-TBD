@@ -18,7 +18,21 @@ test("normalizeRoomDescription clamps bad values into a safe room shape", () => 
     ],
     windows: [{ wall_index: 10, position_percent: 130 }],
     doors: [{ wall: "left", position_percent: -20 }],
-    furniture: [{ type: 99, x_percent: "44", y_percent: "oops", width_percent: 1, height_percent: 300 }]
+    furniture: [{
+      type: "l desk",
+      shape_kind: "polygon",
+      x_percent: "44",
+      y_percent: "oops",
+      width_percent: 1,
+      height_percent: 300,
+      footprint_points: [
+        { x_percent: -70, y_percent: -50 },
+        { x_percent: 20, y_percent: -50 },
+        { x_percent: 20, y_percent: -10 },
+        { x_percent: 70, y_percent: -10 },
+        { x_percent: 70, y_percent: 70 }
+      ]
+    }]
   });
 
   assert.equal(room.estimated_width_m, 1);
@@ -31,12 +45,20 @@ test("normalizeRoomDescription clamps bad values into a safe room shape", () => 
   assert.deepEqual(room.windows, [{ wall_index: 2, position_percent: 100 }]);
   assert.deepEqual(room.doors, [{ wall_index: 2, position_percent: 0 }]);
   assert.deepEqual(room.furniture, [{
-    type: "desk",
+    type: "l_shaped_desk",
+    shape_kind: "polygon",
     x_percent: 44,
     y_percent: 0,
     width_percent: 2,
     height_percent: 100,
-    rotation_deg: 0
+    rotation_deg: 0,
+    footprint_points: [
+      { x_percent: -50, y_percent: -50 },
+      { x_percent: 20, y_percent: -50 },
+      { x_percent: 20, y_percent: -10 },
+      { x_percent: 50, y_percent: -10 },
+      { x_percent: 50, y_percent: 50 }
+    ]
   }]);
 });
 
