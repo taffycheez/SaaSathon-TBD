@@ -600,6 +600,23 @@ export default function WorkspaceApp() {
   const heroScene = HERO_LAYOUT_SCENES[heroSceneIndex];
   const hasWorkspace = Boolean(imagePreview) || isSandboxMode;
   const activeRoom = roomPreview ?? room;
+
+  useEffect(() => {
+    if (!isAnalysing) {
+      return undefined;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isAnalysing]);
+
   const zoneAnalysis = useMemo(() => inferZones(activeRoom), [activeRoom]);
   const committedZoneAnalysis = useMemo(() => inferZones(room), [room]);
   const scoreResult = useMemo(
