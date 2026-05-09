@@ -9,6 +9,8 @@ import {
   snapEdgeItemToWalls
 } from "@/lib/roomGeometry";
 import {
+  addRectangleRoomToRoom,
+  addWallToRoom,
   deleteWallFromRoom,
   getSnappedWallPoint,
   moveWallByDelta,
