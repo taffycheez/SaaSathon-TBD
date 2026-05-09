@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { getObjectDefinition } from "@/lib/objectCatalog";
-import { getScaledItemDimensions, normalizeWallGraph } from "@/lib/roomGeometry";
+import { getScaledItemDimensions, normalizeWallGraph, snapEdgeItemToWalls } from "@/lib/roomGeometry";
 
 const WALL_HEIGHT_M = 2.8;
 const WALL_THICKNESS_M = 0.16;
@@ -300,14 +300,56 @@ function createOpeningMesh(item, kind, bounds, scale) {
   const y = kind === "windows" ? WINDOW_SILL_M + height / 2 : height / 2;
   const depth = kind === "windows" ? WALL_THICKNESS_M * 0.55 : WALL_THICKNESS_M * 0.7;
   const color = kind === "windows" ? "#94cfff" : "#8b5e34";
+  if (kind === "windows") {
+    const group = new THREE.Group();
+    const glassMaterial = new THREE.MeshStandardMaterial({
+      color,
+      transparent: true,
+      opacity: 0.74,
+      emissive: "#bfeeff",
+      emissiveIntensity: 0.42,
+      roughness: 0.16,
+      metalness: 0.02,
+      side: THREE.DoubleSide
+    });
+    const frameMaterial = new THREE.MeshStandardMaterial({
+      color: "#31566d",
+      emissive: "#153849",
+      emissiveIntensity: 0.12,
+      roughness: 0.58
+    });
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), glassMaterial);
+    glass.castShadow = false;
+    glass.receiveShadow = true;
+    group.add(glass);
+
+    const railThickness = 0.045;
+    const frameDepth = depth * 1.8;
+    const topFrame = new THREE.Mesh(new THREE.BoxGeometry(width + railThickness, railThickness, frameDepth), frameMaterial);
+    topFrame.position.y = height / 2 + railThickness / 2;
+    const bottomFrame = topFrame.clone();
+    bottomFrame.position.y = -height / 2 - railThickness / 2;
+    const leftFrame = new THREE.Mesh(new THREE.BoxGeometry(railThickness, height + railThickness * 2, frameDepth), frameMaterial);
+    leftFrame.position.x = -width / 2 - railThickness / 2;
+    const rightFrame = leftFrame.clone();
+    rightFrame.position.x = width / 2 + railThickness / 2;
+    const mullion = new THREE.Mesh(new THREE.BoxGeometry(railThickness * 0.75, height, frameDepth * 1.05), frameMaterial);
+    [topFrame, bottomFrame, leftFrame, rightFrame, mullion].forEach((frame) => {
+      frame.castShadow = true;
+      frame.receiveShadow = true;
+      group.add(frame);
+    });
+
+    group.position.set(point.x, y, point.z);
+    group.rotation.y = angle;
+    return group;
+  }
+
   const material = new THREE.MeshStandardMaterial({
     color,
-    transparent: kind === "windows",
-    opacity: kind === "windows" ? 0.5 : 0.96,
-    emissive: kind === "windows" ? "#bfeeff" : "#000000",
-    emissiveIntensity: kind === "windows" ? 0.28 : 0,
-    roughness: kind === "windows" ? 0.2 : 0.72,
-    metalness: kind === "windows" ? 0.02 : 0
+    opacity: 0.96,
+    roughness: 0.72,
+    metalness: 0
   });
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   mesh.position.set(point.x, y, point.z);
@@ -395,6 +437,20 @@ function createWindowDaylightGroup(item, wall, bounds, scale, sun) {
   group.add(glow);
 
   return group;
+}
+
+function normalizeOpeningFor3D(item, kind, walls) {
+  return snapEdgeItemToWalls(
+    {
+      width_percent: kind === "windows" ? 14 : 10,
+      opening_anchor: kind === "doors" ? "edge" : "center",
+      hinge_side: kind === "doors" ? "start" : undefined,
+      swing_direction: kind === "doors" ? 1 : undefined,
+      ...item
+    },
+    walls,
+    kind === "windows" ? item?.width_percent ?? 14 : item?.width_percent ?? 10
+  );
 }
 
 function createFurnitureMesh(item, bounds, scale) {
@@ -699,8 +755,12 @@ export default function FloorPlanPreview3D({ room }) {
       ...(Array.isArray(room?.furniture) ? room.furniture : []),
       ...(Array.isArray(room?.desks) ? room.desks : [])
     ];
-    const windowItems = Array.isArray(room?.windows) ? room.windows : [];
-    const doorItems = Array.isArray(room?.doors) ? room.doors : [];
+    const windowItems = Array.isArray(room?.windows)
+      ? room.windows.map((item) => normalizeOpeningFor3D(item, "windows", normalizedWalls))
+      : [];
+    const doorItems = Array.isArray(room?.doors)
+      ? room.doors.map((item) => normalizeOpeningFor3D(item, "doors", normalizedWalls))
+      : [];
     const openings = [
       ...windowItems.map((item) => ({ kind: "windows", item })),
       ...doorItems.map((item) => ({ kind: "doors", item }))

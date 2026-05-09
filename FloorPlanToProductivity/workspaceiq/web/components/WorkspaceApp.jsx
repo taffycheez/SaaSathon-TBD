@@ -173,16 +173,28 @@ function normalizeWallIndex(value, wallsLength) {
 }
 
 function edgeItemFromLegacy(item, walls) {
+  const wallIndex = normalizeWallIndex(item?.wall_index, walls.length);
+  const widthPercent = item?.width_percent != null ? clampPercent(item.width_percent) : undefined;
+  const openingMetadata = {
+    wall_index: wallIndex,
+    position_percent: clampPercent(item?.position_percent ?? 50),
+    ...(widthPercent != null ? { width_percent: widthPercent } : {}),
+    ...(item?.opening_anchor ? { opening_anchor: item.opening_anchor } : {}),
+    ...(item?.hinge_side ? { hinge_side: item.hinge_side } : {}),
+    ...(item?.swing_direction ? { swing_direction: Number(item.swing_direction) === -1 ? -1 : 1 } : {})
+  };
+
   if (item && (item.x_percent != null || item.y_percent != null)) {
     return {
+      ...openingMetadata,
       x_percent: clampPercent(item?.x_percent),
       y_percent: clampPercent(item?.y_percent),
       rotation_deg: normalizeRotation(item?.rotation_deg)
     };
   }
 
-  const wall = walls[normalizeWallIndex(item?.wall_index, walls.length)];
-  const ratio = clampPercent(item?.position_percent) / 100;
+  const wall = walls[wallIndex];
+  const ratio = openingMetadata.position_percent / 100;
   const x = wall
     ? wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio
     : 50;
@@ -194,6 +206,7 @@ function edgeItemFromLegacy(item, walls) {
     : 0;
 
   return {
+    ...openingMetadata,
     x_percent: clampPercent(x),
     y_percent: clampPercent(y),
     rotation_deg: rotation
