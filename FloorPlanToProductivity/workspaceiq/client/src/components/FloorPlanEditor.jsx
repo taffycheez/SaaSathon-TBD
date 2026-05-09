@@ -59,44 +59,10 @@ function fromCanvasPoint(point, roomBox, bounds) {
   };
 }
 
-function pointFromWall(item, walls, roomBox, bounds) {
-  const wall = walls[item.wall_index];
-  if (!wall) {
-    return { x: roomBox.x, y: roomBox.y };
-  }
-
-  const ratio = Math.max(0, Math.min(1, (item.position_percent || 0) / 100));
-  return toCanvasPoint({
-    x: wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio,
-    y: wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
-  }, roomBox, bounds);
-}
-
 function clampObjectPosition(pointer, roomBox) {
   return {
     x_percent: Math.max(0, Math.min(100, ((pointer.x - roomBox.x) / roomBox.width) * 100)),
     y_percent: Math.max(0, Math.min(100, ((pointer.y - roomBox.y) / roomBox.height) * 100))
-  };
-}
-
-function projectPointToSegment(point, start, end) {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const lengthSquared = dx * dx + dy * dy;
-  if (!lengthSquared) {
-    return { ratio: 0, distanceSquared: (point.x - start.x) ** 2 + (point.y - start.y) ** 2 };
-  }
-
-  const rawRatio = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared;
-  const ratio = Math.max(0, Math.min(1, rawRatio));
-  const projected = {
-    x: start.x + dx * ratio,
-    y: start.y + dy * ratio
-  };
-
-  return {
-    ratio,
-    distanceSquared: (point.x - projected.x) ** 2 + (point.y - projected.y) ** 2
   };
 }
 
@@ -245,42 +211,6 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
     return () => observer.disconnect();
   }, []);
 
-  function updateEdgeItem(type, index, pointerPosition) {
-    setRoom((currentRoom) => ({
-      ...currentRoom,
-      [type]: currentRoom[type].map((item, itemIndex) => {
-        if (itemIndex !== index) {
-          return item;
-        }
-
-        const normalizedPointer = fromCanvasPoint(pointerPosition, roomBox, roomSize.bounds);
-        let bestWallIndex = item.wall_index ?? 0;
-        let bestPositionPercent = item.position_percent ?? 0;
-        let bestDistance = Number.POSITIVE_INFINITY;
-
-        currentRoom.walls.forEach((wall, wallIndex) => {
-          const projection = projectPointToSegment(
-            normalizedPointer,
-            { x: wall.x1_percent, y: wall.y1_percent },
-            { x: wall.x2_percent, y: wall.y2_percent }
-          );
-
-          if (projection.distanceSquared < bestDistance) {
-            bestDistance = projection.distanceSquared;
-            bestWallIndex = wallIndex;
-            bestPositionPercent = projection.ratio * 100;
-          }
-        });
-
-        return {
-          ...item,
-          wall_index: bestWallIndex,
-          position_percent: bestPositionPercent
-        };
-      })
-    }));
-  }
-
   function updatePlacedItem(type, index, updates) {
     setRoom((currentRoom) => ({
       ...currentRoom,
@@ -315,6 +245,49 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
     }
 
     updatePlacedItem(type, index, clampObjectPosition(position, roomBox));
+  }
+
+  function moveWall(index, deltaXPercent, deltaYPercent) {
+    setRoom((currentRoom) => ({
+      ...currentRoom,
+      walls: currentRoom.walls.map((wall, wallIndex) => {
+        if (wallIndex !== index) {
+          return wall;
+        }
+
+        return {
+          ...wall,
+          x1_percent: Math.max(0, Math.min(100, wall.x1_percent + deltaXPercent)),
+          y1_percent: Math.max(0, Math.min(100, wall.y1_percent + deltaYPercent)),
+          x2_percent: Math.max(0, Math.min(100, wall.x2_percent + deltaXPercent)),
+          y2_percent: Math.max(0, Math.min(100, wall.y2_percent + deltaYPercent))
+        };
+      })
+    }));
+  }
+
+  function rotateWall(index) {
+    setRoom((currentRoom) => ({
+      ...currentRoom,
+      walls: currentRoom.walls.map((wall, wallIndex) => {
+        if (wallIndex !== index) {
+          return wall;
+        }
+
+        const centerX = (wall.x1_percent + wall.x2_percent) / 2;
+        const centerY = (wall.y1_percent + wall.y2_percent) / 2;
+        const dx = (wall.x2_percent - wall.x1_percent) / 2;
+        const dy = (wall.y2_percent - wall.y1_percent) / 2;
+
+        return {
+          ...wall,
+          x1_percent: Math.max(0, Math.min(100, centerX + dy)),
+          y1_percent: Math.max(0, Math.min(100, centerY - dx)),
+          x2_percent: Math.max(0, Math.min(100, centerX - dy)),
+          y2_percent: Math.max(0, Math.min(100, centerY + dx))
+        };
+      })
+    }));
   }
 
   return (
@@ -399,37 +372,49 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
               );
 
               return (
-                <Line
+                <Group
                   key={`wall-${index}`}
-                  points={[start.x, start.y, end.x, end.y]}
-                  stroke="#10233d"
-                  strokeWidth={4}
-                  lineCap="round"
-                />
+                  draggable
+                  onDragEnd={(event) => {
+                    const deltaXPercent = (event.target.x() / roomBox.width) * (roomSize.bounds.maxX - roomSize.bounds.minX);
+                    const deltaYPercent = (event.target.y() / roomBox.height) * (roomSize.bounds.maxY - roomSize.bounds.minY);
+                    moveWall(index, deltaXPercent, deltaYPercent);
+                    event.target.position({ x: 0, y: 0 });
+                  }}
+                  onDblClick={() => rotateWall(index)}
+                >
+                  <Line
+                    points={[start.x, start.y, end.x, end.y]}
+                    stroke="#10233d"
+                    strokeWidth={4}
+                    lineCap="round"
+                  />
+                </Group>
               );
             })}
 
             {windows.map((windowItem, index) => {
-              const point = pointFromWall(windowItem, walls, roomBox, roomSize.bounds);
-              const wall = walls[windowItem.wall_index];
-              const isHorizontal = wall
-                ? Math.abs(wall.x2_percent - wall.x1_percent) >= Math.abs(wall.y2_percent - wall.y1_percent)
-                : true;
+              const x = roomBox.x + (windowItem.x_percent / 100) * roomBox.width;
+              const y = roomBox.y + (windowItem.y_percent / 100) * roomBox.height;
               return (
                 <Group
                   key={`window-${index}`}
+                  x={x}
+                  y={y}
+                  rotation={windowItem.rotation_deg || 0}
+                  offsetX={0}
+                  offsetY={0}
                   draggable
-                  dragBoundFunc={(pos) => {
-                    updateEdgeItem("windows", index, pos);
-                    return pos;
+                  onDragMove={(event) => {
+                    const next = clampObjectPosition(event.target.position(), roomBox);
+                    updatePlacedItem("windows", index, next);
                   }}
+                  onDblClick={() =>
+                    updatePlacedItem("windows", index, { rotation_deg: ((windowItem.rotation_deg || 0) + 90) % 360 })
+                  }
                 >
                   <Line
-                    points={
-                      isHorizontal
-                        ? [point.x - 26, point.y, point.x + 26, point.y]
-                        : [point.x, point.y - 26, point.x, point.y + 26]
-                    }
+                    points={[-26, 0, 26, 0]}
                     stroke="#1877f2"
                     strokeWidth={8}
                     lineCap="round"
@@ -439,26 +424,25 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
             })}
 
             {doors.map((doorItem, index) => {
-              const point = pointFromWall(doorItem, walls, roomBox, roomSize.bounds);
-              const wall = walls[doorItem.wall_index];
-              const isHorizontal = wall
-                ? Math.abs(wall.x2_percent - wall.x1_percent) >= Math.abs(wall.y2_percent - wall.y1_percent)
-                : true;
+              const x = roomBox.x + (doorItem.x_percent / 100) * roomBox.width;
+              const y = roomBox.y + (doorItem.y_percent / 100) * roomBox.height;
               return (
                 <Group
                   key={`door-${index}`}
+                  x={x}
+                  y={y}
+                  rotation={doorItem.rotation_deg || 0}
                   draggable
-                  dragBoundFunc={(pos) => {
-                    updateEdgeItem("doors", index, pos);
-                    return pos;
+                  onDragMove={(event) => {
+                    const next = clampObjectPosition(event.target.position(), roomBox);
+                    updatePlacedItem("doors", index, next);
                   }}
+                  onDblClick={() =>
+                    updatePlacedItem("doors", index, { rotation_deg: ((doorItem.rotation_deg || 0) + 90) % 360 })
+                  }
                 >
                   <Line
-                    points={
-                      isHorizontal
-                        ? [point.x - 18, point.y, point.x + 18, point.y]
-                        : [point.x, point.y - 18, point.x, point.y + 18]
-                    }
+                    points={[-18, 0, 18, 0]}
                     stroke="#8b5e34"
                     strokeWidth={10}
                     lineCap="round"

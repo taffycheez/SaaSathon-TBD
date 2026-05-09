@@ -7,6 +7,8 @@ export default function ControlPanel({
   updateRoomDimensions,
   showReferenceImage,
   setShowReferenceImage,
+  onAddWindow,
+  onAddTable,
   onAddObject,
   onGenerateLayout,
   onReset,
@@ -61,6 +63,18 @@ export default function ControlPanel({
       </div>
 
       <div className="field">
+        <span>Quick add</span>
+        <div className="quick-add-row">
+          <button type="button" className="object-chip quick-add-chip" onClick={onAddWindow}>
+            Add Window
+          </button>
+          <button type="button" className="object-chip quick-add-chip" onClick={onAddTable}>
+            Add Table
+          </button>
+        </div>
+      </div>
+
+      <div className="field">
         <span>Add objects</span>
         <div className="object-palette">
           {OBJECT_PALETTE.map((type) => (
@@ -95,7 +109,7 @@ export default function ControlPanel({
         {isGenerating ? "Generating..." : "Generate Layout"}
       </button>
       <button type="button" className="secondary-button" onClick={onReset}>
-        Reset
+        Reset Edits
       </button>
     </div>
   );
