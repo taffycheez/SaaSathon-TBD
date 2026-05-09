@@ -664,6 +664,8 @@ export default function WorkspaceApp() {
   const [error, setError] = useState("");
   const [roomNotes, setRoomNotes] = useState([]);
   const [layoutNotes, setLayoutNotes] = useState([]);
+  const [scoreExplanation, setScoreExplanation] = useState(null);
+  const [isExplainingScore, setIsExplainingScore] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [pendingScrollTarget, setPendingScrollTarget] = useState("");
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
@@ -671,6 +673,7 @@ export default function WorkspaceApp() {
   const heroScene = HERO_LAYOUT_SCENES[heroSceneIndex];
   const activeRoom = roomPreview ?? room;
   const scoreResult = useMemo(() => computeFengShuiScore(activeRoom, preferences), [activeRoom, preferences]);
+  const committedScoreResult = useMemo(() => computeFengShuiScore(room, preferences), [room, preferences]);
 
   useEffect(() => {
     if (!error) {
@@ -709,6 +712,55 @@ export default function WorkspaceApp() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!Array.isArray(room?.desks) || room.desks.length === 0) {
+      setScoreExplanation(null);
+      setIsExplainingScore(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsExplainingScore(true);
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/score-explanation`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            room,
+            preferences,
+            scoreResult: committedScoreResult
+          }),
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error("Score explanation failed.");
+        }
+
+        const payload = await response.json();
+        if (!controller.signal.aborted) {
+          setScoreExplanation(payload);
+        }
+      } catch (explanationError) {
+        if (!controller.signal.aborted) {
+          setScoreExplanation(null);
+          console.warn("score explanation request failed", explanationError);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsExplainingScore(false);
+        }
+      }
+    }, 700);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [room, preferences, committedScoreResult]);
 
   function syncRoomState(nextRoom) {
     roomRef.current = nextRoom;
@@ -827,6 +879,7 @@ export default function WorkspaceApp() {
       setShowReferenceImage(false);
       setRoom(normalizedRoom, { recordHistory: false, resetHistory: true });
       setBaseRoom(normalizedRoom);
+      setScoreExplanation(null);
       setRoomNotes([
         ...(Array.isArray(data.notes) ? data.notes : []),
         ...(normalizedRoom.wallIssues?.length
@@ -867,6 +920,7 @@ export default function WorkspaceApp() {
         ...currentRoom,
         desks
       }));
+      setScoreExplanation(null);
       setLayoutNotes(notes);
     } catch (generationError) {
       setError(generationError.message || "We couldn't generate a layout right now.");
@@ -895,6 +949,7 @@ export default function WorkspaceApp() {
       setShowReferenceImage(false);
       setError("");
       setLayoutNotes([]);
+      setScoreExplanation(null);
       return;
     }
 
@@ -906,6 +961,7 @@ export default function WorkspaceApp() {
     setError("");
     setRoomNotes([]);
     setLayoutNotes([]);
+    setScoreExplanation(null);
   }
 
   function cancelResetWorkspace() {
@@ -981,7 +1037,14 @@ export default function WorkspaceApp() {
                 onRedo={redoRoomChange}
               />
             </FloorPlanEditorBoundary>
-            <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} advice={scoreResult.advice} isPreviewing={Boolean(roomPreview)} />
+            <ScorePanel
+              score={scoreResult.score}
+              breakdown={scoreResult.breakdown}
+              advice={scoreResult.advice}
+              explanation={!roomPreview ? scoreExplanation : null}
+              isPreviewing={Boolean(roomPreview)}
+              isLoadingExplanation={!roomPreview && isExplainingScore}
+            />
           </section>
 
           <aside className="sidebar-column">

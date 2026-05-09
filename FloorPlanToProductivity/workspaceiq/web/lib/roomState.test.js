@@ -7,6 +7,7 @@ import {
   createWindowForRoom,
   normalizeRoomLayout,
   pointOnWall,
+  updateWallEndpoint,
   updateEdgeItemPosition,
   updatePlacedObjectPosition
 } from "./roomState.js";
@@ -70,6 +71,22 @@ test("createDoorForRoom attaches a new door to a wall", () => {
   assert.deepEqual(pointOnWall(doorItem, room.walls), { x: 18, y: 0 });
 });
 
+test("normalizeRoomLayout keeps legacy opening metadata anchored to the intended wall", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    doors: [
+      {
+        wall_index: 1,
+        position_percent: 40
+      }
+    ]
+  });
+
+  assert.equal(room.doors[0].wall_index, 1);
+  assert.equal(room.doors[0].x_percent, 100);
+  assert.equal(room.doors[0].y_percent, 40);
+});
+
 test("addObjectToRoom chooses a non-overlapping catalog placement", () => {
   const firstRoom = addObjectToRoom(normalizeRoomLayout(BASE_ROOM), "desk");
   const secondRoom = addObjectToRoom(firstRoom, "desk");
@@ -100,6 +117,27 @@ test("updatePlacedObjectPosition rejects overlapping moves", () => {
   assert.deepEqual(moved.desks[1], originalSecondDesk);
 });
 
+test("updatePlacedObjectPosition rejects moves that place a desk on a wall", () => {
+  const room = addObjectToRoom(
+    normalizeRoomLayout({
+      ...BASE_ROOM,
+      walls: [
+        ...BASE_ROOM.walls,
+        { x1_percent: 50, y1_percent: 0, x2_percent: 50, y2_percent: 100 }
+      ]
+    }),
+    "desk"
+  );
+
+  const originalDesk = room.desks[0];
+  const moved = updatePlacedObjectPosition(room, "desks", 0, {
+    x_percent: 50,
+    y_percent: 50
+  });
+
+  assert.deepEqual(moved.desks[0], originalDesk);
+});
+
 test("updateEdgeItemPosition keeps windows snapped to the nearest wall", () => {
   const room = normalizeRoomLayout({
     ...BASE_ROOM,
@@ -113,4 +151,22 @@ test("updateEdgeItemPosition keeps windows snapped to the nearest wall", () => {
 
   assert.equal(moved.windows[0].wall_index, 1);
   assert.equal(moved.windows[0].x_percent, 100);
+});
+
+test("updateWallEndpoint moves connected wall endpoints together", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    walls: [
+      { x1_percent: 0, y1_percent: 0, x2_percent: 50, y2_percent: 0 },
+      { x1_percent: 50, y1_percent: 0, x2_percent: 50, y2_percent: 50 }
+    ]
+  });
+
+  const updated = updateWallEndpoint(room, 0, "end", {
+    x_percent: 60,
+    y_percent: 10
+  });
+
+  assert.equal(updated.walls[0].x2_percent, updated.walls[1].x1_percent);
+  assert.equal(updated.walls[0].y2_percent, updated.walls[1].y1_percent);
 });

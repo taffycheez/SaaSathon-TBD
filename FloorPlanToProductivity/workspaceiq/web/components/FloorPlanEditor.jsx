@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import { normalizeWallGraph, snapEdgeItemToWalls } from "@/lib/roomGeometry";
-import { updateEdgeItemPosition, updatePlacedObjectPosition } from "@/lib/roomState";
+import { updateEdgeItemPosition, updatePlacedObjectPosition, updateWallEndpoint } from "@/lib/roomState";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
@@ -323,6 +323,7 @@ export default function FloorPlanEditor({
   const roomBoxRef = useRef(null);
   const wallsRef = useRef([]);
   const [dragState, setDragState] = useState(null);
+  const [selectedWallIndex, setSelectedWallIndex] = useState(null);
   const wallGraph = useMemo(() => normalizeWallGraph(room.walls || []), [room.walls]);
   const walls = wallGraph.walls.length ? wallGraph.walls : Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
@@ -340,6 +341,15 @@ export default function FloorPlanEditor({
   dragStateRef.current = dragState;
   roomBoxRef.current = roomBox;
   wallsRef.current = walls;
+
+  useEffect(() => {
+    if (selectedWallIndex == null) {
+      return;
+    }
+    if (selectedWallIndex < 0 || selectedWallIndex >= walls.length) {
+      setSelectedWallIndex(null);
+    }
+  }, [selectedWallIndex, walls.length]);
 
   function withUpdatedPlacedItem(currentRoom, type, index, updates) {
     return {
@@ -366,6 +376,16 @@ export default function FloorPlanEditor({
 
       return updatePlacedObjectPosition(currentRoom, type, index, updates);
     }, options);
+  }
+
+  function previewWallUpdate(wallIndex, endpoint, point) {
+    const previewPosition = pointerToRoomPosition(point, roomBoxRef.current, false);
+    onRoomPreviewChange?.(updateWallEndpoint(room, wallIndex, endpoint, previewPosition));
+  }
+
+  function commitWallUpdate(wallIndex, endpoint, point, options) {
+    const previewPosition = pointerToRoomPosition(point, roomBoxRef.current, false);
+    setRoom((currentRoom) => updateWallEndpoint(currentRoom, wallIndex, endpoint, previewPosition), options);
   }
 
   function removePlacedItem(type, index) {
@@ -428,11 +448,28 @@ export default function FloorPlanEditor({
 
     const point = getSvgPointFromClient(event.clientX, event.clientY);
     setDragState({
+      kind: "item",
       type,
       index,
       startPoint: point,
       point,
       overTrash: isOverTrash(event.clientX, event.clientY)
+    });
+  }
+
+  function startWallHandleDrag(wallIndex, endpoint, event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    setSelectedWallIndex(wallIndex);
+    setDragState({
+      kind: "wall-handle",
+      wallIndex,
+      endpoint,
+      startPoint: point,
+      point,
+      overTrash: false
     });
   }
 
@@ -450,6 +487,14 @@ export default function FloorPlanEditor({
     );
 
     clearRoomPreview();
+
+    if (currentDrag.kind === "wall-handle") {
+      if (dragDistance >= DRAG_THRESHOLD) {
+        commitWallUpdate(currentDrag.wallIndex, currentDrag.endpoint, point);
+      }
+      setDragState(null);
+      return;
+    }
 
     if (overTrash) {
       removePlacedItem(currentDrag.type, currentDrag.index);
@@ -482,12 +527,16 @@ export default function FloorPlanEditor({
       const point = getSvgPointFromClient(event.clientX, event.clientY);
       const overTrash = isOverTrash(event.clientX, event.clientY);
       const currentDrag = dragStateRef.current;
-      const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
-
-      if (currentDrag && currentItem && !overTrash) {
-        previewPlacedItem(currentDrag.type, currentDrag.index, buildPreviewItem(currentItem, currentDrag.type, point));
+      if (currentDrag?.kind === "wall-handle") {
+        previewWallUpdate(currentDrag.wallIndex, currentDrag.endpoint, point);
       } else {
-        clearRoomPreview();
+        const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
+
+        if (currentDrag && currentItem && !overTrash) {
+          previewPlacedItem(currentDrag.type, currentDrag.index, buildPreviewItem(currentItem, currentDrag.type, point));
+        } else {
+          clearRoomPreview();
+        }
       }
 
       setDragState((current) => (
@@ -567,6 +616,11 @@ export default function FloorPlanEditor({
           ref={svgRef}
           className="floor-stage-svg"
           viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+          onPointerDown={() => {
+            if (!dragStateRef.current) {
+              setSelectedWallIndex(null);
+            }
+          }}
         >
           {Array.from({ length: 19 }).map((_, index) => {
             const x = PADDING + index * ((CANVAS_WIDTH - PADDING * 2) / 18);
@@ -619,16 +673,56 @@ export default function FloorPlanEditor({
             );
 
             return (
-              <line
-                key={`wall-${index}`}
-                x1={start.x}
-                y1={start.y}
-                x2={end.x}
-                y2={end.y}
-                stroke="#10233d"
-                strokeWidth="4"
-                strokeLinecap="round"
-              />
+              <g key={`wall-${index}`}>
+                <line
+                  x1={start.x}
+                  y1={start.y}
+                  x2={end.x}
+                  y2={end.y}
+                  stroke={selectedWallIndex === index ? "#0b1628" : "#10233d"}
+                  strokeWidth={selectedWallIndex === index ? "5" : "4"}
+                  strokeLinecap="round"
+                />
+                <line
+                  x1={start.x}
+                  y1={start.y}
+                  x2={end.x}
+                  y2={end.y}
+                  stroke="transparent"
+                  strokeWidth="16"
+                  strokeLinecap="round"
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    setSelectedWallIndex(index);
+                  }}
+                />
+                {selectedWallIndex === index ? (
+                  <>
+                    <rect
+                      x={start.x - 6}
+                      y={start.y - 6}
+                      width="12"
+                      height="12"
+                      rx="2"
+                      fill="#ffffff"
+                      stroke="#10233d"
+                      strokeWidth="2"
+                      onPointerDown={(event) => startWallHandleDrag(index, "start", event)}
+                    />
+                    <rect
+                      x={end.x - 6}
+                      y={end.y - 6}
+                      width="12"
+                      height="12"
+                      rx="2"
+                      fill="#ffffff"
+                      stroke="#10233d"
+                      strokeWidth="2"
+                      onPointerDown={(event) => startWallHandleDrag(index, "end", event)}
+                    />
+                  </>
+                ) : null}
+              </g>
             );
           })}
 

@@ -1,4 +1,11 @@
-export default function ScorePanel({ score, breakdown, advice = [], isPreviewing = false }) {
+export default function ScorePanel({
+  score,
+  breakdown,
+  advice = [],
+  explanation = null,
+  isPreviewing = false,
+  isLoadingExplanation = false
+}) {
   const segmentCount = 10;
   const activeSegments = Math.max(0, Math.min(segmentCount, Math.round(score / 10)));
 
@@ -34,6 +41,27 @@ export default function ScorePanel({ score, breakdown, advice = [], isPreviewing
               <li key={`${index}-${item}`}>{item}</li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {explanation ? (
+        <div className="score-advice">
+          <p className="upload-kicker">
+            {explanation.source === "ai" ? "AI design read" : "Design read"}
+          </p>
+          <p>{explanation.summary}</p>
+          {Array.isArray(explanation.insights) && explanation.insights.length ? (
+            <ul className="score-advice-list">
+              {explanation.insights.map((item, index) => (
+                <li key={`insight-${index}-${item}`}>{item}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : isLoadingExplanation ? (
+        <div className="score-advice">
+          <p className="upload-kicker">AI design read</p>
+          <p>Generating a short workspace explanation...</p>
         </div>
       ) : null}
     </div>

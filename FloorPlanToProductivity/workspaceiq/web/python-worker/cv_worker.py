@@ -12,6 +12,7 @@ from PIL import Image
 
 SUPPORTED_TYPES = {
     "desk": "desk",
+    "workstation": "desk",
     "table": "table",
     "dining table": "meeting_table",
     "chair": "chair",
@@ -31,10 +32,15 @@ class AnalysePayload(BaseModel):
 
 
 app = FastAPI(title="WorkspaceIQ CV Worker")
+_SEGMENTATION_MODEL = None
 
 
 def clamp_percent(value: float) -> float:
     return max(0.0, min(100.0, float(value)))
+
+
+def clamp_angle(value: float) -> float:
+    return float(value % 360.0)
 
 
 def normalize_point(x: float, y: float, room_rect: Tuple[int, int, int, int]) -> Dict:
@@ -128,6 +134,22 @@ def orientation_for_line(x1: int, y1: int, x2: int, y2: int) -> str:
     return "horizontal" if abs(x2 - x1) >= abs(y2 - y1) else "vertical"
 
 
+def mask_rectangles(mask: np.ndarray, room_rect: Tuple[int, int, int, int], blocked_rects: List[Tuple[float, float, float, float]]) -> np.ndarray:
+    if not blocked_rects:
+        return mask
+
+    rx, ry, _, _ = room_rect
+    padded = mask.copy()
+    for x1, y1, x2, y2 in blocked_rects:
+        local_x1 = max(0, int(round(x1 - rx - 6)))
+        local_y1 = max(0, int(round(y1 - ry - 6)))
+        local_x2 = min(mask.shape[1], int(round(x2 - rx + 6)))
+        local_y2 = min(mask.shape[0], int(round(y2 - ry + 6)))
+        if local_x2 > local_x1 and local_y2 > local_y1:
+            padded[local_y1:local_y2, local_x1:local_x2] = 0
+    return padded
+
+
 def merge_axis_aligned_segments(segments: List[Tuple[int, int, int]], axis: str, room_rect: Tuple[int, int, int, int]) -> List[Dict]:
     if not segments:
         return []
@@ -178,7 +200,7 @@ def merge_axis_aligned_segments(segments: List[Tuple[int, int, int]], axis: str,
     return walls
 
 
-def detect_wall_segments(image: np.ndarray, room_rect: Tuple[int, int, int, int]) -> List[Dict]:
+def detect_wall_segments(image: np.ndarray, room_rect: Tuple[int, int, int, int], blocked_rects: List[Tuple[float, float, float, float]] = None) -> List[Dict]:
     rx, ry, rw, rh = room_rect
     room_crop = image[ry:ry + rh, rx:rx + rw]
     if room_crop.size == 0:
@@ -192,6 +214,7 @@ def detect_wall_segments(image: np.ndarray, room_rect: Tuple[int, int, int, int]
     horizontal = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, horizontal_kernel, iterations=1)
     vertical = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, vertical_kernel, iterations=1)
     wall_map = cv2.bitwise_or(horizontal, vertical)
+    wall_map = mask_rectangles(wall_map, room_rect, blocked_rects or [])
 
     min_length = max(24, min(rw, rh) // 8)
     raw_lines = cv2.HoughLinesP(wall_map, 1, np.pi / 180, threshold=50, minLineLength=min_length, maxLineGap=max(10, min_length // 3))
@@ -240,12 +263,52 @@ def dedupe_walls(walls: List[Dict]) -> List[Dict]:
 
 
 def maybe_load_segmentation_model():
+    global _SEGMENTATION_MODEL
+    if _SEGMENTATION_MODEL is not None:
+        return _SEGMENTATION_MODEL
+
     model_name = os.environ.get("CV_SEGMENTATION_MODEL", "yolov8n-seg.pt").strip()
     try:
         from ultralytics import YOLO
-        return YOLO(model_name)
+        _SEGMENTATION_MODEL = YOLO(model_name)
+        return _SEGMENTATION_MODEL
     except Exception:
+        _SEGMENTATION_MODEL = False
         return None
+
+
+def polygon_area(points: np.ndarray) -> float:
+    contour = points.astype(np.float32).reshape(-1, 1, 2)
+    return float(abs(cv2.contourArea(contour)))
+
+
+def rotation_from_points(points: np.ndarray, bbox: Tuple[float, float, float, float]) -> float:
+    if points.size >= 6:
+        rect = cv2.minAreaRect(points.astype(np.float32))
+        (_, _), (width, height), angle = rect
+        if width < height:
+            angle += 90.0
+        return clamp_angle(angle)
+
+    x1, y1, x2, y2 = bbox
+    return 0.0 if (x2 - x1) >= (y2 - y1) else 90.0
+
+
+def infer_object_type(base_type: str, contour_points: np.ndarray, bbox: Tuple[float, float, float, float]) -> str:
+    if base_type != "desk" or contour_points.size < 6:
+        return base_type
+
+    x1, y1, x2, y2 = bbox
+    bbox_area = max(1.0, (x2 - x1) * (y2 - y1))
+    fill_ratio = polygon_area(contour_points) / bbox_area
+    hull = cv2.convexHull(contour_points.astype(np.float32))
+    hull_area = max(1.0, polygon_area(hull.reshape(-1, 2)))
+    concavity_ratio = polygon_area(contour_points) / hull_area
+
+    if fill_ratio <= 0.82 and concavity_ratio <= 0.92:
+        return "l_shaped_desk"
+
+    return base_type
 
 
 def polygon_points_from_mask(mask: np.ndarray, bbox: Tuple[float, float, float, float]) -> List[Dict]:
@@ -267,28 +330,29 @@ def polygon_points_from_mask(mask: np.ndarray, bbox: Tuple[float, float, float, 
     return points[:24]
 
 
-def detect_objects_with_segmentation(model, image: np.ndarray, room_rect: Tuple[int, int, int, int]) -> List[Dict]:
+def detect_objects_with_segmentation(model, image: np.ndarray, room_rect: Tuple[int, int, int, int]) -> Tuple[List[Dict], List[Tuple[float, float, float, float]]]:
     if model is None:
-        return []
+        return [], []
 
     try:
         result = model.predict(image, verbose=False, conf=0.18, imgsz=1024)[0]
     except Exception:
-        return []
+        return [], []
 
     names = result.names if hasattr(result, "names") else {}
     masks = result.masks.xy if getattr(result, "masks", None) is not None else []
     boxes = result.boxes
     if boxes is None:
-        return []
+        return [], []
 
     rx, ry, rw, rh = room_rect
     objects = []
+    blocked_rects: List[Tuple[float, float, float, float]] = []
     for index, box in enumerate(boxes):
         cls_index = int(box.cls[0].item())
         label = names.get(cls_index, "").lower()
-        object_type = SUPPORTED_TYPES.get(label)
-        if not object_type:
+        base_type = SUPPORTED_TYPES.get(label)
+        if not base_type:
             continue
 
         x1, y1, x2, y2 = box.xyxy[0].tolist()
@@ -297,7 +361,9 @@ def detect_objects_with_segmentation(model, image: np.ndarray, room_rect: Tuple[
         if not (rx <= center_x <= rx + rw and ry <= center_y <= ry + rh):
             continue
 
-        shape_kind = "polygon" if index < len(masks) and len(masks[index]) >= 3 else "rect"
+        contour_points = np.array(masks[index]) if index < len(masks) and len(masks[index]) >= 3 else np.empty((0, 2), dtype=np.float32)
+        object_type = infer_object_type(base_type, contour_points, (x1, y1, x2, y2))
+        shape_kind = "polygon" if contour_points.size >= 6 else "rect"
         item = {
             "type": object_type,
             "shape_kind": shape_kind,
@@ -305,19 +371,22 @@ def detect_objects_with_segmentation(model, image: np.ndarray, room_rect: Tuple[
             "y_percent": clamp_percent(((center_y - ry) / max(rh, 1)) * 100),
             "width_percent": clamp_percent(((x2 - x1) / max(rw, 1)) * 100),
             "height_percent": clamp_percent(((y2 - y1) / max(rh, 1)) * 100),
-            "rotation_deg": 0,
+            "rotation_deg": rotation_from_points(contour_points, (x1, y1, x2, y2)),
         }
         if shape_kind == "polygon":
-            item["footprint_points"] = polygon_points_from_mask(np.array(masks[index]), (x1, y1, x2, y2))
+            item["footprint_points"] = polygon_points_from_mask(contour_points, (x1, y1, x2, y2))
         objects.append(item)
-    return objects
+        blocked_rects.append((x1, y1, x2, y2))
+    return objects, blocked_rects
 
 
 def build_response(image: np.ndarray) -> Dict:
     contour, room_rect = choose_room_contour(image)
-    walls = dedupe_walls(contour_to_walls(contour, room_rect) + detect_wall_segments(image, room_rect))
     model = maybe_load_segmentation_model()
-    furniture = detect_objects_with_segmentation(model, image, room_rect)
+    furniture, blocked_rects = detect_objects_with_segmentation(model, image, room_rect)
+    detected_walls = detect_wall_segments(image, room_rect, blocked_rects)
+    contour_walls = contour_to_walls(contour, room_rect)
+    walls = dedupe_walls(detected_walls if len(detected_walls) >= 4 else contour_walls + detected_walls)
     _, _, rw, rh = room_rect
 
     return {

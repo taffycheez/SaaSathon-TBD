@@ -10,6 +10,7 @@ const OPENING_POSITIONS = {
   window: [28, 72, 50, 18, 82],
   door: [18, 50, 82, 34, 66]
 };
+const WALL_ENDPOINT_MATCH_TOLERANCE = 1.5;
 
 export function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -203,4 +204,45 @@ export function updatePlacedObjectPosition(room, collectionType, index, pointerP
     ...room,
     [collectionType]: items.map((item, itemIndex) => (itemIndex === index ? nextItem : item))
   };
+}
+
+function endpointMatches(wall, endpoint, point) {
+  const xKey = endpoint === "start" ? "x1_percent" : "x2_percent";
+  const yKey = endpoint === "start" ? "y1_percent" : "y2_percent";
+  return (
+    Math.abs(Number(wall?.[xKey]) - point.x) <= WALL_ENDPOINT_MATCH_TOLERANCE &&
+    Math.abs(Number(wall?.[yKey]) - point.y) <= WALL_ENDPOINT_MATCH_TOLERANCE
+  );
+}
+
+export function updateWallEndpoint(room, wallIndex, endpoint, pointerPosition) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  const targetWall = walls[wallIndex];
+  if (!targetWall || (endpoint !== "start" && endpoint !== "end")) {
+    return room;
+  }
+
+  const originalPoint = endpoint === "start"
+    ? { x: Number(targetWall.x1_percent), y: Number(targetWall.y1_percent) }
+    : { x: Number(targetWall.x2_percent), y: Number(targetWall.y2_percent) };
+  const nextPoint = {
+    x: clampPercent(pointerPosition?.x_percent),
+    y: clampPercent(pointerPosition?.y_percent)
+  };
+
+  return normalizeRoomLayout({
+    ...room,
+    walls: walls.map((wall) => {
+      const nextWall = { ...wall };
+      if (endpointMatches(nextWall, "start", originalPoint)) {
+        nextWall.x1_percent = nextPoint.x;
+        nextWall.y1_percent = nextPoint.y;
+      }
+      if (endpointMatches(nextWall, "end", originalPoint)) {
+        nextWall.x2_percent = nextPoint.x;
+        nextWall.y2_percent = nextPoint.y;
+      }
+      return nextWall;
+    })
+  });
 }

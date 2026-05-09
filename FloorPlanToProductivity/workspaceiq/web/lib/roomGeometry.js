@@ -3,6 +3,7 @@ const MIN_WALL_LENGTH_PERCENT = 5;
 const DEFAULT_OPENING_WIDTH_PERCENT = 10;
 const ELLIPSE_SEGMENTS = 12;
 const WALL_ANGLE_INCREMENT_DEGREES = 45;
+const OPENING_WALL_BIAS = 0.75;
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -389,6 +390,31 @@ export function projectPointOntoWall(point, wall) {
   };
 }
 
+function edgeItemAnchorPoint(item, walls) {
+  const safeWalls = Array.isArray(walls) ? walls : [];
+  if (item && item.x_percent != null && item.y_percent != null) {
+    return {
+      x: clampPercent(item.x_percent),
+      y: clampPercent(item.y_percent)
+    };
+  }
+
+  if (!safeWalls.length) {
+    return {
+      x: 50,
+      y: 50
+    };
+  }
+
+  const wallIndex = Math.max(0, Math.min(safeWalls.length - 1, Number(item?.wall_index) || 0));
+  const wall = safeWalls[wallIndex];
+  const ratio = clampPercent(item?.position_percent ?? 50) / 100;
+  return {
+    x: clampPercent(wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio),
+    y: clampPercent(wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio)
+  };
+}
+
 export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_WIDTH_PERCENT) {
   const safeWalls = Array.isArray(walls) ? walls : [];
   if (!safeWalls.length) {
@@ -401,16 +427,16 @@ export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_
     };
   }
 
-  const target = {
-    x: clampPercent(item?.x_percent ?? 50),
-    y: clampPercent(item?.y_percent ?? 50)
-  };
+  const target = edgeItemAnchorPoint(item, safeWalls);
+  const preferredWallIndex = Number.isInteger(Number(item?.wall_index)) ? Number(item.wall_index) : -1;
 
   let best = null;
   safeWalls.forEach((wall, wallIndex) => {
     const projection = projectPointOntoWall(target, wall);
-    if (!best || projection.distance < best.distance) {
-      best = { ...projection, wall, wallIndex };
+    const weightedDistance =
+      projection.distance - (wallIndex === preferredWallIndex ? OPENING_WALL_BIAS : 0);
+    if (!best || weightedDistance < best.weightedDistance) {
+      best = { ...projection, wall, wallIndex, weightedDistance };
     }
   });
 
@@ -527,6 +553,23 @@ function segmentsIntersect(a1, a2, b1, b2) {
   return false;
 }
 
+function distancePointToSegment(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const denominator = dx * dx + dy * dy;
+  if (!denominator) {
+    return distanceBetweenPoints(point, start);
+  }
+
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / denominator));
+  const closest = {
+    x: start.x + dx * t,
+    y: start.y + dy * t
+  };
+
+  return distanceBetweenPoints(point, closest);
+}
+
 export function pointInPolygon(point, polygon) {
   if (!Array.isArray(polygon) || polygon.length < 3) {
     return false;
@@ -569,9 +612,46 @@ export function polygonsIntersect(polygonA, polygonB) {
   return pointInPolygon(polygonA[0], polygonB) || pointInPolygon(polygonB[0], polygonA);
 }
 
+function footprintIntersectsWalls(footprint, walls, tolerance = 0.35) {
+  if (!Array.isArray(footprint) || footprint.length < 3 || !Array.isArray(walls) || !walls.length) {
+    return false;
+  }
+
+  for (const wall of walls) {
+    const wallStart = { x: wall.x1_percent, y: wall.y1_percent };
+    const wallEnd = { x: wall.x2_percent, y: wall.y2_percent };
+    const wallMidpoint = {
+      x: (wallStart.x + wallEnd.x) / 2,
+      y: (wallStart.y + wallEnd.y) / 2
+    };
+
+    if (
+      pointInPolygon(wallStart, footprint) ||
+      pointInPolygon(wallEnd, footprint) ||
+      pointInPolygon(wallMidpoint, footprint)
+    ) {
+      return true;
+    }
+
+    for (let index = 0; index < footprint.length; index += 1) {
+      const next = footprint[(index + 1) % footprint.length];
+      if (segmentsIntersect(footprint[index], next, wallStart, wallEnd)) {
+        return true;
+      }
+    }
+
+    if (footprint.some((point) => distancePointToSegment(point, wallStart, wallEnd) <= tolerance)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function isPlacementValid(room, collectionType, index, nextItem) {
   const graph = normalizeWallGraph(room?.walls || []);
-  const bounds = getWallBounds(graph.walls.length ? graph.walls : room?.walls || []);
+  const activeWalls = graph.walls.length ? graph.walls : room?.walls || [];
+  const bounds = getWallBounds(activeWalls);
   const footprint = getItemFootprint(nextItem);
 
   const insideBounds = footprint.every(
@@ -587,6 +667,10 @@ export function isPlacementValid(room, collectionType, index, nextItem) {
   }
 
   if (graph.outerPolygon && !footprint.every((point) => pointInPolygon(point, graph.outerPolygon))) {
+    return false;
+  }
+
+  if (footprintIntersectsWalls(footprint, activeWalls)) {
     return false;
   }
 
