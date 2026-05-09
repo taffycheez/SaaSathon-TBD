@@ -1,6 +1,5 @@
 import express from "express";
-import OpenAI from "openai";
-import { openAiApiKey } from "../config.js";
+import { createAiClient, openRouterModel } from "../config.js";
 import { extractJson } from "../lib/json.js";
 import {
   buildFallbackLayout,
@@ -10,9 +9,7 @@ import {
 
 const router = express.Router();
 
-const client = new OpenAI({
-  apiKey: openAiApiKey
-});
+const client = createAiClient();
 
 const systemPrompt =
   "You are an office space planning assistant. Always respond with valid JSON only, no prose, no markdown formatting.";
@@ -26,7 +23,7 @@ router.post("/", async (req, res) => {
     }
 
     const response = await client.responses.create({
-      model: "gpt-4o",
+      model: openRouterModel,
       input: [
         {
           role: "system",

@@ -7,13 +7,22 @@ export default function ControlPanel({
   onReset,
   isGenerating
 }) {
+  const workStyles = [
+    { value: "focus", label: "Focus" },
+    { value: "balanced", label: "Balanced" },
+    { value: "collaborative", label: "Team" }
+  ];
+
   return (
     <div className="panel-card">
       <p className="upload-kicker">Step 3</p>
       <h2>Layout controls</h2>
 
       <label className="field">
-        <span>Number of people: {preferences.numPeople}</span>
+        <span className="field-label">
+          Number of people
+          <strong>{preferences.numPeople}</strong>
+        </span>
         <input
           type="range"
           min="1"
@@ -28,9 +37,27 @@ export default function ControlPanel({
         />
       </label>
 
-      <label className="field">
+      <div className="field">
         <span>Work style</span>
+        <div className="segmented-control" role="group" aria-label="Work style">
+          {workStyles.map((style) => (
+            <button
+              key={style.value}
+              type="button"
+              className={preferences.workStyle === style.value ? "active" : ""}
+              onClick={() =>
+                setPreferences((current) => ({
+                  ...current,
+                  workStyle: style.value
+                }))
+              }
+            >
+              {style.label}
+            </button>
+          ))}
+        </div>
         <select
+          className="sr-only"
           value={preferences.workStyle}
           onChange={(event) =>
             setPreferences((current) => ({
@@ -43,7 +70,7 @@ export default function ControlPanel({
           <option value="balanced">Balanced</option>
           <option value="collaborative">Collaborative</option>
         </select>
-      </label>
+      </div>
 
       <div className="field-row">
         <label className="field">

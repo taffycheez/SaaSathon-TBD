@@ -4,9 +4,9 @@ import { normalizeAnalysisResult } from "./analyseRoomHelpers.js";
 export const analyseRoomPrompt =
   "Analyse this image. First decide whether it is a real office room, workspace interior, or floor plan that can support workspace layout planning. Reject fruit, people-only photos, memes, animals, product shots, abstract art, screenshots unrelated to rooms, and any image that is not clearly a room or floor plan. Return JSON only with: is_valid_room (boolean), rejection_reason (string, empty if valid), estimated_width_m, estimated_height_m, windows (array of {wall, position_percent}), doors (array of {wall, position_percent}), furniture (array of {type, x_percent, y_percent}). If the image is not a valid room or floor plan, set is_valid_room to false and explain why in rejection_reason.";
 
-export async function analyseRoomImage(client, imageUrl) {
+export async function analyseRoomImage(client, imageUrl, model) {
   const response = await client.responses.create({
-    model: "gpt-4o",
+    model,
     input: [
       {
         role: "system",

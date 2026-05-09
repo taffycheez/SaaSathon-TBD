@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import UploadScreen from "./components/UploadScreen";
 import FloorPlanEditor from "./components/FloorPlanEditor";
 import ControlPanel from "./components/ControlPanel";
@@ -177,6 +177,7 @@ function computeScore(room, preferences) {
 }
 
 export default function App() {
+  const uploadRef = useRef(null);
   const [room, setRoom] = useState(DEFAULT_ROOM);
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
@@ -269,14 +270,37 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div>
-          <p className="eyebrow">WorkspaceIQ</p>
-          <h1>Turn an office photo into an editable productivity layout.</h1>
-        </div>
+        <button
+          type="button"
+          className="brand-lockup brand-home-button"
+          onClick={resetWorkspace}
+          aria-label="Go to WorkspaceIQ home"
+        >
+          <span className="brand-mark">WIQ</span>
+          <div>
+            <p className="eyebrow">WorkspaceIQ</p>
+            <h1>Plan a sharper room for focused work.</h1>
+          </div>
+        </button>
+        {!imagePreview ? (
+          <button
+            type="button"
+            className="header-upload-button"
+            onClick={() => uploadRef.current?.openPicker()}
+            disabled={isAnalysing}
+          >
+            {isAnalysing ? "Analysing..." : "Upload image"}
+          </button>
+        ) : null}
       </header>
 
       {!imagePreview ? (
-        <UploadScreen onUpload={handleUpload} isLoading={isAnalysing} error={error} />
+        <HomePage
+          uploadRef={uploadRef}
+          onUpload={handleUpload}
+          isLoading={isAnalysing}
+          error={error}
+        />
       ) : (
         <main className="workspace-layout">
           <section className="canvas-column">
@@ -318,7 +342,112 @@ export default function App() {
           </aside>
         </main>
       )}
+      <Footer />
     </div>
+  );
+}
+
+function HomePage({ uploadRef, onUpload, isLoading, error }) {
+  const marqueeItems = [
+    "Room photo analysis",
+    "Desk placement",
+    "Natural light scoring",
+    "Quiet zones",
+    "Corridor checks",
+    "Editable floor plans"
+  ];
+
+  return (
+    <main className="home-page">
+      <section className="hero-section" id="home">
+        <div className="hero-copy">
+          <p className="eyebrow">Workspace planning assistant</p>
+          <h2>Design a workspace that works back.</h2>
+          <p>
+            Upload a room photo, get an editable floor plan, and tune desk placement around light,
+            flow, collaboration, and focus.
+          </p>
+          <div className="hero-actions">
+            <button
+              type="button"
+              className="primary-link"
+              onClick={() => uploadRef.current?.openPicker()}
+              disabled={isLoading}
+            >
+              {isLoading ? "Analysing..." : "Start with a photo"}
+            </button>
+            <a className="secondary-link" href="#features">View features</a>
+          </div>
+        </div>
+
+        <div className="hero-visual" aria-label="WorkspaceIQ floor plan preview">
+          <div className="mini-toolbar">
+            <span />
+            <span />
+            <strong>Score 82</strong>
+          </div>
+          <div className="mini-plan">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <span key={`desk-${index}`} className={`mini-desk desk-${index + 1}`} />
+            ))}
+            <span className="mini-window" />
+            <span className="mini-door" />
+          </div>
+          <div className="mini-insights">
+            <span>Light +24</span>
+            <span>Flow +15</span>
+            <span>Focus +18</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="marquee-section" aria-label="WorkspaceIQ capabilities">
+        <div className="marquee-track">
+          {[...marqueeItems, ...marqueeItems].map((item, index) => (
+            <span key={`${item}-${index}`}>{item}</span>
+          ))}
+        </div>
+      </section>
+
+      <section className="feature-section" id="features">
+        <article>
+          <span>01</span>
+          <h3>Read the room</h3>
+          <p>Estimate room size, walls, windows, doors, and obstacles from a simple workspace photo.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>Generate layouts</h3>
+          <p>Create desk arrangements based on headcount and the work style your space needs to support.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>Score decisions</h3>
+          <p>See how each arrangement performs for daylight, circulation, quiet areas, and usable space.</p>
+        </article>
+      </section>
+
+      <div id="upload">
+        <UploadScreen ref={uploadRef} onUpload={onUpload} isLoading={isLoading} error={error} />
+      </div>
+    </main>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="site-footer" id="footer">
+      <div>
+        <p className="eyebrow">WorkspaceIQ</p>
+        <h2>Quick links</h2>
+      </div>
+      <nav aria-label="Footer quick links">
+        <a href="#home">Home</a>
+        <a href="#features">Features</a>
+        <a href="#upload">Upload</a>
+        <a href="mailto:hello@workspaceiq.local">Contact</a>
+      </nav>
+    </footer>
   );
 }
 
