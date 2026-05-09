@@ -353,15 +353,39 @@ function clampValue(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function DoorShape({ hingeSide = "start", swingDirection = 1 }) {
-  const closedX = hingeSide === "end" ? -DOOR_RENDER_LENGTH : DOOR_RENDER_LENGTH;
-  const openY = DOOR_RENDER_LENGTH * swingDirection;
+function getOpeningCanvasLength(item, walls, roomBox, bounds, fallbackLength = DOOR_RENDER_LENGTH) {
+  const wallIndex = Math.max(0, Math.min(walls.length - 1, Number(item?.wall_index) || 0));
+  const wall = walls[wallIndex];
+  if (!wall) {
+    return fallbackLength;
+  }
+
+  const wallStart = toCanvasPoint({ x: wall.x1_percent, y: wall.y1_percent }, roomBox, bounds);
+  const wallEnd = toCanvasPoint({ x: wall.x2_percent, y: wall.y2_percent }, roomBox, bounds);
+  const wallLengthPixels = Math.max(1, Math.hypot(wallEnd.x - wallStart.x, wallEnd.y - wallStart.y));
+  const wallLengthPercent = Math.max(
+    1,
+    Math.hypot(
+      Number(wall.x2_percent) - Number(wall.x1_percent),
+      Number(wall.y2_percent) - Number(wall.y1_percent)
+    )
+  );
+  const openingWidthPercent = Math.max(4, Number(item?.width_percent) || 10);
+
+  return Math.max(20, Math.min(72, (openingWidthPercent / wallLengthPercent) * wallLengthPixels));
+}
+
+function DoorShape({ hingeSide = "start", swingDirection = 1, length = DOOR_RENDER_LENGTH }) {
+  const doorLength = Math.max(18, Number(length) || DOOR_RENDER_LENGTH);
+  const closedX = hingeSide === "end" ? -doorLength : doorLength;
+  const openY = doorLength * swingDirection;
   const arcSweep = swingDirection > 0 ? 1 : 0;
   return (
     <>
+      <line x1="0" y1="0" x2={closedX} y2="0" stroke="#f1d3a6" strokeWidth="2.4" strokeLinecap="round" opacity="0.82" />
       <line x1="0" y1="0" x2="0" y2={openY} stroke="#8b5e34" strokeWidth="2.8" strokeLinecap="round" />
       <path
-        d={`M ${closedX} 0 A ${DOOR_RENDER_LENGTH} ${DOOR_RENDER_LENGTH} 0 0 ${arcSweep} 0 ${openY}`}
+        d={`M ${closedX} 0 A ${doorLength} ${doorLength} 0 0 ${arcSweep} 0 ${openY}`}
         fill="none"
         stroke="#8b5e34"
         strokeWidth="2"
@@ -667,6 +691,10 @@ export default function FloorPlanEditor({
     updatePlacedItem("doors", selectedEdgeItem.index, cycleDoorOrientation(item));
   }
 
+  function flipDoorHingeAtIndex(index) {
+    setRoom((currentRoom) => flipDoorHingeInRoom(currentRoom, index));
+  }
+
   function flipSelectedDoorHinge() {
     if (selectedEdgeItem?.type !== "doors") {
       return;
@@ -677,7 +705,7 @@ export default function FloorPlanEditor({
       return;
     }
 
-    setRoom((currentRoom) => flipDoorHingeInRoom(currentRoom, selectedEdgeItem.index));
+    flipDoorHingeAtIndex(selectedEdgeItem.index);
   }
 
   function previewWallUpdate(wallIndex, endpoint, point) {
@@ -1983,14 +2011,13 @@ export default function FloorPlanEditor({
 
           {windows.map((windowItem, index) => {
             const renderedWindow = getPreviewItem("windows", index, windowItem);
-            const x = roomBox.x + (renderedWindow.x_percent / 100) * roomBox.width;
-            const y = roomBox.y + (renderedWindow.y_percent / 100) * roomBox.height;
-            const windowLength = Math.max(24, ((Number(renderedWindow.width_percent) || 14) / 100) * Math.min(roomBox.width, roomBox.height));
+            const point = toCanvasPoint({ x: renderedWindow.x_percent, y: renderedWindow.y_percent }, roomBox, roomSize.bounds);
+            const windowLength = getOpeningCanvasLength(renderedWindow, walls, roomBox, roomSize.bounds, 32);
             return (
               <g
                 key={`window-${index}`}
                 className={`workspace-opening${dragState?.type === "windows" && dragState?.index === index ? " is-dragging" : ""}`}
-                transform={`translate(${x} ${y}) rotate(${renderedWindow.rotation_deg || 0})`}
+                transform={`translate(${point.x} ${point.y}) rotate(${renderedWindow.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("windows", index, event)}
                 onDoubleClick={() =>
                   updatePlacedItem("windows", index, { rotation_deg: ((windowItem.rotation_deg || 0) + 90) % 360 })
@@ -2004,21 +2031,20 @@ export default function FloorPlanEditor({
           {doors.map((doorItem, index) => {
             const renderedDoor = getPreviewItem("doors", index, doorItem);
             const renderedSwingDirection = getRenderedDoorSwingDirection(renderedDoor, wallGraph.outerPolygon);
-            const x = roomBox.x + (renderedDoor.x_percent / 100) * roomBox.width;
-            const y = roomBox.y + (renderedDoor.y_percent / 100) * roomBox.height;
+            const point = toCanvasPoint({ x: renderedDoor.x_percent, y: renderedDoor.y_percent }, roomBox, roomSize.bounds);
+            const doorLength = getOpeningCanvasLength(renderedDoor, walls, roomBox, roomSize.bounds, DOOR_RENDER_LENGTH);
             return (
               <g
                 key={`door-${index}`}
                 className={`workspace-opening${dragState?.type === "doors" && dragState?.index === index ? " is-dragging" : ""}`}
-                transform={`translate(${x} ${y}) rotate(${renderedDoor.rotation_deg || 0})`}
+                transform={`translate(${point.x} ${point.y}) rotate(${renderedDoor.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("doors", index, event)}
-                onDoubleClick={() =>
-                  updatePlacedItem("doors", index, cycleDoorOrientation(doorItem))
-                }
+                onDoubleClick={() => flipDoorHingeAtIndex(index)}
               >
                 <DoorShape
                   hingeSide={renderedDoor.hinge_side}
                   swingDirection={renderedSwingDirection}
+                  length={doorLength}
                 />
               </g>
             );

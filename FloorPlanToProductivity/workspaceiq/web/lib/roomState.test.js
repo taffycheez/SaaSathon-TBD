@@ -341,6 +341,36 @@ test("flipDoorHingeInRoom moves the hinge to the other end of the same doorway",
   assert.equal(flippedBack.doors[0].y_percent, 0);
 });
 
+test("flipDoorHingeInRoom preserves doorway span on shorter wall segments", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    walls: [
+      { x1_percent: 10, y1_percent: 10, x2_percent: 90, y2_percent: 10 },
+      { x1_percent: 90, y1_percent: 10, x2_percent: 90, y2_percent: 90 },
+      { x1_percent: 90, y1_percent: 90, x2_percent: 10, y2_percent: 90 },
+      { x1_percent: 10, y1_percent: 90, x2_percent: 10, y2_percent: 10 }
+    ],
+    doors: [{
+      wall_index: 0,
+      position_percent: 30,
+      width_percent: 8,
+      opening_anchor: "edge",
+      hinge_side: "start",
+      swing_direction: 1
+    }]
+  });
+
+  const flipped = flipDoorHingeInRoom(room, 0);
+  assert.equal(flipped.doors[0].hinge_side, "end");
+  assert.equal(flipped.doors[0].position_percent, 40);
+  assert.equal(flipped.doors[0].x_percent, 42);
+
+  const flippedBack = flipDoorHingeInRoom(flipped, 0);
+  assert.equal(flippedBack.doors[0].hinge_side, "start");
+  assert.equal(flippedBack.doors[0].position_percent, 30);
+  assert.equal(flippedBack.doors[0].x_percent, 34);
+});
+
 test("updateWallEndpoint moves connected wall endpoints together", () => {
   const room = normalizeRoomLayout({
     ...BASE_ROOM,
