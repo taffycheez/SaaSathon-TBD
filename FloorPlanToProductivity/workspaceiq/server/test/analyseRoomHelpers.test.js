@@ -72,6 +72,17 @@ test("fallback room produces useful fallback notes", () => {
   assert.deepEqual(fallbackRoom.doors, []);
 });
 
+test("normalizeRoomDescription drops generic equipment objects from office plans", () => {
+  const room = normalizeRoomDescription({
+    furniture: [
+      { type: "copier", x_percent: 40, y_percent: 40 },
+      { type: "plant", x_percent: 66, y_percent: 42 }
+    ]
+  });
+
+  assert.deepEqual(room.furniture.map((item) => item.type), ["plant"]);
+});
+
 test("normalizeAnalysisResult preserves explicit room rejection", () => {
   const result = normalizeAnalysisResult({
     is_valid_room: false,

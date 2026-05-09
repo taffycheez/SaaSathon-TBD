@@ -266,20 +266,22 @@ export function normalizeRoomDescription(payload) {
     windows: normalizeEdgeItems(safePayload.windows, walls, safePayload.walls),
     doors: normalizeEdgeItems(safePayload.doors, walls, safePayload.walls),
     furniture: Array.isArray(safePayload.furniture)
-      ? safePayload.furniture.map((item) => {
-          const type = canonicalizeObjectType(item?.type);
-          const definition = getObjectDefinition(type);
-          return {
-            type,
-            shape_kind: normalizeShapeKind(item?.shape_kind, definition.shape_kind),
-            x_percent: clampPercent(item?.x_percent),
-            y_percent: clampPercent(item?.y_percent),
-            width_percent: Math.max(2, clampPercent(item?.width_percent ?? definition.width_percent)),
-            height_percent: Math.max(2, clampPercent(item?.height_percent ?? definition.height_percent)),
-            rotation_deg: normalizeRotation(item?.rotation_deg),
-            footprint_points: normalizeFootprintPoints(item?.footprint_points, definition.footprint_points)
-          };
-        })
+      ? safePayload.furniture
+          .map((item) => {
+            const type = canonicalizeObjectType(item?.type);
+            const definition = getObjectDefinition(type);
+            return {
+              type,
+              shape_kind: normalizeShapeKind(item?.shape_kind, definition.shape_kind),
+              x_percent: clampPercent(item?.x_percent),
+              y_percent: clampPercent(item?.y_percent),
+              width_percent: Math.max(2, clampPercent(item?.width_percent ?? definition.width_percent)),
+              height_percent: Math.max(2, clampPercent(item?.height_percent ?? definition.height_percent)),
+              rotation_deg: normalizeRotation(item?.rotation_deg),
+              footprint_points: normalizeFootprintPoints(item?.footprint_points, definition.footprint_points)
+            };
+          })
+          .filter((item) => item.type !== "office_equipment")
       : []
   };
 }

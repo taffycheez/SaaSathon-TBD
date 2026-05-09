@@ -303,6 +303,88 @@ function WhiteboardShape({ width, height, stroke, strokeWidth }) {
   );
 }
 
+function DeskChairInset({ x, y, width, height, strokeWidth }) {
+  const chairDefinition = getObjectDefinition("chair");
+  return (
+    <Group x={x} y={y}>
+      <ChairShape
+        width={width}
+        height={height}
+        fill={chairDefinition.tone}
+        stroke={chairDefinition.stroke}
+        strokeWidth={strokeWidth}
+      />
+    </Group>
+  );
+}
+
+function DeskShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.15, strokeWidth * 0.7);
+  const chairWidth = Math.max(12, width * 0.32);
+  const chairHeight = Math.max(10, height * 0.42);
+
+  return (
+    <>
+      <Rect
+        x={width * 0.14}
+        y={height * 0.08}
+        width={width * 0.72}
+        height={height * 0.34}
+        cornerRadius={Math.max(4, width * 0.08)}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <Line points={[width * 0.2, height * 0.42, width * 0.18, height * 0.66]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.32, height * 0.42, width * 0.32, height * 0.58]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.68, height * 0.42, width * 0.68, height * 0.58]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.8, height * 0.42, width * 0.82, height * 0.66]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <DeskChairInset
+        x={width * 0.34}
+        y={height * 0.48}
+        width={chairWidth}
+        height={chairHeight}
+        strokeWidth={detailStroke}
+      />
+    </>
+  );
+}
+
+function LShapedDeskShape({ width, height, fill, stroke, strokeWidth, footprintPoints }) {
+  const detailStroke = Math.max(1.15, strokeWidth * 0.68);
+  const points = footprintPoints.flatMap((point) => [
+    width / 2 + (point.x_percent / 100) * width,
+    height / 2 + (point.y_percent / 100) * height
+  ]);
+
+  return (
+    <>
+      <Line points={points} closed fill={fill} stroke={stroke} strokeWidth={strokeWidth} lineJoin="round" />
+      <Line
+        points={[
+          width * 0.58,
+          height * 0.08,
+          width * 0.58,
+          height * 0.42,
+          width * 0.86,
+          height * 0.42
+        ]}
+        stroke={stroke}
+        strokeWidth={detailStroke}
+        lineJoin="round"
+        opacity={0.34}
+      />
+      <DeskChairInset
+        x={width * 0.16}
+        y={height * 0.52}
+        width={Math.max(12, width * 0.3)}
+        height={Math.max(10, height * 0.36)}
+        strokeWidth={detailStroke}
+      />
+    </>
+  );
+}
+
 function getInteractiveMotion(type, mode = "idle") {
   if (!ANIMATED_FURNITURE_TYPES.has(type)) {
     return null;
@@ -382,6 +464,35 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
   const { width, height } = objectPixelSize(item, roomBox);
   const definition = getObjectDefinition(item.type);
   const shapeKind = item.shape_kind || definition.shape_kind;
+
+  if (item.type === "desk") {
+    return (
+      <>
+        <DeskShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+        {renderObjectLabel(label, width, height, stroke, { y: Math.max(4, height * 0.12), fontSize: 10.5 })}
+      </>
+    );
+  }
+
+  if (item.type === "l_shaped_desk") {
+    const footprintPoints = Array.isArray(item.footprint_points) && item.footprint_points.length >= 3
+      ? item.footprint_points
+      : normalizeFootprintPoints(definition.footprint_points, definition.footprint_points);
+
+    return (
+      <>
+        <LShapedDeskShape
+          width={width}
+          height={height}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          footprintPoints={footprintPoints}
+        />
+        {renderObjectLabel(label, width, height, stroke, { y: Math.max(4, height * 0.12), fontSize: 10.5 })}
+      </>
+    );
+  }
 
   if (item.type === "chair") {
     return <ChairShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;

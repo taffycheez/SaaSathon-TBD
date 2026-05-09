@@ -1,6 +1,6 @@
 import { pointOnWall } from "./roomState.js";
 
-const DISRUPTIVE_TYPES = ["office_equipment", "trashcan", "toilet", "sink", "shower"];
+const DISRUPTIVE_TYPES = ["trashcan", "toilet", "sink", "shower"];
 const COLLABORATION_ANCHORS = ["meeting_table", "table", "chair", "armchair", "whiteboard"];
 
 function clamp(value, min, max) {
@@ -499,7 +499,7 @@ function buildAdvice({
   if (natureQuality < 0.65) {
     suggestions.push({
       priority: 0.76 - natureQuality,
-      text: "Add a plant near the work zone and keep trashcans or bulky equipment farther from the closest desks."
+      text: "Add a plant near the work zone and keep trashcans or bulky clutter farther from the closest desks."
     });
   }
 
