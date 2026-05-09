@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Layer, Line, Rect, Stage, Text, Group, Ellipse, Image as KonvaImage } from "react-konva";
 import useImage from "use-image";
 import { getObjectDefinition } from "../objectCatalog";
+import { deriveOpeningRenderData, snapOpeningToWall } from "../lib/roomState";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
@@ -174,8 +175,9 @@ export default function FloorPlanEditor({
     width: roomSize.width,
     height: roomSize.height
   };
+  const controlGap = 18;
   const trashTarget = {
-    x: Math.min(CANVAS_WIDTH - 64, roomBox.x + roomBox.width + 10),
+    x: Math.max(10, roomBox.x - 58 - controlGap),
     y: Math.min(CANVAS_HEIGHT - 64, roomBox.y + roomBox.height - 4),
     size: 58
   };
@@ -380,17 +382,6 @@ export default function FloorPlanEditor({
               );
             })}
 
-            <Rect
-              x={roomBox.x}
-              y={roomBox.y}
-              width={roomBox.width}
-              height={roomBox.height}
-              fill="#f8fbff"
-              opacity={0.92}
-              strokeEnabled={false}
-              cornerRadius={6}
-            />
-
             {imagePreview && showReferenceImage ? (
               <>
                 <Text
@@ -430,7 +421,7 @@ export default function FloorPlanEditor({
 
               return (
                 <Group
-                  key={`wall-${index}`}
+                  key={wall.id || `wall-${index}`}
                   draggable
                   onDragStart={() => {
                     onActionStart?.();
@@ -459,14 +450,15 @@ export default function FloorPlanEditor({
             })}
 
             {windows.map((windowItem, index) => {
-              const x = roomBox.x + (windowItem.x_percent / 100) * roomBox.width;
-              const y = roomBox.y + (windowItem.y_percent / 100) * roomBox.height;
+              const renderData = deriveOpeningRenderData(windowItem, walls);
+              const x = roomBox.x + (renderData.x_percent / 100) * roomBox.width;
+              const y = roomBox.y + (renderData.y_percent / 100) * roomBox.height;
               return (
                 <Group
-                  key={`window-${index}`}
+                  key={windowItem.id || `window-${index}`}
                   x={x}
                   y={y}
-                  rotation={windowItem.rotation_deg || 0}
+                  rotation={renderData.rotation_deg || 0}
                   offsetX={0}
                   offsetY={0}
                   draggable
@@ -474,11 +466,7 @@ export default function FloorPlanEditor({
                     onActionStart?.();
                     setIsTrashHot(false);
                   }}
-                  onDragMove={(event) => {
-                    updateTrashHover(event);
-                    const next = clampObjectPosition(event.target.position(), roomBox);
-                    updatePlacedItem("windows", index, next);
-                  }}
+                  onDragMove={(event) => updateTrashHover(event)}
                   onDragEnd={(event) => {
                     const position = event.target.position();
                     setIsTrashHot(false);
@@ -488,11 +476,18 @@ export default function FloorPlanEditor({
                       return;
                     }
 
-                    updatePlacedItem("windows", index, clampObjectPosition(position, roomBox));
-                  }}
-                  onDblClick={() => {
-                    onActionStart?.();
-                    updatePlacedItem("windows", index, { rotation_deg: ((windowItem.rotation_deg || 0) + 90) % 360 });
+                    updatePlacedItem(
+                      "windows",
+                      index,
+                      snapOpeningToWall(
+                        {
+                          ...windowItem,
+                          ...clampObjectPosition(position, roomBox)
+                        },
+                        walls,
+                        "window"
+                      )
+                    );
                   }}
                 >
                   <Line
@@ -506,24 +501,21 @@ export default function FloorPlanEditor({
             })}
 
             {doors.map((doorItem, index) => {
-              const x = roomBox.x + (doorItem.x_percent / 100) * roomBox.width;
-              const y = roomBox.y + (doorItem.y_percent / 100) * roomBox.height;
+              const renderData = deriveOpeningRenderData(doorItem, walls);
+              const x = roomBox.x + (renderData.x_percent / 100) * roomBox.width;
+              const y = roomBox.y + (renderData.y_percent / 100) * roomBox.height;
               return (
                 <Group
-                  key={`door-${index}`}
+                  key={doorItem.id || `door-${index}`}
                   x={x}
                   y={y}
-                  rotation={doorItem.rotation_deg || 0}
+                  rotation={renderData.rotation_deg || 0}
                   draggable
                   onDragStart={() => {
                     onActionStart?.();
                     setIsTrashHot(false);
                   }}
-                  onDragMove={(event) => {
-                    updateTrashHover(event);
-                    const next = clampObjectPosition(event.target.position(), roomBox);
-                    updatePlacedItem("doors", index, next);
-                  }}
+                  onDragMove={(event) => updateTrashHover(event)}
                   onDragEnd={(event) => {
                     const position = event.target.position();
                     setIsTrashHot(false);
@@ -533,11 +525,18 @@ export default function FloorPlanEditor({
                       return;
                     }
 
-                    updatePlacedItem("doors", index, clampObjectPosition(position, roomBox));
-                  }}
-                  onDblClick={() => {
-                    onActionStart?.();
-                    updatePlacedItem("doors", index, { rotation_deg: ((doorItem.rotation_deg || 0) + 90) % 360 });
+                    updatePlacedItem(
+                      "doors",
+                      index,
+                      snapOpeningToWall(
+                        {
+                          ...doorItem,
+                          ...clampObjectPosition(position, roomBox)
+                        },
+                        walls,
+                        "door"
+                      )
+                    );
                   }}
                 >
                   <Line
@@ -558,7 +557,7 @@ export default function FloorPlanEditor({
 
               return (
                 <Group
-                  key={`furniture-${index}`}
+                  key={item.id || `furniture-${index}`}
                   x={x}
                   y={y}
                   rotation={item.rotation_deg || 0}
@@ -618,7 +617,7 @@ export default function FloorPlanEditor({
 
               return (
                 <Group
-                  key={`desk-${index}`}
+                  key={desk.id || `desk-${index}`}
                   x={x}
                   y={y}
                   rotation={desk.rotation_deg}

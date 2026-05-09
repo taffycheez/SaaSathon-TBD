@@ -91,3 +91,15 @@ export function cvAnalysisLooksUsable(analysis) {
 
   return wallCount >= cvMinWallSegments || furnitureCount > 0;
 }
+
+export function cvOpeningsLookUsable(analysis) {
+  const room = analysis?.room;
+  if (!analysis?.is_valid_room || !room) {
+    return false;
+  }
+
+  const windowCount = Array.isArray(room.windows) ? room.windows.length : 0;
+  const doorCount = Array.isArray(room.doors) ? room.doors.length : 0;
+
+  return windowCount > 0 && doorCount > 0;
+}

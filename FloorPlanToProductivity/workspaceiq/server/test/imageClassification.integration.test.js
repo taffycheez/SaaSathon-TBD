@@ -63,3 +63,20 @@ test(
     }
   }
 );
+
+test(
+  "opening detection returns non-stacked openings for a floor-plan fixture",
+  { skip: !shouldRun },
+  async () => {
+    const filePath = path.join(fixturesDir, "pass", "small-office-layout.jpg");
+    const result = await analyseRoomImage(client, await fileToDataUrl(filePath), openRouterModel);
+    const openings = [...result.room.windows, ...result.room.doors];
+    const uniqueOpenings = new Set(
+      openings.map((item) => `${item.wall_index}:${Math.round(item.position_percent)}`)
+    );
+
+    assert.equal(result.is_valid_room, true);
+    assert.equal(openings.length > 0, true, "Expected at least one detected door or window");
+    assert.equal(uniqueOpenings.size, openings.length, "Expected detected openings not to stack on one wall location");
+  }
+);
