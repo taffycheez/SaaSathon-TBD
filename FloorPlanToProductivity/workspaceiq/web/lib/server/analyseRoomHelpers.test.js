@@ -38,6 +38,38 @@ test("dedupeEdgeItems removes clustered openings on the same wall", () => {
   );
 });
 
+test("normalizeAnalysisResult preserves opening metadata from vision analysis", () => {
+  const result = normalizeAnalysisResult({
+    is_valid_room: true,
+    walls: WALLS,
+    windows: [
+      { wall_index: 1, position_percent: 40, width_percent: 14 }
+    ],
+    doors: [
+      {
+        wall_index: 2,
+        position_percent: 35,
+        width_percent: 9,
+        opening_anchor: "edge",
+        hinge_side: "end",
+        swing_direction: -1
+      }
+    ]
+  });
+
+  assert.deepEqual(result.room.windows, [{ wall_index: 1, position_percent: 40, width_percent: 14 }]);
+  assert.deepEqual(result.room.doors, [
+    {
+      wall_index: 2,
+      position_percent: 35,
+      width_percent: 9,
+      opening_anchor: "edge",
+      hinge_side: "end",
+      swing_direction: -1
+    }
+  ]);
+});
+
 test("normalizeAnalysisResult rejects invalid images without inventing openings", () => {
   const result = normalizeAnalysisResult({
     is_valid_room: false,

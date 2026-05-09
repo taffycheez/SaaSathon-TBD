@@ -605,6 +605,7 @@ export default function WorkspaceApp() {
   const [wallToolMode, setWallToolMode] = useState("select");
   const [scaleToolActive, setScaleToolActive] = useState(false);
   const [northToolActive, setNorthToolActive] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState("hybrid");
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -895,7 +896,7 @@ export default function WorkspaceApp() {
       const response = await fetch(`${API_BASE_URL}/analyse-room`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: analysisDataUrl })
+        body: JSON.stringify({ image: analysisDataUrl, analysis_mode: analysisMode })
       });
 
       if (!response.ok) {
@@ -1110,6 +1111,8 @@ export default function WorkspaceApp() {
         <HomePage
           uploadRef={uploadRef}
           onUpload={handleUpload}
+          analysisMode={analysisMode}
+          onAnalysisModeChange={setAnalysisMode}
           onStartSandbox={startSandbox}
           isLoading={isAnalysing}
           error={error}
@@ -1311,7 +1314,17 @@ function LoadingScreen() {
   );
 }
 
-function HomePage({ uploadRef, onUpload, onStartSandbox, isLoading, error, heroScene, heroSceneIndex }) {
+function HomePage({
+  uploadRef,
+  onUpload,
+  onStartSandbox,
+  isLoading,
+  error,
+  heroScene,
+  heroSceneIndex,
+  analysisMode,
+  onAnalysisModeChange
+}) {
   const [pointerLight, setPointerLight] = useState({ x: 50, y: 50, active: false });
 
   function handlePlanPointerMove(event) {
@@ -1467,7 +1480,14 @@ function HomePage({ uploadRef, onUpload, onStartSandbox, isLoading, error, heroS
       </section>
 
       <div id="upload">
-        <UploadScreen ref={uploadRef} onUpload={onUpload} isLoading={isLoading} error={error} />
+        <UploadScreen
+          ref={uploadRef}
+          onUpload={onUpload}
+          isLoading={isLoading}
+          error={error}
+          analysisMode={analysisMode}
+          onAnalysisModeChange={onAnalysisModeChange}
+        />
       </div>
     </main>
   );

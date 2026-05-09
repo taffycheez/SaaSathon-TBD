@@ -109,9 +109,15 @@ For the Vercel web app, set these in the Vercel dashboard instead of a file:
 ANALYSIS_WORKER_URL=
 OPENROUTER_API_KEY=
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=openai/gpt-4o
+OPENROUTER_MODEL=openai/gpt-5.5
+OPENROUTER_ANALYSIS_MODEL=openai/gpt-5.5
+ANALYSIS_PIPELINE_MODE=hybrid
+LLM_ANALYSIS_TIMEOUT_MS=45000
+LLM_REFINEMENT_TIMEOUT_MS=25000
 NEXT_PUBLIC_APP_URL=https://saa-sathon-tbd.vercel.app
 ```
+
+Use `ANALYSIS_PIPELINE_MODE=llm` to test LLM-only image analysis against the Python CV worker. Use `ANALYSIS_PIPELINE_MODE=cv` to test Python-only analysis without LLM fallback. The default `hybrid` mode tries CV first and only uses the LLM when fallback/refinement is useful.
 
 For the Render Python worker:
 

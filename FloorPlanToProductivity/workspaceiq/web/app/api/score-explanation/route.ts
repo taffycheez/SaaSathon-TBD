@@ -1,4 +1,4 @@
-import { createAiClient, openRouterApiKey, openRouterModel } from "@/lib/server/ai";
+import { createAiClient, openRouterApiKey, openRouterExplanationModel } from "@/lib/server/ai";
 import {
   buildRuleBasedScoreExplanation,
   explainScoreWithAi
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const explanation = await explainScoreWithAi(client, openRouterModel, scoreResult, room, preferences);
+      const explanation = await explainScoreWithAi(client, openRouterExplanationModel, scoreResult, room, preferences);
       return Response.json(explanation);
     } catch (error) {
       console.warn("score-explanation ai error, falling back to rules", error);

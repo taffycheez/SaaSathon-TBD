@@ -1,6 +1,12 @@
 import { forwardRef, useImperativeHandle, useRef } from "react";
 
-const UploadScreen = forwardRef(function UploadScreen({ onUpload, isLoading, error }, ref) {
+const UploadScreen = forwardRef(function UploadScreen({
+  onUpload,
+  isLoading,
+  error,
+  analysisMode = "hybrid",
+  onAnalysisModeChange
+}, ref) {
   const inputRef = useRef(null);
 
   function openPicker() {
@@ -52,6 +58,22 @@ const UploadScreen = forwardRef(function UploadScreen({ onUpload, isLoading, err
         <p className="upload-kicker">Step 1</p>
         <h2>Upload a floor plan</h2>
         <p>Drop an image here or click to browse. WorkspaceIQ estimates the room and opens an editable floor plan.</p>
+        <label
+          className="analysis-mode-picker"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <span>Analysis mode</span>
+          <select
+            value={analysisMode}
+            disabled={isLoading}
+            onChange={(event) => onAnalysisModeChange?.(event.target.value)}
+          >
+            <option value="hybrid">Hybrid: CV first, AI refine</option>
+            <option value="llm">LLM only: best AI read</option>
+            <option value="cv">Python CV only</option>
+          </select>
+        </label>
         <button
           type="button"
           className="primary-button"

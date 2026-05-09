@@ -258,6 +258,31 @@ export function positionPercentOnWall(point, wall) {
   return roundPercent(clampPercent(ratio * 100));
 }
 
+function normalizeEdgeItemMetadata(item) {
+  const metadata = {};
+  const widthPercent = Number(item?.width_percent);
+
+  if (Number.isFinite(widthPercent)) {
+    metadata.width_percent = Math.max(2, clampPercent(widthPercent));
+  }
+
+  if (item?.opening_anchor === "edge" || item?.opening_anchor === "center") {
+    metadata.opening_anchor = item.opening_anchor;
+  }
+
+  if (item?.hinge_side === "start" || item?.hinge_side === "end") {
+    metadata.hinge_side = item.hinge_side;
+  }
+
+  if (Number(item?.swing_direction) === -1) {
+    metadata.swing_direction = -1;
+  } else if (Number(item?.swing_direction) === 1) {
+    metadata.swing_direction = 1;
+  }
+
+  return metadata;
+}
+
 export function normalizeEdgeItems(items, targetWalls, sourceWalls = targetWalls) {
   if (!Array.isArray(items)) {
     return [];
@@ -272,7 +297,8 @@ export function normalizeEdgeItems(items, targetWalls, sourceWalls = targetWalls
 
     return {
       wall_index,
-      position_percent: positionPercentOnWall(point, walls[wall_index])
+      position_percent: positionPercentOnWall(point, walls[wall_index]),
+      ...normalizeEdgeItemMetadata(item)
     };
   });
 
@@ -287,7 +313,8 @@ export function dedupeEdgeItems(items, tolerance = 8) {
   const sorted = [...items]
     .map((item) => ({
       wall_index: clampIndex(item?.wall_index, Number.MAX_SAFE_INTEGER),
-      position_percent: clampPercent(item?.position_percent)
+      position_percent: clampPercent(item?.position_percent),
+      ...normalizeEdgeItemMetadata(item)
     }))
     .sort((a, b) => a.wall_index - b.wall_index || a.position_percent - b.position_percent);
 

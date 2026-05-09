@@ -16,10 +16,16 @@ This package is the cloud-ready Next.js + TypeScript app for WorkspaceIQ.
 ANALYSIS_WORKER_URL=
 OPENROUTER_API_KEY=
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=openai/gpt-4o
+OPENROUTER_MODEL=openai/gpt-5.5
+OPENROUTER_ANALYSIS_MODEL=openai/gpt-5.5
+ANALYSIS_PIPELINE_MODE=hybrid
+LLM_ANALYSIS_TIMEOUT_MS=45000
+LLM_REFINEMENT_TIMEOUT_MS=25000
 ```
 
 If `ANALYSIS_WORKER_URL` is set, `app/api/analyse-room` will try the Python CV backend first and fall back to the LLM route if the worker is unavailable.
+
+Set `ANALYSIS_PIPELINE_MODE=llm` when you want to compare LLM-only vision analysis against Python CV. Set `ANALYSIS_PIPELINE_MODE=cv` to force Python-only analysis with no LLM fallback. Keep `hybrid` for production.
 
 ## Local development
 

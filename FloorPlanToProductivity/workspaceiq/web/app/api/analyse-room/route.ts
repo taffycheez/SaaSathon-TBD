@@ -1,5 +1,5 @@
 import { getCvWorkerUrl } from "@/lib/config";
-import { createAiClient, openRouterApiKey, openRouterModel } from "@/lib/server/ai";
+import { createAiClient, openRouterAnalysisModel, openRouterApiKey } from "@/lib/server/ai";
 import {
   buildRoomNotes,
   mergeRoomAnalyses,
@@ -11,13 +11,26 @@ export const dynamic = "force-dynamic";
 
 type AnalyseRequest = {
   image?: string;
+  analysis_mode?: string;
 };
 
 const client = createAiClient();
-const WORKER_TIMEOUT_MS = 20000;
-const LLM_TIMEOUT_MS = 30000;
-const LLM_REFINEMENT_TIMEOUT_MS = 18000;
+type AnalysisPipelineMode = "hybrid" | "cv" | "llm";
+
+const PIPELINE_MODES = new Set<AnalysisPipelineMode>(["hybrid", "cv", "llm"]);
+const WORKER_TIMEOUT_MS = getEnvNumber("WORKER_TIMEOUT_MS", 20000, 5000, 120000);
+const LLM_TIMEOUT_MS = getEnvNumber("LLM_ANALYSIS_TIMEOUT_MS", 45000, 10000, 120000);
+const LLM_REFINEMENT_TIMEOUT_MS = getEnvNumber("LLM_REFINEMENT_TIMEOUT_MS", 25000, 5000, 120000);
 const BATHROOM_FIXTURE_TYPES = new Set(["toilet", "sink", "shower"]);
+
+function getEnvNumber(name: string, fallback: number, min: number, max: number) {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(min, Math.min(max, value));
+}
 
 async function parseJsonSafely(response: Response) {
   try {
@@ -36,6 +49,14 @@ function formatFailureReason(source: string, error: unknown) {
   return `${source}: ${message}`;
 }
 
+function getAnalysisPipelineMode(value: unknown): AnalysisPipelineMode {
+  const candidate = typeof value === "string" && value.trim()
+    ? value.trim().toLowerCase()
+    : (process.env.ANALYSIS_PIPELINE_MODE || process.env.NEXT_PUBLIC_ANALYSIS_PIPELINE_MODE || "hybrid").toLowerCase();
+
+  return PIPELINE_MODES.has(candidate as AnalysisPipelineMode) ? candidate as AnalysisPipelineMode : "hybrid";
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -50,6 +71,20 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
     if (timer) {
       clearTimeout(timer);
     }
+  }
+}
+
+async function measureTiming<T>(
+  timings: Record<string, number>,
+  label: string,
+  operation: () => Promise<T>
+) {
+  const startedAt = Date.now();
+
+  try {
+    return await operation();
+  } finally {
+    timings[label] = Date.now() - startedAt;
   }
 }
 
@@ -104,7 +139,7 @@ function shouldRunPostCvRefinement(analysis: Awaited<ReturnType<typeof analyseRo
 }
 
 async function refineCvAnalysisWithLlm(baseAnalysis: NonNullable<Awaited<ReturnType<typeof analyseRoomWithWorker>>>, image: string) {
-  const llmAnalysis = await analyseRoomImage(client, image, openRouterModel);
+  const llmAnalysis = await analyseRoomImage(client, image, openRouterAnalysisModel);
   if (!llmAnalysis?.is_valid_room) {
     return baseAnalysis;
   }
@@ -130,27 +165,40 @@ export async function POST(request: Request) {
       return Response.json({ error: "Image is required." }, { status: 400 });
     }
 
-    let analysisSource = "llm";
-    let analysis = null;
+    const pipelineMode = getAnalysisPipelineMode(body.analysis_mode);
+    let analysisSource = "none";
+    let analysis: Awaited<ReturnType<typeof analyseRoomWithWorker>> = null;
     let usedLlmRefinement = false;
     const failureReasons: string[] = [];
+    const timings: Record<string, number> = {};
 
-    try {
-      analysis = await analyseRoomWithWorker(body.image);
-      if (analysis) {
-        analysisSource = "cv_worker";
+    if (pipelineMode !== "llm") {
+      try {
+        analysis = await measureTiming(timings, "cv_worker", () => analyseRoomWithWorker(body.image as string));
+        if (analysis) {
+          analysisSource = "cv_worker";
+        }
+      } catch (workerError) {
+        const message = formatFailureReason("cv_worker", workerError);
+        console.warn(
+          pipelineMode === "cv" ? "analyse-room cv-worker error" : "analyse-room cv-worker error, falling back to llm",
+          workerError
+        );
+        failureReasons.push(message);
       }
-    } catch (workerError) {
-      console.warn("analyse-room cv-worker error, falling back to llm", workerError);
-      failureReasons.push(formatFailureReason("cv_worker", workerError));
     }
 
-    if (analysisSource === "cv_worker" && analysis && shouldRunPostCvRefinement(analysis)) {
+    if (pipelineMode === "hybrid" && analysisSource === "cv_worker" && analysis && shouldRunPostCvRefinement(analysis)) {
+      const baseAnalysis = analysis;
       try {
-        analysis = await withTimeout(
-          refineCvAnalysisWithLlm(analysis, body.image),
-          LLM_REFINEMENT_TIMEOUT_MS,
-          "LLM refinement"
+        analysis = await measureTiming(
+          timings,
+          "llm_refinement",
+          () => withTimeout(
+            refineCvAnalysisWithLlm(baseAnalysis, body.image as string),
+            LLM_REFINEMENT_TIMEOUT_MS,
+            "LLM refinement"
+          )
         );
         usedLlmRefinement = true;
       } catch (refinementError) {
@@ -158,21 +206,34 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!analysis) {
+    if (!analysis && pipelineMode !== "cv") {
       try {
         if (!openRouterApiKey) {
           throw new Error("OPENROUTER_API_KEY is missing. Add it to web/.env.local before running AI analysis locally.");
         }
 
-        analysis = await withTimeout(
-          analyseRoomImage(client, body.image, openRouterModel),
-          LLM_TIMEOUT_MS,
-          "LLM analysis"
+        analysis = await measureTiming(
+          timings,
+          "llm",
+          () => withTimeout(
+            analyseRoomImage(client, body.image as string, openRouterAnalysisModel),
+            LLM_TIMEOUT_MS,
+            "LLM analysis"
+          )
         );
+        analysisSource = "llm";
       } catch (llmError) {
         failureReasons.push(formatFailureReason("llm", llmError));
         throw new Error(failureReasons.join(" | "));
       }
+    }
+
+    if (!analysis) {
+      const reason = pipelineMode === "cv"
+        ? "CV-only analysis did not return a result. Set ANALYSIS_WORKER_URL or switch ANALYSIS_PIPELINE_MODE to hybrid/llm."
+        : "No analysis pipeline returned a result.";
+      failureReasons.push(reason);
+      throw new Error(failureReasons.join(" | "));
     }
 
     if (!analysis.is_valid_room) {
@@ -189,6 +250,10 @@ export async function POST(request: Request) {
     const room = analysis.room;
     return Response.json({
       ...room,
+      analysis_source: usedLlmRefinement ? "cv_worker+llm_refinement" : analysisSource,
+      analysis_model: analysisSource === "llm" || usedLlmRefinement ? openRouterAnalysisModel : null,
+      analysis_pipeline_mode: pipelineMode,
+      analysis_timings_ms: timings,
       notes: [
         ...(analysisSource === "cv_worker" ? ["Python CV backend analysed this image first before any fallback logic."] : []),
         ...(usedLlmRefinement ? ["A follow-up LLM pass refined openings and fixtures while keeping the CV wall geometry as the base."] : []),

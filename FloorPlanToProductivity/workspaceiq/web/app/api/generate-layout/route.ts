@@ -1,4 +1,4 @@
-import { createAiClient, openRouterApiKey, openRouterModel } from "@/lib/server/ai";
+import { createAiClient, openRouterApiKey, openRouterLayoutModel } from "@/lib/server/ai";
 import { extractJson } from "@/lib/server/json";
 import {
   buildFallbackLayout,
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     }
 
     const response = await client.responses.create({
-      model: openRouterModel,
+      model: openRouterLayoutModel,
       input: [
         {
           role: "system",

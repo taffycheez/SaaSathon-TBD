@@ -511,6 +511,32 @@ button:disabled {
   color: var(--muted);
 }
 
+.analysis-mode-picker {
+  width: min(100%, 420px);
+  margin: 0 auto 22px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(51, 78, 104, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 251, 240, 0.72);
+  color: var(--muted);
+  cursor: default;
+  text-align: left;
+}
+
+.analysis-mode-picker span {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-dark);
+}
+
+.analysis-mode-picker select {
+  width: 100%;
+}
+
 .editor-card {
   padding: 16px;
 }

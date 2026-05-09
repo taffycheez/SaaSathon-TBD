@@ -76,7 +76,9 @@ Use `web/.env.local` like this:
 ANALYSIS_WORKER_URL=https://your-render-worker-url
 OPENROUTER_API_KEY=
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=openai/gpt-4o
+OPENROUTER_MODEL=openai/gpt-5.5
+OPENROUTER_ANALYSIS_MODEL=openai/gpt-5.5
+ANALYSIS_PIPELINE_MODE=hybrid
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
