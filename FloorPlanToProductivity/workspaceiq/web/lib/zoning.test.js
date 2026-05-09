@@ -56,6 +56,26 @@ test("inferZones keeps zones separated across partitioned spaces", () => {
   assert.notEqual(focusZone.spaceId, collaborationZone.spaceId);
 });
 
+test("inferZones treats couches as clear social anchors", () => {
+  const room = {
+    ...OPEN_PLAN_ROOM,
+    desks: [],
+    furniture: [
+      { type: "couch", x_percent: 42, y_percent: 52, width_percent: 14, height_percent: 7, rotation_deg: 0 },
+      { type: "chair", x_percent: 52, y_percent: 54, width_percent: 6, height_percent: 6, rotation_deg: 0 }
+    ]
+  };
+
+  const analysis = inferZones(room);
+  const socialZone = analysis.zones.find((zone) => zone.type === "social");
+
+  assert.ok(socialZone);
+  assert.ok(socialZone.members.some((member) => member.type === "couch"));
+  assert.ok(socialZone.members.some((member) => member.type === "chair"));
+  assert.ok(socialZone.radiusX >= 13);
+  assert.ok(socialZone.radiusY >= 11);
+});
+
 test("summarizeZoneImpact penalizes noisy adjacency around focus zones", () => {
   const quietAnalysis = inferZones(OPEN_PLAN_ROOM);
   const noisyAnalysis = {

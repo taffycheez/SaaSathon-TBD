@@ -93,6 +93,27 @@ test("computeFengShuiScore penalizes disruptive furniture near desks", () => {
   assert.ok(calmResult.score > noisyResult.score);
 });
 
+test("computeFengShuiScore recommends adding a social zone when the score is low", () => {
+  const room = {
+    ...BASE_ROOM,
+    estimated_area_m2: 12,
+    desks: [
+      { type: "desk", x_percent: 10, y_percent: 10, width_percent: 10, height_percent: 6, rotation_deg: 180 }
+    ],
+    furniture: [
+      { type: "trashcan", x_percent: 12, y_percent: 12, width_percent: 4, height_percent: 4, rotation_deg: 0 }
+    ]
+  };
+
+  const result = computeFengShuiScore(room, {
+    workStyle: "balanced",
+    zoneAnalysis: inferZones(room)
+  });
+
+  assert.ok(result.score < 60);
+  assert.ok(result.advice.some((item) => /add a social zone/i.test(item)));
+});
+
 test("computeFengShuiScore includes zone-aware scoring when multiple zones are inferred", () => {
   const room = {
     ...BASE_ROOM,

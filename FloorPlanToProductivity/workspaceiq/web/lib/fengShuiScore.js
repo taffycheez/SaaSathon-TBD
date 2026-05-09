@@ -433,6 +433,7 @@ function workStyleHarmony(workStyle, desks, doorPoints, furniture, center) {
 }
 
 function buildAdvice({
+  score,
   workStyle,
   doorPoints,
   windowPoints,
@@ -442,9 +443,17 @@ function buildAdvice({
   lightQuality,
   harmonyQuality,
   natureQuality,
-  zoningQuality
+  zoningQuality,
+  socialZoneCount
 }) {
   const suggestions = [];
+
+  if (score < 60 && socialZoneCount <= 0) {
+    suggestions.push({
+      priority: 0.98,
+      text: "Add a social zone with a couch or casual chairs away from focus desks so the room has a clear place for informal conversation."
+    });
+  }
 
   if (!doorPoints.length) {
     suggestions.push({
@@ -622,6 +631,7 @@ export function computeFengShuiScore(room, preferences = {}) {
       `Nature + clutter: ${nature.plantSupportedSeats}/${desks.length} desk(s) sit near plants; ${nature.clutterRiskSeats} sit too close to trashcans or other disruptive items: +${naturePoints}`
     ],
     advice: buildAdvice({
+      score,
       workStyle,
       doorPoints,
       windowPoints,
@@ -631,7 +641,8 @@ export function computeFengShuiScore(room, preferences = {}) {
       lightQuality,
       harmonyQuality: harmony.quality,
       natureQuality: nature.quality,
-      zoningQuality: zoning.quality
+      zoningQuality: zoning.quality,
+      socialZoneCount: Number(zoneAnalysis?.counts?.social) || 0
     })
   };
 }

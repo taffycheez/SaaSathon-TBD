@@ -18,10 +18,10 @@ export const ZONE_DEFINITIONS = {
   },
   social: {
     label: "Social zone",
-    cloudColor: "rgba(112, 196, 147, 0.22)",
+    cloudColor: "rgba(112, 196, 147, 0.3)",
     markerColor: "#2d8b5f",
     popupColor: "#e9f7ef",
-    description: "A casual area for informal conversation, waiting, and lighter social energy."
+    description: "A casual seating area for informal conversation, waiting, and lighter social energy."
   },
   rest: {
     label: "Rest zone",
@@ -341,8 +341,8 @@ function createZoneFromMembers(space, inferredType, members, room, overrides) {
   };
   const spreadX = Math.max(...xs) - Math.min(...xs);
   const spreadY = Math.max(...ys) - Math.min(...ys);
-  const paddingX = inferredType === "collaboration" ? 14 : inferredType === "focus" ? 12 : 10;
-  const paddingY = inferredType === "collaboration" ? 12 : inferredType === "focus" ? 10 : 9;
+  const paddingX = inferredType === "collaboration" ? 14 : inferredType === "social" ? 13 : inferredType === "focus" ? 12 : 10;
+  const paddingY = inferredType === "collaboration" ? 12 : inferredType === "social" ? 11 : inferredType === "focus" ? 10 : 9;
   const rx = clamp(Math.max(10, spreadX / 2 + paddingX), 9, Math.max(12, (space.bounds.maxX - space.bounds.minX) / 2));
   const ry = clamp(Math.max(8, spreadY / 2 + paddingY), 8, Math.max(10, (space.bounds.maxY - space.bounds.minY) / 2));
   const memberSignature = members
@@ -418,9 +418,10 @@ function inferZonesForSpace(space, items, room, overrides) {
   const loungeCandidates = [...byType.lounge, ...socialChairs];
   groupNearbyItems(loungeCandidates, 18).forEach((group) => {
     const hasTable = group.some((item) => canonicalizeObjectType(item.type) === "table");
+    const hasCouch = group.some((item) => canonicalizeObjectType(item.type) === "couch");
     const armchairs = group.filter((item) => canonicalizeObjectType(item.type) === "armchair").length;
     const plants = group.filter((item) => canonicalizeObjectType(item.type) === "plant").length;
-    const type = hasTable || armchairs > 1 ? "social" : armchairs >= 1 || plants >= 1 ? "rest" : null;
+    const type = hasCouch || hasTable || armchairs > 1 ? "social" : armchairs >= 1 || plants >= 1 ? "rest" : null;
     if (!type) {
       return;
     }
