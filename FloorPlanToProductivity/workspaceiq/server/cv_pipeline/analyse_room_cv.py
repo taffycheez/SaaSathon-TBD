@@ -57,7 +57,22 @@ def clamp_percent(value: float) -> float:
     return max(0.0, min(100.0, float(value)))
 
 
-def choose_room_contour(image: np.ndarray) -> Tuple[np.ndarray, Tuple[int, int, int, int]]:
+def rect_hugs_image_border(rect: Tuple[int, int, int, int], image_shape: Tuple[int, int, int]) -> bool:
+    x, y, w, h = rect
+    image_h, image_w = image_shape[:2]
+    margin = max(3, int(min(image_w, image_h) * 0.015))
+    area_ratio = (w * h) / max(image_w * image_h, 1)
+
+    return (
+        area_ratio >= 0.92
+        and x <= margin
+        and y <= margin
+        and x + w >= image_w - margin
+        and y + h >= image_h - margin
+    )
+
+
+def choose_room_contour(image: np.ndarray) -> Tuple[np.ndarray, Tuple[int, int, int, int], bool]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     edges = cv2.Canny(blur, 60, 160)
@@ -74,15 +89,16 @@ def choose_room_contour(image: np.ndarray) -> Tuple[np.ndarray, Tuple[int, int, 
         perimeter = cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, 0.015 * perimeter, True)
         x, y, w, h = cv2.boundingRect(approx)
+        if rect_hugs_image_border((x, y, w, h), image.shape):
+            continue
         candidates.append((area, approx, (x, y, w, h)))
 
     if not candidates:
         h, w = image.shape[:2]
-        contour = np.array([[[0, 0]], [[w, 0]], [[w, h]], [[0, h]]], dtype=np.int32)
-        return contour, (0, 0, w, h)
+        return np.empty((0, 1, 2), dtype=np.int32), (0, 0, w, h), False
 
     _, best_contour, room_rect = max(candidates, key=lambda item: item[0])
-    return best_contour, room_rect
+    return best_contour, room_rect, True
 
 
 def contour_to_walls(contour: np.ndarray, room_rect: Tuple[int, int, int, int]) -> List[Dict]:
@@ -113,6 +129,37 @@ def orientation_for_line(x1: int, y1: int, x2: int, y2: int) -> str:
     if abs(x2 - x1) >= abs(y2 - y1):
         return "horizontal"
     return "vertical"
+
+
+def wall_midpoint(wall: Dict) -> Tuple[float, float]:
+    return (
+        (wall["x1_percent"] + wall["x2_percent"]) / 2,
+        (wall["y1_percent"] + wall["y2_percent"]) / 2,
+    )
+
+
+def nearest_wall_index(point: Tuple[float, float], walls: List[Dict]) -> int:
+    if not walls:
+        return 0
+
+    px, py = point
+    distances = [
+        (index, (wall_midpoint(wall)[0] - px) ** 2 + (wall_midpoint(wall)[1] - py) ** 2)
+        for index, wall in enumerate(walls)
+    ]
+    return min(distances, key=lambda item: item[1])[0]
+
+
+def position_percent_on_wall(point: Tuple[float, float], wall: Dict) -> float:
+    px, py = point
+    dx = wall["x2_percent"] - wall["x1_percent"]
+    dy = wall["y2_percent"] - wall["y1_percent"]
+    length_squared = dx * dx + dy * dy
+    if length_squared <= 0:
+        return 50.0
+
+    ratio = ((px - wall["x1_percent"]) * dx + (py - wall["y1_percent"]) * dy) / length_squared
+    return clamp_percent(ratio * 100)
 
 
 def detect_wall_segments(image: np.ndarray, room_rect: Tuple[int, int, int, int]) -> List[Dict]:
@@ -169,6 +216,118 @@ def detect_wall_segments(image: np.ndarray, room_rect: Tuple[int, int, int, int]
     merged.extend(merge_axis_aligned_segments(horizontal_segments, axis="horizontal", room_rect=room_rect))
     merged.extend(merge_axis_aligned_segments(vertical_segments, axis="vertical", room_rect=room_rect))
     return merged
+
+
+def detect_doors(image: np.ndarray, room_rect: Tuple[int, int, int, int], walls: List[Dict]) -> List[Dict]:
+    if not walls:
+        return []
+
+    rx, ry, rw, rh = room_rect
+    room_crop = image[ry:ry + rh, rx:rx + rw]
+    if room_crop.size == 0:
+        return []
+
+    gray = cv2.cvtColor(room_crop, cv2.COLOR_BGR2GRAY)
+    blur = cv2.medianBlur(gray, 5)
+    min_radius = max(8, min(rw, rh) // 35)
+    max_radius = max(min_radius + 4, min(rw, rh) // 7)
+    circles = cv2.HoughCircles(
+        blur,
+        cv2.HOUGH_GRADIENT,
+        dp=1.2,
+        minDist=max(18, min(rw, rh) // 9),
+        param1=70,
+        param2=18,
+        minRadius=min_radius,
+        maxRadius=max_radius
+    )
+
+    doors = []
+    if circles is not None:
+        for circle in np.round(circles[0, :]).astype("int"):
+            x, y, radius = circle.tolist()
+            if x <= 2 or y <= 2 or x >= rw - 2 or y >= rh - 2:
+                continue
+
+            normalized = normalize_point(rx + x, ry + y, room_rect)
+            point = (normalized["x_percent"], normalized["y_percent"])
+            wall_index = nearest_wall_index(point, walls)
+            doors.append({
+                "wall_index": wall_index,
+                "position_percent": position_percent_on_wall(point, walls[wall_index]),
+                "confidence": float(min(1.0, radius / max(max_radius, 1))),
+            })
+
+    # Many floor plans draw doors as simple breaks in long walls. Use large gaps between
+    # collinear wall segments as a conservative fallback, but avoid inventing more than a few.
+    if len(doors) < 3:
+        horizontal = sorted(
+            [wall for wall in walls if abs(wall["y1_percent"] - wall["y2_percent"]) <= 4],
+            key=lambda wall: (round((wall["y1_percent"] + wall["y2_percent"]) / 2 / 4), wall["x1_percent"])
+        )
+        vertical = sorted(
+            [wall for wall in walls if abs(wall["x1_percent"] - wall["x2_percent"]) <= 4],
+            key=lambda wall: (round((wall["x1_percent"] + wall["x2_percent"]) / 2 / 4), wall["y1_percent"])
+        )
+
+        doors.extend(gap_doors(horizontal, walls, axis="horizontal"))
+        doors.extend(gap_doors(vertical, walls, axis="vertical"))
+
+    return dedupe_edge_items(doors)[:4]
+
+
+def gap_doors(segments: List[Dict], walls: List[Dict], axis: str) -> List[Dict]:
+    doors = []
+    for first, second in zip(segments, segments[1:]):
+        if axis == "horizontal":
+            first_y = (first["y1_percent"] + first["y2_percent"]) / 2
+            second_y = (second["y1_percent"] + second["y2_percent"]) / 2
+            if abs(first_y - second_y) > 4:
+                continue
+            first_end = max(first["x1_percent"], first["x2_percent"])
+            second_start = min(second["x1_percent"], second["x2_percent"])
+            gap = second_start - first_end
+            if 4 <= gap <= 18:
+                point = ((first_end + second_start) / 2, (first_y + second_y) / 2)
+            else:
+                continue
+        else:
+            first_x = (first["x1_percent"] + first["x2_percent"]) / 2
+            second_x = (second["x1_percent"] + second["x2_percent"]) / 2
+            if abs(first_x - second_x) > 4:
+                continue
+            first_end = max(first["y1_percent"], first["y2_percent"])
+            second_start = min(second["y1_percent"], second["y2_percent"])
+            gap = second_start - first_end
+            if 4 <= gap <= 18:
+                point = ((first_x + second_x) / 2, (first_end + second_start) / 2)
+            else:
+                continue
+
+        wall_index = nearest_wall_index(point, walls)
+        doors.append({
+            "wall_index": wall_index,
+            "position_percent": position_percent_on_wall(point, walls[wall_index]),
+            "confidence": 0.45,
+        })
+
+    return doors
+
+
+def dedupe_edge_items(items: List[Dict]) -> List[Dict]:
+    unique = []
+    for item in sorted(items, key=lambda entry: entry.get("confidence", 0), reverse=True):
+        duplicate = any(
+            existing["wall_index"] == item["wall_index"]
+            and abs(existing["position_percent"] - item["position_percent"]) <= 8
+            for existing in unique
+        )
+        if not duplicate:
+            unique.append({
+                "wall_index": int(item["wall_index"]),
+                "position_percent": clamp_percent(item["position_percent"]),
+            })
+    return unique
 
 
 def merge_axis_aligned_segments(segments: List[Tuple[int, int, int]], axis: str, room_rect: Tuple[int, int, int, int]) -> List[Dict]:
@@ -341,13 +500,14 @@ def detect_objects_with_segmentation(model, image: np.ndarray, room_rect: Tuple[
 
 
 def build_response(image: np.ndarray) -> Dict:
-    contour, room_rect = choose_room_contour(image)
-    contour_walls = contour_to_walls(contour, room_rect)
+    contour, room_rect, has_room_contour = choose_room_contour(image)
+    contour_walls = contour_to_walls(contour, room_rect) if has_room_contour else []
     detected_walls = detect_wall_segments(image, room_rect)
     walls = dedupe_walls(contour_walls + detected_walls)
     width_m, height_m = estimate_room_size(room_rect)
     model = maybe_load_segmentation_model()
     furniture = detect_objects_with_segmentation(model, image, room_rect)
+    doors = detect_doors(image, room_rect, walls)
 
     return {
         "is_valid_room": True,
@@ -356,7 +516,7 @@ def build_response(image: np.ndarray) -> Dict:
         "estimated_height_m": height_m,
         "walls": walls,
         "windows": [],
-        "doors": [],
+        "doors": doors,
         "furniture": furniture,
         "pipeline": {
             "mode": "cv",

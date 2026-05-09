@@ -9,10 +9,7 @@ export const fallbackRoom = {
     { x1_percent: 100, y1_percent: 100, x2_percent: 0, y2_percent: 100 },
     { x1_percent: 0, y1_percent: 100, x2_percent: 0, y2_percent: 0 }
   ],
-  windows: [
-    { wall_index: 0, position_percent: 25 },
-    { wall_index: 0, position_percent: 75 }
-  ],
+  windows: [],
   doors: [{ wall_index: 3, position_percent: 70 }],
   furniture: []
 };
@@ -95,7 +92,7 @@ function normalizeEdgeItems(items, walls) {
 
 export function normalizeRoomDescription(payload) {
   const safePayload = payload && typeof payload === "object" ? payload : {};
-  const walls = Array.isArray(safePayload.walls) && safePayload.walls.length >= 3
+  const walls = Array.isArray(safePayload.walls) && safePayload.walls.length >= 2
     ? safePayload.walls.map(normalizeWallSegment)
     : fallbackRoom.walls.map(normalizeWallSegment);
 

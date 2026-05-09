@@ -66,6 +66,7 @@ test("fallback room produces useful fallback notes", () => {
   const notes = buildRoomNotes(fallbackRoom, true);
   assert.equal(notes.length >= 2, true);
   assert.match(notes[0], /starter room/i);
+  assert.deepEqual(fallbackRoom.windows, []);
 });
 
 test("normalizeAnalysisResult preserves explicit room rejection", () => {
@@ -76,4 +77,19 @@ test("normalizeAnalysisResult preserves explicit room rejection", () => {
 
   assert.equal(result.is_valid_room, false);
   assert.match(result.rejection_reason, /fruit/i);
+});
+
+test("normalizeAnalysisResult accepts wall evidence from borderline floor plans", () => {
+  const result = normalizeAnalysisResult({
+    is_valid_room: false,
+    rejection_reason: "The image is sparse.",
+    walls: [
+      { x1_percent: 8, y1_percent: 12, x2_percent: 92, y2_percent: 12 },
+      { x1_percent: 92, y1_percent: 12, x2_percent: 92, y2_percent: 88 }
+    ]
+  });
+
+  assert.equal(result.is_valid_room, true);
+  assert.equal(result.rejection_reason, "");
+  assert.equal(result.room.walls.length, 2);
 });
