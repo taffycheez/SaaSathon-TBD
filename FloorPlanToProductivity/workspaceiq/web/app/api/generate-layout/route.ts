@@ -1,4 +1,4 @@
-import { createAiClient, openRouterModel } from "@/lib/server/ai";
+import { createAiClient, openRouterApiKey, openRouterModel } from "@/lib/server/ai";
 import { extractJson } from "@/lib/server/json";
 import {
   buildFallbackLayout,
@@ -24,6 +24,10 @@ export async function POST(request: Request) {
         { error: "Room, number of people, and work style are required." },
         { status: 400 }
       );
+    }
+
+    if (!openRouterApiKey) {
+      throw new Error("OPENROUTER_API_KEY is missing. Using fallback layout.");
     }
 
     const response = await client.responses.create({

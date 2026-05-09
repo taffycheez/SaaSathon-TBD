@@ -3,6 +3,9 @@ import { OBJECT_PALETTE, getObjectDefinition } from "@/lib/objectCatalog";
 export default function ControlPanel({
   preferences,
   setPreferences,
+  canShowReferenceImage = false,
+  showReferenceImage,
+  setShowReferenceImage,
   onAddWindow,
   onAddDoor,
   wallToolMode,
@@ -97,6 +100,22 @@ export default function ControlPanel({
         </div>
       </div>
 
+      {canShowReferenceImage ? (
+        <label className="field toggle-field">
+          <span>
+            Show original floor plan
+            <small>Overlay the uploaded reference image on the canvas.</small>
+          </span>
+          <button
+            type="button"
+            className={`toggle-button ${showReferenceImage ? "active" : ""}`}
+            aria-pressed={showReferenceImage}
+            onClick={() => setShowReferenceImage((current) => !current)}
+          >
+            {showReferenceImage ? "On" : "Off"}
+          </button>
+        </label>
+      ) : null}
       <button type="button" className="primary-button" onClick={onGenerateLayout} disabled={isGenerating}>
         {isGenerating ? "Generating..." : "Generate Layout"}
       </button>

@@ -1029,7 +1029,6 @@ export default function WorkspaceApp() {
           onStartSandbox={startSandbox}
           isLoading={isAnalysing}
           error={error}
-          onHome={goHome}
           heroScene={heroScene}
           heroSceneIndex={heroSceneIndex}
         />
@@ -1077,6 +1076,9 @@ export default function WorkspaceApp() {
             <ControlPanel
               preferences={preferences}
               setPreferences={setPreferences}
+              canShowReferenceImage={Boolean(imagePreview)}
+              showReferenceImage={showReferenceImage}
+              setShowReferenceImage={setShowReferenceImage}
               onAddWindow={addWindow}
               onAddDoor={addDoor}
               wallToolMode={wallToolMode}
@@ -1212,7 +1214,7 @@ function LoadingScreen() {
   );
 }
 
-function HomePage({ uploadRef, onUpload, onStartSandbox, isLoading, error, onHome, heroScene, heroSceneIndex }) {
+function HomePage({ uploadRef, onUpload, onStartSandbox, isLoading, error, heroScene, heroSceneIndex }) {
   const [pointerLight, setPointerLight] = useState({ x: 50, y: 50, active: false });
 
   function handlePlanPointerMove(event) {

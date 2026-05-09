@@ -114,9 +114,7 @@ button:disabled {
   letter-spacing: 0.04em;
 }
 
-.site-footer a,
-.secondary-link,
-.footer-link-button {
+.secondary-link {
   color: inherit;
   text-decoration: none;
 }
@@ -1564,11 +1562,4 @@ input[type="range"] {
     grid-template-columns: 1fr;
   }
 
-  .site-footer {
-    display: grid;
-  }
-
-  .copyright {
-    text-align: left;
-  }
 }

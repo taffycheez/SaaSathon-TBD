@@ -1,5 +1,5 @@
 import { getCvWorkerUrl } from "@/lib/config";
-import { createAiClient, openRouterModel } from "@/lib/server/ai";
+import { createAiClient, openRouterApiKey, openRouterModel } from "@/lib/server/ai";
 import {
   buildRoomNotes,
   mergeRoomAnalyses,
@@ -160,6 +160,10 @@ export async function POST(request: Request) {
 
     if (!analysis) {
       try {
+        if (!openRouterApiKey) {
+          throw new Error("OPENROUTER_API_KEY is missing. Add it to web/.env.local before running AI analysis locally.");
+        }
+
         analysis = await withTimeout(
           analyseRoomImage(client, body.image, openRouterModel),
           LLM_TIMEOUT_MS,
