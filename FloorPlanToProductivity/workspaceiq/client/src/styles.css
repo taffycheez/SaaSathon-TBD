@@ -588,6 +588,154 @@ button:disabled {
   background: #ffe3e3;
 }
 
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(244, 247, 245, 0.86);
+  backdrop-filter: blur(16px);
+}
+
+.loading-panel {
+  width: min(520px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 24px 70px rgba(23, 32, 47, 0.16);
+  text-align: center;
+}
+
+.loading-plan {
+  position: relative;
+  width: min(220px, 70vw);
+  aspect-ratio: 1.28;
+  margin: 0 auto 22px;
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    linear-gradient(#e8eee9 1px, transparent 1px),
+    linear-gradient(90deg, #e8eee9 1px, transparent 1px),
+    #f9fbf9;
+  background-size: 24px 24px;
+}
+
+.loading-room {
+  position: absolute;
+  inset: 18% 16% 16% 18%;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  animation: scan-room 1.8s ease-in-out infinite;
+}
+
+.loading-desk,
+.loading-path {
+  position: absolute;
+  border-radius: 6px;
+}
+
+.loading-desk {
+  width: 24%;
+  height: 16%;
+  background: var(--warm);
+}
+
+.loading-desk.desk-a {
+  top: 31%;
+  left: 27%;
+}
+
+.loading-desk.desk-b {
+  right: 25%;
+  bottom: 28%;
+}
+
+.loading-path {
+  left: 18%;
+  right: 18%;
+  top: 50%;
+  height: 5px;
+  background: var(--blue);
+  transform-origin: left;
+  animation: trace-path 1.8s ease-in-out infinite;
+}
+
+.loading-panel h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.7rem;
+}
+
+.loading-panel p:not(.eyebrow) {
+  max-width: 390px;
+  margin: 10px auto 0;
+  color: var(--muted);
+}
+
+.loading-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.loading-steps span {
+  height: 8px;
+  border-radius: 999px;
+  background: #dce6df;
+  animation: pulse-step 1.2s ease-in-out infinite;
+}
+
+.loading-steps span:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.loading-steps span:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+@keyframes scan-room {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes trace-path {
+  0% {
+    transform: scaleX(0.12);
+  }
+
+  50% {
+    transform: scaleX(1);
+  }
+
+  100% {
+    transform: scaleX(0.12);
+  }
+}
+
+@keyframes pulse-step {
+  0%,
+  100% {
+    background: #dce6df;
+  }
+
+  50% {
+    background: var(--accent);
+  }
+}
+
 .upload-screen .error-banner {
   position: fixed;
   top: 50%;
