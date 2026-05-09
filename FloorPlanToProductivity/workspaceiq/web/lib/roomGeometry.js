@@ -2,6 +2,7 @@ const SNAP_TOLERANCE_PERCENT = 3;
 const MIN_WALL_LENGTH_PERCENT = 5;
 const DEFAULT_OPENING_WIDTH_PERCENT = 10;
 const ELLIPSE_SEGMENTS = 12;
+const WALL_ANGLE_INCREMENT_DEGREES = 45;
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -53,6 +54,16 @@ function lineAngleDegrees(wall) {
   );
 }
 
+function quantizeAngleDegrees(angle) {
+  return normalizeRotation(
+    Math.round(angle / WALL_ANGLE_INCREMENT_DEGREES) * WALL_ANGLE_INCREMENT_DEGREES
+  );
+}
+
+function isBorderValue(value, tolerance = SNAP_TOLERANCE_PERCENT) {
+  return value <= tolerance || value >= 100 - tolerance;
+}
+
 function pointKey(point) {
   return `${point.x.toFixed(2)}:${point.y.toFixed(2)}`;
 }
@@ -64,6 +75,110 @@ function normalizeWallSegment(wall) {
     x2_percent: clampPercent(wall?.x2_percent),
     y2_percent: clampPercent(wall?.y2_percent)
   };
+}
+
+function quantizeWallAngle(wall) {
+  const length = lineLength(wall);
+  if (length < MIN_WALL_LENGTH_PERCENT) {
+    return wall;
+  }
+
+  const centerX = (wall.x1_percent + wall.x2_percent) / 2;
+  const centerY = (wall.y1_percent + wall.y2_percent) / 2;
+  const angleRadians = (quantizeAngleDegrees(lineAngleDegrees(wall)) * Math.PI) / 180;
+  const halfDx = Math.cos(angleRadians) * (length / 2);
+  const halfDy = Math.sin(angleRadians) * (length / 2);
+
+  return {
+    x1_percent: clampPercent(centerX - halfDx),
+    y1_percent: clampPercent(centerY - halfDy),
+    x2_percent: clampPercent(centerX + halfDx),
+    y2_percent: clampPercent(centerY + halfDy)
+  };
+}
+
+function nodePriority(node) {
+  if (!node) {
+    return 0;
+  }
+
+  let priority = 0;
+  if (node.isBorderNode) {
+    priority += 2;
+  }
+  if (node.count > 1) {
+    priority += 1;
+  }
+  return priority;
+}
+
+function updateNodePosition(node, point, tolerance = SNAP_TOLERANCE_PERCENT) {
+  const snapped = snapPointToBorder(point, tolerance);
+  node.x = clampPercent(snapped.x);
+  node.y = clampPercent(snapped.y);
+  node.isBorderNode = isBorderValue(node.x, tolerance) || isBorderValue(node.y, tolerance);
+}
+
+function quantizeWallNodePair(startNode, endNode, tolerance = SNAP_TOLERANCE_PERCENT) {
+  const wall = {
+    x1_percent: startNode.x,
+    y1_percent: startNode.y,
+    x2_percent: endNode.x,
+    y2_percent: endNode.y
+  };
+  const length = lineLength(wall);
+  if (length < MIN_WALL_LENGTH_PERCENT) {
+    return;
+  }
+
+  const angleRadians = (quantizeAngleDegrees(lineAngleDegrees(wall)) * Math.PI) / 180;
+  const dx = Math.cos(angleRadians) * length;
+  const dy = Math.sin(angleRadians) * length;
+  const startPriority = nodePriority(startNode);
+  const endPriority = nodePriority(endNode);
+
+  if (startPriority > endPriority) {
+    updateNodePosition(
+      endNode,
+      {
+        x: startNode.x + dx,
+        y: startNode.y + dy
+      },
+      tolerance
+    );
+    return;
+  }
+
+  if (endPriority > startPriority) {
+    updateNodePosition(
+      startNode,
+      {
+        x: endNode.x - dx,
+        y: endNode.y - dy
+      },
+      tolerance
+    );
+    return;
+  }
+
+  const centerX = (startNode.x + endNode.x) / 2;
+  const centerY = (startNode.y + endNode.y) / 2;
+  updateNodePosition(
+    startNode,
+    {
+      x: centerX - dx / 2,
+      y: centerY - dy / 2
+    },
+    tolerance
+  );
+  updateNodePosition(
+    endNode,
+    {
+      x: centerX + dx / 2,
+      y: centerY + dy / 2
+    },
+    tolerance
+  );
 }
 
 function dedupeWalls(walls) {
@@ -154,8 +269,8 @@ export function normalizeWallGraph(rawWalls, tolerance = SNAP_TOLERANCE_PERCENT)
   const safeWalls = Array.isArray(rawWalls) ? rawWalls.map(normalizeWallSegment) : [];
   const nodes = [];
 
-  function assignNode(point) {
-    const existing = nodes.find((node) => distanceBetweenPoints(node, point) <= tolerance);
+  function assignNode(point, pool = nodes) {
+    const existing = pool.find((node) => distanceBetweenPoints(node, point) <= tolerance);
     if (existing) {
       existing.x = (existing.x * existing.count + point.x) / (existing.count + 1);
       existing.y = (existing.y * existing.count + point.y) / (existing.count + 1);
@@ -163,8 +278,8 @@ export function normalizeWallGraph(rawWalls, tolerance = SNAP_TOLERANCE_PERCENT)
       return existing;
     }
 
-    const created = { x: point.x, y: point.y, count: 1 };
-    nodes.push(created);
+    const created = { x: point.x, y: point.y, count: 1, isBorderNode: false };
+    pool.push(created);
     return created;
   }
 
@@ -173,26 +288,29 @@ export function normalizeWallGraph(rawWalls, tolerance = SNAP_TOLERANCE_PERCENT)
     endNode: assignNode({ x: wall.x2_percent, y: wall.y2_percent })
   }));
 
-  const snappedWalls = dedupeWalls(
+  nodes.forEach((node) => {
+    updateNodePosition(node, node, tolerance);
+  });
+
+  wallNodes.forEach(({ startNode, endNode }) => {
+    quantizeWallNodePair(startNode, endNode, tolerance);
+  });
+
+  const connectedWalls = dedupeWalls(
     wallNodes
-      .map(({ startNode, endNode }) => {
-        const snappedStart = snapPointToBorder(startNode, tolerance);
-        const snappedEnd = snapPointToBorder(endNode, tolerance);
-        const snapped = {
-          x1_percent: clampPercent(snappedStart.x),
-          y1_percent: clampPercent(snappedStart.y),
-          x2_percent: clampPercent(snappedEnd.x),
-          y2_percent: clampPercent(snappedEnd.y)
-        };
-        return lineLength(snapped) >= MIN_WALL_LENGTH_PERCENT ? snapped : null;
-      })
-      .filter(Boolean)
+      .map(({ startNode, endNode }) => ({
+        x1_percent: clampPercent(startNode.x),
+        y1_percent: clampPercent(startNode.y),
+        x2_percent: clampPercent(endNode.x),
+        y2_percent: clampPercent(endNode.y)
+      }))
+      .filter((wall) => lineLength(wall) >= MIN_WALL_LENGTH_PERCENT)
   );
 
   const nodesByKey = new Map();
   const adjacency = new Map();
 
-  for (const wall of snappedWalls) {
+  for (const wall of connectedWalls) {
     const start = roundPoint({ x: wall.x1_percent, y: wall.y1_percent });
     const end = roundPoint({ x: wall.x2_percent, y: wall.y2_percent });
     const startKey = pointKey(start);
@@ -208,7 +326,7 @@ export function normalizeWallGraph(rawWalls, tolerance = SNAP_TOLERANCE_PERCENT)
   const nodeKeys = [...nodesByKey.keys()];
   const danglingNodes = nodeKeys.filter((key) => (adjacency.get(key) || new Set()).size < 2);
   const components = buildConnectedComponents(adjacency, nodeKeys);
-  const outerPolygon = buildOuterPolygon(snappedWalls, adjacency, nodesByKey);
+  const outerPolygon = buildOuterPolygon(connectedWalls, adjacency, nodesByKey);
   const issues = [];
 
   if (components > 1) {
@@ -222,7 +340,7 @@ export function normalizeWallGraph(rawWalls, tolerance = SNAP_TOLERANCE_PERCENT)
   }
 
   return {
-    walls: snappedWalls,
+    walls: connectedWalls,
     nodes: nodeKeys.map((key) => nodesByKey.get(key)),
     issues,
     isValid: issues.length === 0,

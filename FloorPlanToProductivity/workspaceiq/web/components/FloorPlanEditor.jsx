@@ -625,22 +625,9 @@ export default function FloorPlanEditor({
                 y1={start.y}
                 x2={end.x}
                 y2={end.y}
-                stroke={wallGraph.isValid ? "#10233d" : "#b03a3a"}
+                stroke="#10233d"
                 strokeWidth="4"
                 strokeLinecap="round"
-              />
-            );
-          })}
-
-          {wallGraph.nodes.map((node, index) => {
-            const point = toCanvasPoint(node, roomBox, roomSize.bounds);
-            return (
-              <circle
-                key={`wall-node-${index}`}
-                cx={point.x}
-                cy={point.y}
-                r="4"
-                fill={wallGraph.isValid ? "#10233d" : "#b03a3a"}
               />
             );
           })}
