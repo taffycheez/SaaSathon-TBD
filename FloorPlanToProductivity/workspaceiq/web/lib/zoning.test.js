@@ -76,6 +76,22 @@ test("inferZones treats couches as clear social anchors", () => {
   assert.ok(socialZone.radiusY >= 11);
 });
 
+test("inferZones does not create a zone from a plant by itself", () => {
+  const room = {
+    ...OPEN_PLAN_ROOM,
+    desks: [],
+    furniture: [
+      { type: "plant", x_percent: 48, y_percent: 54, width_percent: 5, height_percent: 6, rotation_deg: 0 }
+    ]
+  };
+
+  const analysis = inferZones(room);
+
+  assert.equal(analysis.zones.length, 0);
+  assert.equal(analysis.counts.rest, 0);
+  assert.equal(analysis.counts.social, 0);
+});
+
 test("summarizeZoneImpact penalizes noisy adjacency around focus zones", () => {
   const quietAnalysis = inferZones(OPEN_PLAN_ROOM);
   const noisyAnalysis = {

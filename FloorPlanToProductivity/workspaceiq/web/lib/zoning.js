@@ -420,8 +420,7 @@ function inferZonesForSpace(space, items, room, overrides) {
     const hasTable = group.some((item) => canonicalizeObjectType(item.type) === "table");
     const hasCouch = group.some((item) => canonicalizeObjectType(item.type) === "couch");
     const armchairs = group.filter((item) => canonicalizeObjectType(item.type) === "armchair").length;
-    const plants = group.filter((item) => canonicalizeObjectType(item.type) === "plant").length;
-    const type = hasCouch || hasTable || armchairs > 1 ? "social" : armchairs >= 1 || plants >= 1 ? "rest" : null;
+    const type = hasCouch || hasTable || armchairs > 1 ? "social" : armchairs >= 1 ? "rest" : null;
     if (!type) {
       return;
     }
