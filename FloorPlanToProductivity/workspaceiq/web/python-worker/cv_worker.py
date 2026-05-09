@@ -1290,7 +1290,14 @@ def detect_door_openings_from_wall_gaps(
                 continue
 
             hinge_percent = start_percent if hinge_side == "start" else end_percent
-            opening_width_percent = max(4.0, min(24.0, abs(end_percent - start_percent)))
+            wall_length_percent = float(np.hypot(
+                wall["x2_percent"] - wall["x1_percent"],
+                wall["y2_percent"] - wall["y1_percent"],
+            ))
+            opening_width_percent = max(
+                4.0,
+                min(24.0, (abs(end_percent - start_percent) / 100.0) * max(wall_length_percent, 1.0)),
+            )
 
             doors.append({
                 "wall_index": wall_index,

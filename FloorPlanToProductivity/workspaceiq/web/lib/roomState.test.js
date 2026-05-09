@@ -10,6 +10,7 @@ import {
   createDoorForRoom,
   createWindowForRoom,
   deleteWallFromRoom,
+  flipDoorHingeInRoom,
   normalizeFurnitureItem,
   moveWallByDelta,
   normalizeRoomLayout,
@@ -312,6 +313,32 @@ test("updateEdgeItem preserves door orientation metadata while re-snapping to th
   assert.equal(updated.doors[0].hinge_side, "end");
   assert.equal(updated.doors[0].swing_direction, -1);
   assert.equal(updated.doors[0].y_percent, 0);
+});
+
+test("flipDoorHingeInRoom moves the hinge to the other end of the same doorway", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    doors: [{
+      wall_index: 0,
+      position_percent: 20,
+      width_percent: 12,
+      opening_anchor: "edge",
+      hinge_side: "start",
+      swing_direction: 1
+    }]
+  });
+
+  const flipped = flipDoorHingeInRoom(room, 0);
+  assert.equal(flipped.doors[0].hinge_side, "end");
+  assert.equal(flipped.doors[0].position_percent, 32);
+  assert.equal(flipped.doors[0].x_percent, 32);
+  assert.equal(flipped.doors[0].y_percent, 0);
+
+  const flippedBack = flipDoorHingeInRoom(flipped, 0);
+  assert.equal(flippedBack.doors[0].hinge_side, "start");
+  assert.equal(flippedBack.doors[0].position_percent, 20);
+  assert.equal(flippedBack.doors[0].x_percent, 20);
+  assert.equal(flippedBack.doors[0].y_percent, 0);
 });
 
 test("updateWallEndpoint moves connected wall endpoints together", () => {

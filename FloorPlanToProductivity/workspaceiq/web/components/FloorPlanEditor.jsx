@@ -12,6 +12,7 @@ import {
   addRectangleRoomToRoom,
   addWallToRoom,
   deleteWallFromRoom,
+  flipDoorHingeInRoom,
   getSnappedWallPoint,
   moveWallByDelta,
   normalizeRotation,
@@ -348,61 +349,8 @@ function cycleDoorOrientation(door) {
   };
 }
 
-function clampPercent(value) {
-  const numeric = Number(value);
-  return Math.max(0, Math.min(100, Number.isFinite(numeric) ? numeric : 0));
-}
-
 function clampValue(value, min, max) {
   return Math.max(min, Math.min(max, value));
-}
-
-function getWallLengthPercent(wall) {
-  if (!wall) {
-    return 0;
-  }
-
-  return Math.hypot(
-    Number(wall.x2_percent) - Number(wall.x1_percent),
-    Number(wall.y2_percent) - Number(wall.y1_percent)
-  );
-}
-
-function pointOnWallAtPosition(wall, positionPercent) {
-  const ratio = clampPercent(positionPercent) / 100;
-  return {
-    x_percent: Number((Number(wall.x1_percent) + (Number(wall.x2_percent) - Number(wall.x1_percent)) * ratio).toFixed(2)),
-    y_percent: Number((Number(wall.y1_percent) + (Number(wall.y2_percent) - Number(wall.y1_percent)) * ratio).toFixed(2))
-  };
-}
-
-function flipDoorHinge(door, walls) {
-  const safeWalls = Array.isArray(walls) ? walls : [];
-  const wallIndex = Math.max(0, Math.min(safeWalls.length - 1, Number(door?.wall_index) || 0));
-  const wall = safeWalls[wallIndex];
-  const currentHingeSide = door?.hinge_side === "end" ? "end" : "start";
-  const nextHingeSide = currentHingeSide === "end" ? "start" : "end";
-  const currentPosition = clampPercent(door?.position_percent ?? 50);
-  const effectiveWidthPercent = Math.max(4, clampPercent(door?.width_percent ?? 10));
-  const wallLengthPercent = Math.max(getWallLengthPercent(wall), effectiveWidthPercent);
-  const spanPercent = Math.min(98, (effectiveWidthPercent / wallLengthPercent) * 100);
-  const nextPosition = nextHingeSide === "end"
-    ? clampPercent(currentPosition + spanPercent)
-    : clampPercent(currentPosition - spanPercent);
-  const nextPoint = wall
-    ? pointOnWallAtPosition(wall, nextPosition)
-    : {
-        x_percent: clampPercent(door?.x_percent),
-        y_percent: clampPercent(door?.y_percent)
-      };
-
-  return {
-    ...nextPoint,
-    wall_index: wallIndex,
-    position_percent: Number(nextPosition.toFixed(2)),
-    opening_anchor: "edge",
-    hinge_side: nextHingeSide
-  };
 }
 
 function DoorShape({ hingeSide = "start", swingDirection = 1 }) {
@@ -729,7 +677,7 @@ export default function FloorPlanEditor({
       return;
     }
 
-    updatePlacedItem("doors", selectedEdgeItem.index, flipDoorHinge(item, walls));
+    setRoom((currentRoom) => flipDoorHingeInRoom(currentRoom, selectedEdgeItem.index));
   }
 
   function previewWallUpdate(wallIndex, endpoint, point) {

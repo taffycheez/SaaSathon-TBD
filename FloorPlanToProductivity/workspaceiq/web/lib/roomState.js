@@ -70,6 +70,76 @@ export function pointOnWall(item, walls) {
   };
 }
 
+function wallLengthPercent(wall) {
+  if (!wall) {
+    return 0;
+  }
+
+  return Math.hypot(
+    Number(wall.x2_percent) - Number(wall.x1_percent),
+    Number(wall.y2_percent) - Number(wall.y1_percent)
+  );
+}
+
+function pointAtWallPosition(wall, positionPercent) {
+  const ratio = clampPercent(positionPercent) / 100;
+  return {
+    x_percent: Number(
+      clampPercent(wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio).toFixed(2)
+    ),
+    y_percent: Number(
+      clampPercent(wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio).toFixed(2)
+    )
+  };
+}
+
+function doorOpeningRange(door, wall) {
+  const currentPosition = clampPercent(door?.position_percent ?? 50);
+  const effectiveWidthPercent = Math.max(4, clampPercent(door?.width_percent ?? 10));
+  const lengthPercent = Math.max(wallLengthPercent(wall), effectiveWidthPercent);
+  const spanPercent = Math.min(98, (effectiveWidthPercent / lengthPercent) * 100);
+  const hingeSide = door?.hinge_side === "end" ? "end" : "start";
+  let start = hingeSide === "end" ? currentPosition - spanPercent : currentPosition;
+  let end = hingeSide === "end" ? currentPosition : currentPosition + spanPercent;
+
+  if (start < 0) {
+    end += -start;
+    start = 0;
+  }
+  if (end > 100) {
+    start -= end - 100;
+    end = 100;
+  }
+
+  return {
+    start: clampPercent(start),
+    end: clampPercent(end)
+  };
+}
+
+export function flipDoorHingeInRoom(room, index) {
+  const doors = Array.isArray(room?.doors) ? room.doors : [];
+  const door = doors[index];
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  if (!door || !walls.length) {
+    return room;
+  }
+
+  const wallIndex = Math.max(0, Math.min(walls.length - 1, Number(door.wall_index) || 0));
+  const wall = walls[wallIndex];
+  const nextHingeSide = door.hinge_side === "end" ? "start" : "end";
+  const range = doorOpeningRange(door, wall);
+  const nextPosition = nextHingeSide === "end" ? range.end : range.start;
+
+  return updateEdgeItem(room, "doors", index, {
+    ...pointAtWallPosition(wall, nextPosition),
+    wall_index: wallIndex,
+    position_percent: Number(nextPosition.toFixed(2)),
+    opening_anchor: "edge",
+    hinge_side: nextHingeSide
+  });
+}
+
 export function createPlacedObject(type, seedIndex = 0) {
   const canonicalType = canonicalizeObjectType(type);
   const definition = getObjectDefinition(canonicalType);
