@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { computeFengShuiScore } from "./fengShuiScore.js";
+import { inferZones } from "./zoning.js";
 
 const BASE_ROOM = {
   estimated_width_m: 8,
@@ -47,7 +48,8 @@ test("computeFengShuiScore rewards a supported desk with a visible door and near
   );
 
   assert.ok(result.score > 40);
-  assert.equal(result.breakdown.length, 6);
+  assert.equal(result.breakdown.length, 7);
+  assert.match(result.breakdown[5], /Zoning:/);
 });
 
 test("computeFengShuiScore changes harmony messaging by work style", () => {
@@ -88,4 +90,27 @@ test("computeFengShuiScore penalizes disruptive furniture near desks", () => {
   const noisyResult = computeFengShuiScore(noisyRoom, { workStyle: "balanced" });
 
   assert.ok(calmResult.score > noisyResult.score);
+});
+
+test("computeFengShuiScore includes zone-aware scoring when multiple zones are inferred", () => {
+  const room = {
+    ...BASE_ROOM,
+    desks: [
+      { type: "desk", x_percent: 18, y_percent: 24, width_percent: 10, height_percent: 6, rotation_deg: 0 },
+      { type: "desk", x_percent: 34, y_percent: 24, width_percent: 10, height_percent: 6, rotation_deg: 0 }
+    ],
+    furniture: [
+      { type: "meeting_table", x_percent: 72, y_percent: 26, width_percent: 16, height_percent: 10, rotation_deg: 0 },
+      { type: "armchair", x_percent: 76, y_percent: 74, width_percent: 8, height_percent: 7, rotation_deg: 0 },
+      { type: "plant", x_percent: 86, y_percent: 74, width_percent: 5, height_percent: 6, rotation_deg: 0 }
+    ]
+  };
+
+  const result = computeFengShuiScore(room, {
+    workStyle: "balanced",
+    zoneAnalysis: inferZones(room)
+  });
+
+  assert.match(result.breakdown[5], /focus zone/i);
+  assert.ok(result.score > 0);
 });

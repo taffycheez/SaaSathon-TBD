@@ -8,9 +8,12 @@ import FloorPlanEditorBoundary from "@/components/FloorPlanEditorBoundary";
 import ScorePanel from "@/components/ScorePanel";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import { computeFengShuiScore } from "@/lib/fengShuiScore";
+import { inferZones } from "@/lib/zoning";
 import {
   addWallToRoom,
+  addRectangleRoomToRoom,
   addObjectToRoom,
+  applyScaleReference,
   clampPercent,
   createDoorForRoom,
   createWindowForRoom,
@@ -37,7 +40,8 @@ const DEFAULT_ROOM = {
   windows: [],
   doors: [],
   furniture: [],
-  desks: []
+  desks: [],
+  zoneOverrides: {}
 };
 
 const defaultPreferences = {
@@ -160,6 +164,20 @@ function edgeItemFromLegacy(item, walls) {
   };
 }
 
+function looksLikeDeskChair(chair, desks) {
+  if (chair?.type !== "chair" || !Array.isArray(desks) || !desks.length) {
+    return false;
+  }
+
+  return desks.some((desk) => {
+    const dx = Math.abs((chair.x_percent || 0) - (desk.x_percent || 0));
+    const dy = Math.abs((chair.y_percent || 0) - (desk.y_percent || 0));
+    const widthAllowance = ((desk.width_percent || 0) * (desk.scale || 1)) * 0.9 + 4;
+    const heightAllowance = ((desk.height_percent || 0) * (desk.scale || 1)) * 1.25 + 5;
+    return dx <= widthAllowance && dy <= heightAllowance;
+  });
+}
+
 function normalizeRoomData(data) {
   const safeData = data && typeof data === "object" ? data : {};
   const walls = Array.isArray(safeData.walls) && safeData.walls.length >= 3
@@ -177,6 +195,7 @@ function normalizeRoomData(data) {
         .filter((item) => item.type !== "office_equipment")
     : [];
   const detectedDesks = furniture.filter(isDeskLikeFurniture).map(normalizeFurnitureItem);
+  const filteredFurniture = furniture.filter((item) => !isDeskLikeFurniture(item) && !looksLikeDeskChair(item, detectedDesks));
 
   return {
     ...DEFAULT_ROOM,
@@ -189,10 +208,11 @@ function normalizeRoomData(data) {
     doors: Array.isArray(safeData.doors)
       ? safeData.doors.map((item) => edgeItemFromLegacy(item, walls))
       : [],
-    furniture: furniture.filter((item) => !isDeskLikeFurniture(item)),
+    furniture: filteredFurniture,
     desks: detectedDesks,
     notes: Array.isArray(safeData.notes) ? safeData.notes : [],
-    wallIssues: []
+    wallIssues: [],
+    zoneOverrides: safeData.zoneOverrides && typeof safeData.zoneOverrides === "object" ? safeData.zoneOverrides : {}
   };
 }
 
@@ -538,7 +558,9 @@ export default function WorkspaceApp() {
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
   const [showReferenceImage, setShowReferenceImage] = useState(false);
+  const [showZones, setShowZones] = useState(true);
   const [wallToolMode, setWallToolMode] = useState("select");
+  const [scaleToolActive, setScaleToolActive] = useState(false);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -555,8 +577,16 @@ export default function WorkspaceApp() {
   const heroScene = HERO_LAYOUT_SCENES[heroSceneIndex];
   const hasWorkspace = Boolean(imagePreview) || isSandboxMode;
   const activeRoom = roomPreview ?? room;
-  const scoreResult = useMemo(() => computeFengShuiScore(activeRoom, preferences), [activeRoom, preferences]);
-  const committedScoreResult = useMemo(() => computeFengShuiScore(room, preferences), [room, preferences]);
+  const zoneAnalysis = useMemo(() => inferZones(activeRoom), [activeRoom]);
+  const committedZoneAnalysis = useMemo(() => inferZones(room), [room]);
+  const scoreResult = useMemo(
+    () => computeFengShuiScore(activeRoom, { ...preferences, zoneAnalysis }),
+    [activeRoom, preferences, zoneAnalysis]
+  );
+  const committedScoreResult = useMemo(
+    () => computeFengShuiScore(room, { ...preferences, zoneAnalysis: committedZoneAnalysis }),
+    [room, preferences, committedZoneAnalysis]
+  );
 
   useEffect(() => {
     if (!error) {
@@ -763,6 +793,25 @@ export default function WorkspaceApp() {
     setRoom((currentRoom) => addWallToRoom(currentRoom, startPoint, endPoint));
   }
 
+  function addRectangleRoom(startPoint, endPoint) {
+    setRoom((currentRoom) => addRectangleRoomToRoom(currentRoom, startPoint, endPoint));
+  }
+
+  function applyScale(startPoint, endPoint, distanceMeters) {
+    setRoom((currentRoom) => applyScaleReference(currentRoom, startPoint, endPoint, distanceMeters));
+    setScaleToolActive(false);
+  }
+
+  function updateZoneOverride(zoneId, nextType) {
+    setRoom((currentRoom) => ({
+      ...currentRoom,
+      zoneOverrides: {
+        ...(currentRoom.zoneOverrides || {}),
+        [zoneId]: nextType
+      }
+    }));
+  }
+
   async function handleUpload(file) {
     setIsAnalysing(true);
     setIsSandboxMode(false);
@@ -800,7 +849,9 @@ export default function WorkspaceApp() {
       );
       setImagePreview(originalDataUrl);
       setShowReferenceImage(false);
+      setShowZones(true);
       setWallToolMode("select");
+      setScaleToolActive(false);
       setRoom(normalizedRoom, { recordHistory: false, resetHistory: true });
       setBaseRoom(normalizedRoom);
       setScoreExplanation(null);
@@ -871,7 +922,9 @@ export default function WorkspaceApp() {
       setRoom(baseRoom, { recordHistory: false, resetHistory: true });
       setPreferences(defaultPreferences);
       setShowReferenceImage(false);
+      setShowZones(true);
       setWallToolMode("select");
+      setScaleToolActive(false);
       setError("");
       setLayoutNotes([]);
       setScoreExplanation(null);
@@ -896,7 +949,9 @@ export default function WorkspaceApp() {
     setPreferences(defaultPreferences);
     setImagePreview("");
     setShowReferenceImage(false);
+    setShowZones(true);
     setWallToolMode("select");
+    setScaleToolActive(false);
     setError("");
     setRoomNotes([]);
     setLayoutNotes([]);
@@ -918,6 +973,7 @@ export default function WorkspaceApp() {
     setImagePreview("");
     setShowReferenceImage(false);
     setWallToolMode("select");
+    setScaleToolActive(false);
     setRoomNotes([]);
     setLayoutNotes([]);
     setPendingScrollTarget(target);
@@ -978,11 +1034,20 @@ export default function WorkspaceApp() {
                 room={room}
                 setRoom={setRoom}
                 onRoomPreviewChange={setRoomPreview}
+                zones={showZones ? zoneAnalysis.zones : []}
+                onZoneOverride={updateZoneOverride}
                 wallToolMode={wallToolMode}
                 setWallToolMode={setWallToolMode}
+                scaleToolActive={scaleToolActive}
+                setScaleToolActive={setScaleToolActive}
                 onAddWall={addWall}
+                onAddRectangleRoom={addRectangleRoom}
+                onApplyScale={applyScale}
                 imagePreview={imagePreview}
                 showReferenceImage={showReferenceImage}
+                setShowReferenceImage={setShowReferenceImage}
+                showZones={showZones}
+                setShowZones={setShowZones}
                 canUndo={undoStack.length > 0}
                 canRedo={redoStack.length > 0}
                 onUndo={undoRoomChange}
@@ -993,6 +1058,7 @@ export default function WorkspaceApp() {
               score={scoreResult.score}
               breakdown={scoreResult.breakdown}
               advice={scoreResult.advice}
+              zones={zoneAnalysis.zones}
               explanation={!roomPreview ? scoreExplanation : null}
               isPreviewing={Boolean(roomPreview)}
               isLoadingExplanation={!roomPreview && isExplainingScore}
@@ -1005,12 +1071,12 @@ export default function WorkspaceApp() {
               setPreferences={setPreferences}
               room={room}
               updateRoomDimensions={updateRoomDimensions}
-              showReferenceImage={showReferenceImage}
-              setShowReferenceImage={setShowReferenceImage}
               onAddWindow={addWindow}
               onAddDoor={addDoor}
               wallToolMode={wallToolMode}
               setWallToolMode={setWallToolMode}
+              scaleToolActive={scaleToolActive}
+              setScaleToolActive={setScaleToolActive}
               onAddObject={addObject}
               onGenerateLayout={handleGenerateLayout}
               onReset={resetWorkspace}

@@ -2,6 +2,7 @@ import { getCvWorkerUrl } from "@/lib/config";
 import { createAiClient, openRouterModel } from "@/lib/server/ai";
 import {
   buildRoomNotes,
+  mergeRoomAnalyses,
   normalizeAnalysisResult
 } from "@/lib/server/analyseRoomHelpers";
 import { analyseRoomImage } from "@/lib/server/analyseRoomVision";
@@ -15,6 +16,8 @@ type AnalyseRequest = {
 const client = createAiClient();
 const WORKER_TIMEOUT_MS = 20000;
 const LLM_TIMEOUT_MS = 30000;
+const LLM_REFINEMENT_TIMEOUT_MS = 18000;
+const BATHROOM_FIXTURE_TYPES = new Set(["toilet", "sink", "shower"]);
 
 async function parseJsonSafely(response: Response) {
   try {
@@ -87,6 +90,39 @@ async function analyseRoomWithWorker(image: string) {
   return normalizeAnalysisResult(await response.json());
 }
 
+function shouldRunPostCvRefinement(analysis: Awaited<ReturnType<typeof analyseRoomWithWorker>>) {
+  const room = analysis?.room;
+  if (!room) {
+    return false;
+  }
+
+  const openings = [...(room.windows || []), ...(room.doors || [])];
+  const openingWallCount = new Set(openings.map((item) => item.wall_index)).size;
+  const hasBathroomFixtures = Array.isArray(room.furniture) && room.furniture.some((item) => BATHROOM_FIXTURE_TYPES.has(item.type));
+
+  return room.doors.length === 0 || room.windows.length === 0 || (openings.length >= 2 && openingWallCount <= 1) || hasBathroomFixtures;
+}
+
+async function refineCvAnalysisWithLlm(baseAnalysis: NonNullable<Awaited<ReturnType<typeof analyseRoomWithWorker>>>, image: string) {
+  const llmAnalysis = await analyseRoomImage(client, image, openRouterModel);
+  if (!llmAnalysis?.is_valid_room) {
+    return baseAnalysis;
+  }
+
+  return mergeRoomAnalyses(
+    {
+      ...llmAnalysis,
+      room: {
+        ...llmAnalysis.room,
+        estimated_width_m: baseAnalysis.room.estimated_width_m,
+        estimated_height_m: baseAnalysis.room.estimated_height_m,
+        walls: baseAnalysis.room.walls
+      }
+    },
+    baseAnalysis
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as AnalyseRequest;
@@ -96,6 +132,7 @@ export async function POST(request: Request) {
 
     let analysisSource = "llm";
     let analysis = null;
+    let usedLlmRefinement = false;
     const failureReasons: string[] = [];
 
     try {
@@ -106,6 +143,19 @@ export async function POST(request: Request) {
     } catch (workerError) {
       console.warn("analyse-room cv-worker error, falling back to llm", workerError);
       failureReasons.push(formatFailureReason("cv_worker", workerError));
+    }
+
+    if (analysisSource === "cv_worker" && analysis && shouldRunPostCvRefinement(analysis)) {
+      try {
+        analysis = await withTimeout(
+          refineCvAnalysisWithLlm(analysis, body.image),
+          LLM_REFINEMENT_TIMEOUT_MS,
+          "LLM refinement"
+        );
+        usedLlmRefinement = true;
+      } catch (refinementError) {
+        failureReasons.push(formatFailureReason("llm_refinement", refinementError));
+      }
     }
 
     if (!analysis) {
@@ -137,6 +187,7 @@ export async function POST(request: Request) {
       ...room,
       notes: [
         ...(analysisSource === "cv_worker" ? ["Python CV backend analysed this image first before any fallback logic."] : []),
+        ...(usedLlmRefinement ? ["A follow-up LLM pass refined openings and fixtures while keeping the CV wall geometry as the base."] : []),
         ...buildRoomNotes(room, false)
       ],
       reasons: failureReasons,

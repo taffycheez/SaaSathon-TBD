@@ -569,6 +569,24 @@ button:disabled {
   margin-left: auto;
 }
 
+.editor-toggle-button {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 9px 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--accent-dark);
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(23, 32, 47, 0.08);
+}
+
+.editor-toggle-button.is-active {
+  background: linear-gradient(135deg, var(--accent) 0%, #4a86ff 100%);
+  border-color: transparent;
+  color: #ffffff;
+}
+
 .editor-icon-button {
   width: 44px;
   height: 44px;
@@ -620,11 +638,15 @@ button:disabled {
 }
 
 .trash-drop-zone.is-active {
-  transform: translateY(-1px) scale(1.02);
+  transform: translateY(-1px);
   border-color: var(--danger);
   background: #ffe4e4;
   color: #7f2626;
   box-shadow: 0 14px 30px rgba(168, 59, 59, 0.16);
+}
+
+.trash-drop-zone .editor-icon {
+  flex: 0 0 auto;
 }
 
 .trash-drop-copy {
@@ -652,6 +674,53 @@ button:disabled {
   border-radius: 8px;
   padding: 12px;
   background: var(--surface);
+}
+
+.wall-action-panel {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.wall-action-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.wall-action-copy strong {
+  font-size: 0.92rem;
+}
+
+.wall-action-copy small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.wall-delete-button {
+  border: 1px solid #d9b2b2;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #fff5f4;
+  color: #8f3a3a;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.wall-inline-delete {
+  cursor: pointer;
+  color: #8f3a3a;
+}
+
+.wall-inline-delete svg {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 
 .object-scale-field {
@@ -740,6 +809,19 @@ button:disabled {
   background: #f7faf8;
   border: 1px solid var(--border);
   width: 100%;
+  position: relative;
+}
+
+.stage-overlay-controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  max-width: min(100%, 420px);
 }
 
 .floor-stage-svg {
@@ -787,6 +869,61 @@ button:disabled {
 .workspace-opening.is-dragging {
   cursor: grabbing;
   filter: drop-shadow(0 8px 16px rgba(23, 32, 47, 0.18));
+}
+
+.zone-marker {
+  cursor: pointer;
+  transition: transform 160ms ease, opacity 160ms ease, r 160ms ease;
+  transform-origin: center;
+}
+
+.zone-marker.is-active {
+  animation: zone-pulse 1.4s ease-in-out infinite;
+}
+
+.zone-popup {
+  display: grid;
+  gap: 8px;
+  min-height: 96px;
+  border: 1px solid;
+  border-radius: 14px;
+  padding: 12px;
+  color: var(--ink);
+  box-shadow: 0 18px 34px rgba(23, 32, 47, 0.14);
+}
+
+.zone-popup strong {
+  font-size: 0.95rem;
+}
+
+.zone-popup p,
+.zone-popup small {
+  margin: 0;
+  color: #42546f;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.zone-popup label {
+  display: grid;
+  gap: 6px;
+}
+
+.zone-popup label span {
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #42546f;
+}
+
+.zone-popup select {
+  width: 100%;
+  border: 1px solid rgba(66, 84, 111, 0.18);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
 }
 
 .workspace-object--chair.is-dragging,
@@ -862,6 +999,26 @@ button:disabled {
   margin: 12px 0 0;
   padding-left: 18px;
   color: var(--muted);
+}
+
+.scale-tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.scale-tool-actions input {
+  width: 110px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.scale-tool-cancel {
+  min-height: 42px;
 }
 
 .error-banner {
@@ -1059,6 +1216,17 @@ button:disabled {
 
   50% {
     background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%);
+  }
+}
+
+@keyframes zone-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+  }
+
+  50% {
+    filter: drop-shadow(0 0 10px rgba(36, 99, 235, 0.24));
   }
 }
 

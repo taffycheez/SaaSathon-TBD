@@ -48,6 +48,14 @@ export const OBJECT_TYPES = {
     tone: "#c7e3d5",
     stroke: "#2b6b53"
   },
+  couch: {
+    label: "Couch",
+    shape_kind: "rect",
+    width_percent: 14,
+    height_percent: 7,
+    tone: "#d7e6cf",
+    stroke: "#47684f"
+  },
   table: {
     label: "Table",
     shape_kind: "rect",
@@ -112,6 +120,22 @@ export const OBJECT_TYPES = {
     tone: "#d7ebf3",
     stroke: "#5c879a"
   },
+  fridge: {
+    label: "Fridge",
+    shape_kind: "rect",
+    width_percent: 7,
+    height_percent: 10,
+    tone: "#eef4fb",
+    stroke: "#607587"
+  },
+  kitchenette: {
+    label: "Kitchenette",
+    shape_kind: "rect",
+    width_percent: 14,
+    height_percent: 5,
+    tone: "#efe5d7",
+    stroke: "#8a6f53"
+  },
   shower: {
     label: "Shower",
     shape_kind: "rect",
@@ -138,7 +162,9 @@ const OBJECT_ALIASES = {
   visitor_chair: "chair",
   seat: "chair",
   seating: "chair",
-  sofa_chair: "armchair",
+  sofa: "couch",
+  couch: "couch",
+  sofa_chair: "couch",
   lounge_chair: "armchair",
   soft_chair: "armchair",
   filing_cabinet: "filing_cabinet",
@@ -164,7 +190,14 @@ const OBJECT_ALIASES = {
   bathroom_toilet: "toilet",
   bathtub: "shower",
   wash_basin: "sink",
-  washbasin: "sink"
+  washbasin: "sink",
+  refrigerator: "fridge",
+  fridge_freezer: "fridge",
+  kitchen: "kitchenette",
+  kitchen_counter: "kitchenette",
+  kitchenette_counter: "kitchenette",
+  counter: "kitchenette",
+  benchtop: "kitchenette"
 };
 
 export function canonicalizeObjectType(value) {
@@ -192,10 +225,14 @@ export const OBJECT_PALETTE = [
   "l_shaped_desk",
   "chair",
   "armchair",
+  "couch",
   "meeting_table",
   "table",
   "filing_cabinet",
   "whiteboard",
   "plant",
-  "trashcan"
+  "trashcan",
+  "fridge",
+  "kitchenette",
+  "sink"
 ];

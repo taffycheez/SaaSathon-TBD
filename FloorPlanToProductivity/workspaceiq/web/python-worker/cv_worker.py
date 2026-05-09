@@ -16,24 +16,38 @@ SUPPORTED_TYPES = {
     "table": "table",
     "dining table": "meeting_table",
     "chair": "chair",
-    "couch": "armchair",
-    "sofa": "armchair",
+    "couch": "couch",
+    "sofa": "couch",
     "potted plant": "plant",
     "plant": "plant",
     "toilet": "toilet",
     "sink": "sink",
     "shower": "shower",
     "bathtub": "shower",
+    "refrigerator": "fridge",
+    "fridge": "fridge",
+    "kitchen": "kitchenette",
+    "counter": "kitchenette",
+    "kitchenette": "kitchenette",
 }
 
 MAX_ANALYSIS_DIMENSION = 1600
 SEGMENTATION_IMAGE_SIZE = 768
 WALL_CONNECTION_TOLERANCE_PERCENT = 4.0
+STRUCTURAL_ENDPOINT_TOLERANCE_PERCENT = 4.5
+MIN_STRUCTURAL_WALL_LENGTH_PERCENT = 14.0
 WINDOW_GAP_MIN_RATIO = 0.08
 WINDOW_GAP_MAX_RATIO = 0.35
 WINDOW_SCAN_HALF_THICKNESS = 3
 MIN_OBJECT_CANDIDATE_AREA_RATIO = 0.0004
 MAX_OBJECT_CANDIDATE_AREA_RATIO = 0.08
+DOOR_MIN_RADIUS_RATIO = 0.025
+DOOR_MAX_RADIUS_RATIO = 0.16
+DOOR_ARC_SUPPORT_MIN_RATIO = 0.16
+DOOR_ARC_SUPPORT_MAX_RATIO = 0.6
+DOOR_ARC_ASPECT_RATIO_MAX = 1.85
+SYMBOL_MIN_AREA_RATIO = 0.00035
+SYMBOL_MAX_AREA_RATIO = 0.03
 
 
 class AnalysePayload(BaseModel):
@@ -226,6 +240,49 @@ def wall_near_border(segment: Dict, tolerance: float = 3.0) -> bool:
     )
 
 
+def point_near_border(point: Tuple[float, float], tolerance: float = STRUCTURAL_ENDPOINT_TOLERANCE_PERCENT) -> bool:
+    return (
+        point[0] <= tolerance
+        or point[0] >= 100.0 - tolerance
+        or point[1] <= tolerance
+        or point[1] >= 100.0 - tolerance
+    )
+
+
+def endpoint_anchor_score(segment: Dict, walls: List[Dict], tolerance: float = STRUCTURAL_ENDPOINT_TOLERANCE_PERCENT) -> int:
+    endpoints = [
+        (segment["x1_percent"], segment["y1_percent"]),
+        (segment["x2_percent"], segment["y2_percent"]),
+    ]
+    score = 0
+
+    for endpoint in endpoints:
+        if point_near_border(endpoint, tolerance):
+            score += 1
+            continue
+
+        anchored = False
+        for candidate in walls:
+            if candidate is segment:
+                continue
+
+            candidate_endpoints = [
+                (candidate["x1_percent"], candidate["y1_percent"]),
+                (candidate["x2_percent"], candidate["y2_percent"]),
+            ]
+            if any(np.hypot(endpoint[0] - other[0], endpoint[1] - other[1]) <= tolerance for other in candidate_endpoints):
+                anchored = True
+                break
+            if point_on_segment(endpoint, candidate, tolerance):
+                anchored = True
+                break
+
+        if anchored:
+            score += 1
+
+    return score
+
+
 def wall_connection_score(segment: Dict, walls: List[Dict], tolerance: float = WALL_CONNECTION_TOLERANCE_PERCENT) -> int:
     endpoints = [
         (segment["x1_percent"], segment["y1_percent"]),
@@ -273,7 +330,7 @@ def filter_structural_walls(walls: List[Dict], room_rect: Tuple[int, int, int, i
     filtered: List[Dict] = []
     for wall in walls:
         length = segment_length(wall)
-        if length < 10:
+        if length < MIN_STRUCTURAL_WALL_LENGTH_PERCENT:
             continue
 
         wall_midpoint = midpoint(wall)
@@ -281,7 +338,16 @@ def filter_structural_walls(walls: List[Dict], room_rect: Tuple[int, int, int, i
             continue
 
         connection_score = wall_connection_score(wall, walls)
-        if wall_near_border(wall) or connection_score >= 2 or (length >= 22 and connection_score >= 1):
+        anchor_score = endpoint_anchor_score(wall, walls)
+        if wall_near_border(wall):
+            filtered.append(wall)
+            continue
+
+        if anchor_score >= 2 and connection_score >= 1:
+            filtered.append(wall)
+            continue
+
+        if connection_score >= 2 and anchor_score >= 1 and length >= 18:
             filtered.append(wall)
 
     return filtered
@@ -487,6 +553,41 @@ def count_object_like_regions(room_crop: np.ndarray, room_features: Dict[str, np
     return count
 
 
+def detect_object_candidate_rects(
+    room_crop: np.ndarray,
+    room_rect: Tuple[int, int, int, int],
+    room_features: Dict[str, np.ndarray] = None,
+) -> List[Tuple[float, float, float, float]]:
+    if room_crop.size == 0:
+        return []
+
+    blob_mask = build_object_candidate_mask(room_crop, room_features)
+    contours, _ = cv2.findContours(blob_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    room_area = max(room_crop.shape[0] * room_crop.shape[1], 1)
+    rx, ry, _, _ = room_rect
+    rects: List[Tuple[float, float, float, float]] = []
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        area_ratio = area / room_area
+        if area_ratio < MIN_OBJECT_CANDIDATE_AREA_RATIO or area_ratio > MAX_OBJECT_CANDIDATE_AREA_RATIO:
+            continue
+
+        x, y, w, h = cv2.boundingRect(contour)
+        if x <= 1 or y <= 1 or x + w >= room_crop.shape[1] - 1 or y + h >= room_crop.shape[0] - 1:
+            continue
+        if min(w, h) < 8:
+            continue
+
+        aspect_ratio = max(w, h) / max(min(w, h), 1)
+        if aspect_ratio > 5.5:
+            continue
+
+        rects.append((rx + x, ry + y, rx + x + w, ry + y + h))
+
+    return rects
+
+
 def should_run_segmentation(room_crop: np.ndarray, walls: List[Dict], room_features: Dict[str, np.ndarray] = None) -> bool:
     mode = segmentation_mode()
     if mode == "off":
@@ -525,6 +626,24 @@ def rotation_from_points(points: np.ndarray, bbox: Tuple[float, float, float, fl
     return 0.0 if (x2 - x1) >= (y2 - y1) else 90.0
 
 
+def quantize_object_rotation(base_type: str, raw_rotation: float) -> float:
+    if base_type in {
+        "desk",
+        "l_shaped_desk",
+        "chair",
+        "couch",
+        "toilet",
+        "sink",
+        "shower",
+        "fridge",
+        "kitchenette",
+        "meeting_table",
+        "table",
+    }:
+        return clamp_angle(round(raw_rotation / 90.0) * 90.0)
+    return clamp_angle(raw_rotation)
+
+
 def infer_object_type(base_type: str, contour_points: np.ndarray, bbox: Tuple[float, float, float, float]) -> str:
     if base_type != "desk" or contour_points.size < 6:
         return base_type
@@ -540,6 +659,50 @@ def infer_object_type(base_type: str, contour_points: np.ndarray, bbox: Tuple[fl
         return "l_shaped_desk"
 
     return base_type
+
+
+def nearest_wall_distance(point: Tuple[float, float], walls: List[Dict]) -> float:
+    if not walls:
+        return 999.0
+    return min(project_point_to_wall_percent(point, wall)[1] for wall in walls)
+
+
+def nearby_wall_count(point: Tuple[float, float], walls: List[Dict], max_distance: float = 10.0) -> int:
+    count = 0
+    for wall in walls:
+        _, distance = project_point_to_wall_percent(point, wall)
+        if distance <= max_distance:
+            count += 1
+    return count
+
+
+def object_area_percent(item: Dict) -> float:
+    return (item.get("width_percent", 0.0) * item.get("height_percent", 0.0)) / 100.0
+
+
+def looks_like_plausible_fixture(item: Dict, walls: List[Dict], confidence: float) -> bool:
+    point = (item.get("x_percent", 50.0), item.get("y_percent", 50.0))
+    wall_distance = nearest_wall_distance(point, walls)
+    area = object_area_percent(item)
+    aspect_ratio = max(item.get("width_percent", 1.0), item.get("height_percent", 1.0)) / max(
+        min(item.get("width_percent", 1.0), item.get("height_percent", 1.0)),
+        1.0,
+    )
+    item_type = item.get("type")
+
+    if item_type == "toilet":
+        return confidence >= 0.45 and wall_distance <= 9.0 and area <= 7.5 and aspect_ratio <= 2.1
+
+    if item_type == "sink":
+        return confidence >= 0.35 and wall_distance <= 9.5 and area <= 8.5 and aspect_ratio <= 2.6
+
+    if item_type == "shower":
+        return confidence >= 0.4 and nearby_wall_count(point, walls, 11.0) >= 2 and area <= 14.0
+
+    if item_type in {"fridge", "kitchenette"}:
+        return confidence >= 0.35 and wall_distance <= 11.0 and area <= 18.0
+
+    return True
 
 
 def polygon_points_from_mask(mask: np.ndarray, bbox: Tuple[float, float, float, float]) -> List[Dict]:
@@ -561,7 +724,12 @@ def polygon_points_from_mask(mask: np.ndarray, bbox: Tuple[float, float, float, 
     return points[:24]
 
 
-def detect_objects_with_segmentation(model, image: np.ndarray, room_rect: Tuple[int, int, int, int]) -> Tuple[List[Dict], List[Tuple[float, float, float, float]]]:
+def detect_objects_with_segmentation(
+    model,
+    image: np.ndarray,
+    room_rect: Tuple[int, int, int, int],
+    walls: List[Dict],
+) -> Tuple[List[Dict], List[Tuple[float, float, float, float]]]:
     if model is None:
         return [], []
 
@@ -589,6 +757,7 @@ def detect_objects_with_segmentation(model, image: np.ndarray, room_rect: Tuple[
         base_type = SUPPORTED_TYPES.get(label)
         if not base_type:
             continue
+        confidence = float(box.conf[0].item()) if getattr(box, "conf", None) is not None else 0.0
 
         x1, y1, x2, y2 = box.xyxy[0].tolist()
         center_x = (x1 + x2) / 2
@@ -603,13 +772,144 @@ def detect_objects_with_segmentation(model, image: np.ndarray, room_rect: Tuple[
             "y_percent": clamp_percent((center_y / max(rh, 1)) * 100),
             "width_percent": clamp_percent(((x2 - x1) / max(rw, 1)) * 100),
             "height_percent": clamp_percent(((y2 - y1) / max(rh, 1)) * 100),
-            "rotation_deg": rotation_from_points(contour_points, (x1, y1, x2, y2)),
+            "rotation_deg": quantize_object_rotation(
+                object_type,
+                rotation_from_points(contour_points, (x1, y1, x2, y2)),
+            ),
         }
+        if not looks_like_plausible_fixture(item, walls, confidence):
+            continue
         if shape_kind == "polygon":
             item["footprint_points"] = polygon_points_from_mask(contour_points, (x1, y1, x2, y2))
         objects.append(item)
         blocked_rects.append((rx + x1, ry + y1, rx + x2, ry + y2))
     return objects, blocked_rects
+
+
+def symbol_item_from_bbox(
+    item_type: str,
+    bbox: Tuple[float, float, float, float],
+    room_rect: Tuple[int, int, int, int],
+    rotation_deg: float = 0.0,
+    shape_kind: str = "rect",
+) -> Dict:
+    rx, ry, rw, rh = room_rect
+    x1, y1, x2, y2 = bbox
+    center_x = (x1 + x2) / 2.0
+    center_y = (y1 + y2) / 2.0
+    return {
+        "type": item_type,
+        "shape_kind": shape_kind,
+        "x_percent": clamp_percent((center_x / max(rw, 1)) * 100),
+        "y_percent": clamp_percent((center_y / max(rh, 1)) * 100),
+        "width_percent": clamp_percent(((x2 - x1) / max(rw, 1)) * 100),
+        "height_percent": clamp_percent(((y2 - y1) / max(rh, 1)) * 100),
+        "rotation_deg": quantize_object_rotation(item_type, rotation_deg),
+    }
+
+
+def dedupe_furniture_items(items: List[Dict], tolerance: float = 6.0) -> List[Dict]:
+    unique: List[Dict] = []
+    for item in items:
+        duplicate = False
+        for existing in unique:
+            if existing.get("type") != item.get("type"):
+                continue
+            if (
+                abs(existing.get("x_percent", 0.0) - item.get("x_percent", 0.0)) <= tolerance
+                and abs(existing.get("y_percent", 0.0) - item.get("y_percent", 0.0)) <= tolerance
+            ):
+                duplicate = True
+                break
+        if not duplicate:
+            unique.append(item)
+    return unique
+
+
+def detect_symbol_fixtures(
+    image: np.ndarray,
+    room_rect: Tuple[int, int, int, int],
+    walls: List[Dict],
+    blocked_rects: List[Tuple[float, float, float, float]],
+    room_features: Dict[str, np.ndarray] = None,
+) -> Tuple[List[Dict], List[Tuple[float, float, float, float]]]:
+    rx, ry, rw, rh = room_rect
+    room_crop = image[ry:ry + rh, rx:rx + rw]
+    if room_crop.size == 0:
+        return [], []
+
+    features = room_features or build_room_features(room_crop)
+    symbol_mask = cv2.bitwise_and(features["thresh"], cv2.bitwise_not(features["wall_map"]))
+    symbol_mask = cv2.morphologyEx(
+        symbol_mask,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+        iterations=1,
+    )
+    symbol_mask = cv2.morphologyEx(
+        symbol_mask,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
+        iterations=1,
+    )
+    symbol_mask = mask_rectangles(symbol_mask, room_rect, blocked_rects or [])
+    contours, _ = cv2.findContours(symbol_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    fixtures: List[Dict] = []
+    blocked: List[Tuple[float, float, float, float]] = []
+    room_area = float(max(rw * rh, 1))
+
+    for contour in contours:
+        area = float(cv2.contourArea(contour))
+        if area <= 0:
+            continue
+        area_ratio = area / room_area
+        if area_ratio < SYMBOL_MIN_AREA_RATIO or area_ratio > SYMBOL_MAX_AREA_RATIO:
+            continue
+
+        perimeter = float(cv2.arcLength(contour, True))
+        if perimeter <= 0:
+            continue
+
+        x, y, width, height = cv2.boundingRect(contour)
+        if width < 8 or height < 8:
+            continue
+
+        aspect_ratio = max(width, height) / max(min(width, height), 1)
+        circularity = (4.0 * np.pi * area) / max(perimeter * perimeter, 1.0)
+        extent = area / max(width * height, 1)
+        points = contour.reshape(-1, 2).astype(np.float32)
+        center_point = (
+            clamp_percent(((x + width / 2.0) / max(rw, 1)) * 100),
+            clamp_percent(((y + height / 2.0) / max(rh, 1)) * 100),
+        )
+        wall_distance = nearest_wall_distance(center_point, walls)
+        nearby_walls = nearby_wall_count(center_point, walls, 12.0)
+        bbox = (float(x), float(y), float(x + width), float(y + height))
+        rotation = rotation_from_points(points, bbox)
+
+        item_type = None
+        shape_kind = "rect"
+
+        if wall_distance <= 10.0 and circularity >= 0.42 and 0.7 <= aspect_ratio <= 1.6 and extent >= 0.45:
+            item_type = "toilet"
+            shape_kind = "ellipse"
+        elif wall_distance <= 10.0 and extent >= 0.52 and 0.9 <= aspect_ratio <= 2.6:
+            item_type = "sink"
+        elif nearby_walls >= 2 and 0.75 <= aspect_ratio <= 1.35 and extent >= 0.58:
+            item_type = "shower"
+
+        if not item_type:
+            continue
+
+        item = symbol_item_from_bbox(item_type, bbox, room_rect, rotation, shape_kind)
+        if not looks_like_plausible_fixture(item, walls, 0.72):
+            continue
+
+        fixtures.append(item)
+        blocked.append((rx + x, ry + y, rx + x + width, ry + y + height))
+
+    return dedupe_furniture_items(fixtures, 7.0), blocked
 
 
 def dedupe_openings(openings: List[Dict], position_tolerance: float = 7.0) -> List[Dict]:
@@ -642,59 +942,136 @@ def project_point_to_wall_percent(point: Tuple[float, float], wall: Dict) -> Tup
     return t * 100.0, float(np.hypot(point[0] - projected[0], point[1] - projected[1]))
 
 
+def circle_support_ratio(edge_map: np.ndarray, center_x: float, center_y: float, radius: float) -> float:
+    if radius <= 0:
+        return 0.0
+
+    hits = 0
+    samples = 48
+    image_h, image_w = edge_map.shape[:2]
+
+    for sample_index in range(samples):
+        angle = (2.0 * np.pi * sample_index) / samples
+        x = int(round(center_x + np.cos(angle) * radius))
+        y = int(round(center_y + np.sin(angle) * radius))
+        if 0 <= x < image_w and 0 <= y < image_h and edge_map[y, x] > 0:
+            hits += 1
+
+    return hits / max(samples, 1)
+
+
+def opening_from_hinge_point(point: Tuple[float, float], walls: List[Dict], max_distance: float = 6.0):
+    best = None
+    for wall_index, wall in enumerate(walls):
+        position_percent, distance = project_point_to_wall_percent(point, wall)
+        if distance > max_distance:
+            continue
+
+        candidate = {
+            "wall_index": wall_index,
+            "position_percent": clamp_percent(position_percent),
+            "distance": distance,
+        }
+        if best is None or candidate["distance"] < best["distance"]:
+            best = candidate
+
+    if best is None:
+        return None
+
+    return {
+        "wall_index": best["wall_index"],
+        "position_percent": round(best["position_percent"], 2),
+    }
+
+
+def detect_door_arc_contours(edge_map: np.ndarray, walls: List[Dict]) -> List[Dict]:
+    contours, _ = cv2.findContours(edge_map, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    openings: List[Dict] = []
+
+    for contour in contours:
+        if len(contour) < 18:
+            continue
+
+        perimeter = cv2.arcLength(contour, False)
+        if perimeter <= 0:
+            continue
+
+        (center_x, center_y), radius = cv2.minEnclosingCircle(contour)
+        if radius <= 0:
+            continue
+
+        x, y, width, height = cv2.boundingRect(contour)
+        aspect_ratio = max(width, height) / max(min(width, height), 1)
+        if aspect_ratio > DOOR_ARC_ASPECT_RATIO_MAX:
+            continue
+
+        circumference_ratio = perimeter / max(2.0 * np.pi * radius, 1.0)
+        if circumference_ratio < DOOR_ARC_SUPPORT_MIN_RATIO or circumference_ratio > 0.45:
+            continue
+
+        opening = opening_from_hinge_point((center_x, center_y), walls)
+        if opening is not None:
+            openings.append(opening)
+
+    return openings
+
+
 def detect_door_openings(image: np.ndarray, room_rect: Tuple[int, int, int, int], walls: List[Dict], blocked_rects: List[Tuple[float, float, float, float]]) -> List[Dict]:
     rx, ry, rw, rh = room_rect
     room_crop = image[ry:ry + rh, rx:rx + rw]
     if room_crop.size == 0 or not walls:
         return []
 
-    gray = cv2.cvtColor(room_crop, cv2.COLOR_BGR2GRAY)
+    features = build_room_features(room_crop)
+    gray = features["gray"]
     blurred = cv2.GaussianBlur(gray, (7, 7), 1.4)
-    edges = cv2.Canny(blurred, 50, 130)
+    edges = cv2.Canny(blurred, 40, 110)
     edges = mask_rectangles(edges, room_rect, blocked_rects or [])
-    min_radius = max(8, int(min(rw, rh) * 0.03))
-    max_radius = max(min_radius + 4, int(min(rw, rh) * 0.14))
+    min_radius = max(8, int(min(rw, rh) * DOOR_MIN_RADIUS_RATIO))
+    max_radius = max(min_radius + 4, int(min(rw, rh) * DOOR_MAX_RADIUS_RATIO))
     circles = cv2.HoughCircles(
         edges,
         cv2.HOUGH_GRADIENT,
         dp=1.1,
         minDist=max(18, min_radius * 2),
-        param1=120,
-        param2=10,
+        param1=110,
+        param2=8,
         minRadius=min_radius,
         maxRadius=max_radius,
     )
-    if circles is None:
-        return []
 
-    doors = []
-    for circle in circles[0]:
-        local_x, local_y, _radius = [float(value) for value in circle.tolist()]
-        point = (
-            clamp_percent((local_x / max(rw, 1)) * 100),
-            clamp_percent((local_y / max(rh, 1)) * 100),
-        )
-
-        best = None
-        for wall_index, wall in enumerate(walls):
-            position_percent, distance = project_point_to_wall_percent(point, wall)
-            if distance > 4.5:
+    arc_doors = []
+    if circles is not None:
+        for circle in circles[0]:
+            local_x, local_y, radius = [float(value) for value in circle.tolist()]
+            support_ratio = circle_support_ratio(edges, local_x, local_y, radius)
+            if support_ratio < DOOR_ARC_SUPPORT_MIN_RATIO or support_ratio > DOOR_ARC_SUPPORT_MAX_RATIO:
                 continue
-            candidate = {
-                "wall_index": wall_index,
-                "position_percent": clamp_percent(position_percent),
-                "distance": distance,
-            }
-            if best is None or candidate["distance"] < best["distance"]:
-                best = candidate
 
-        if best is not None:
-            doors.append({
-                "wall_index": best["wall_index"],
-                "position_percent": round(best["position_percent"], 2),
-            })
+            point = (
+                clamp_percent((local_x / max(rw, 1)) * 100),
+                clamp_percent((local_y / max(rh, 1)) * 100),
+            )
+            opening = opening_from_hinge_point(point, walls)
+            if opening is not None:
+                arc_doors.append(opening)
 
-    return dedupe_openings(doors, 10.0)
+    contour_mask = cv2.bitwise_and(edges, cv2.bitwise_not(features["wall_map"]))
+    contour_mask = cv2.morphologyEx(
+        contour_mask,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+        iterations=1,
+    )
+    contour_mask = mask_rectangles(contour_mask, room_rect, blocked_rects or [])
+    arc_doors.extend(detect_door_arc_contours(contour_mask, walls))
+
+    if arc_doors:
+        return dedupe_openings(arc_doors, 10.0)
+
+    fallback_doors = detect_door_openings_from_wall_gaps(features["wall_map"], contour_mask, walls)
+
+    return dedupe_openings(fallback_doors, 10.0)
 
 
 def sample_wall_gap_runs(wall_map: np.ndarray, wall: Dict) -> List[Tuple[float, float]]:
@@ -750,6 +1127,85 @@ def sample_wall_gap_runs(wall_map: np.ndarray, wall: Dict) -> List[Tuple[float, 
     return normalized
 
 
+def wall_gap_center_local(wall: Dict, position_percent: float, image_shape: Tuple[int, int]) -> Tuple[int, int]:
+    image_h, image_w = image_shape[:2]
+    local_x = ((wall["x1_percent"] + ((wall["x2_percent"] - wall["x1_percent"]) * (position_percent / 100.0))) / 100.0) * max(image_w - 1, 1)
+    local_y = ((wall["y1_percent"] + ((wall["y2_percent"] - wall["y1_percent"]) * (position_percent / 100.0))) / 100.0) * max(image_h - 1, 1)
+    return int(round(local_x)), int(round(local_y))
+
+
+def gap_has_door_arc_support(
+    edge_mask: np.ndarray,
+    wall: Dict,
+    start_percent: float,
+    end_percent: float,
+) -> bool:
+    if edge_mask.size == 0:
+        return False
+
+    axis = orientation_for_line(
+        int(round(wall["x1_percent"])),
+        int(round(wall["y1_percent"])),
+        int(round(wall["x2_percent"])),
+        int(round(wall["y2_percent"])),
+    )
+    center_percent = (start_percent + end_percent) / 2.0
+    center_x, center_y = wall_gap_center_local(wall, center_percent, edge_mask.shape)
+    gap_length_px = max(
+        10,
+        int(
+            round(
+                ((abs(end_percent - start_percent) / 100.0) * max(edge_mask.shape[0], edge_mask.shape[1]))
+            )
+        ),
+    )
+    lateral_half = max(8, int(round(gap_length_px * 0.8)))
+    normal_depth = max(10, int(round(gap_length_px * 1.1)))
+
+    if axis == "horizontal":
+        left = max(0, center_x - lateral_half)
+        right = min(edge_mask.shape[1], center_x + lateral_half)
+        above = edge_mask[max(0, center_y - normal_depth): max(0, center_y - 1), left:right]
+        below = edge_mask[min(edge_mask.shape[0], center_y + 1): min(edge_mask.shape[0], center_y + normal_depth), left:right]
+        regions = [above, below]
+    else:
+        top = max(0, center_y - lateral_half)
+        bottom = min(edge_mask.shape[0], center_y + lateral_half)
+        left_region = edge_mask[top:bottom, max(0, center_x - normal_depth): max(0, center_x - 1)]
+        right_region = edge_mask[top:bottom, min(edge_mask.shape[1], center_x + 1): min(edge_mask.shape[1], center_x + normal_depth)]
+        regions = [left_region, right_region]
+
+    for region in regions:
+        if region.size == 0:
+            continue
+        non_zero = int(np.count_nonzero(region))
+        density = non_zero / max(region.size, 1)
+        if non_zero >= 14 and density >= 0.045:
+            return True
+
+    return False
+
+
+def detect_door_openings_from_wall_gaps(
+    wall_map: np.ndarray,
+    edge_mask: np.ndarray,
+    walls: List[Dict],
+) -> List[Dict]:
+    doors: List[Dict] = []
+
+    for wall_index, wall in enumerate(walls):
+        for start_percent, end_percent in sample_wall_gap_runs(wall_map, wall):
+            if not gap_has_door_arc_support(edge_mask, wall, start_percent, end_percent):
+                continue
+
+            doors.append({
+                "wall_index": wall_index,
+                "position_percent": round((start_percent + end_percent) / 2.0, 2),
+            })
+
+    return doors
+
+
 def detect_window_openings(
     image: np.ndarray,
     room_rect: Tuple[int, int, int, int],
@@ -764,7 +1220,7 @@ def detect_window_openings(
         return []
 
     features = room_features or build_room_features(room_crop)
-    wall_map = mask_rectangles(features["thresh"], room_rect, blocked_rects or [])
+    wall_map = mask_rectangles(features["wall_map"], room_rect, blocked_rects or [])
     door_positions = {(door["wall_index"], int(round(door["position_percent"] / 5))) for door in doors}
     windows = []
 
@@ -789,20 +1245,27 @@ def build_response(image: np.ndarray) -> Dict:
     contour, room_rect = choose_room_contour(image)
     room_crop = image[room_rect[1]:room_rect[1] + room_rect[3], room_rect[0]:room_rect[0] + room_rect[2]]
     room_features = build_room_features(room_crop) if room_crop.size != 0 else None
-    detected_walls = detect_wall_segments(image, room_rect, [], room_features)
+    preblocked_rects = detect_object_candidate_rects(room_crop, room_rect, room_features)
+    detected_walls = detect_wall_segments(image, room_rect, preblocked_rects, room_features)
     contour_walls = contour_to_walls(contour, room_rect)
     walls = dedupe_walls(detected_walls if len(detected_walls) >= 4 else contour_walls + detected_walls)
     furniture = []
-    blocked_rects: List[Tuple[float, float, float, float]] = []
+    blocked_rects: List[Tuple[float, float, float, float]] = list(preblocked_rects)
 
     if should_run_segmentation(room_crop, walls, room_features):
         model = maybe_load_segmentation_model()
         if model is not None:
-            furniture, blocked_rects = detect_objects_with_segmentation(model, image, room_rect)
-            if blocked_rects:
+            furniture, segmentation_rects = detect_objects_with_segmentation(model, image, room_rect, walls)
+            if segmentation_rects:
+                blocked_rects.extend(segmentation_rects)
                 refined_walls = detect_wall_segments(image, room_rect, blocked_rects, room_features)
                 if refined_walls:
                     walls = dedupe_walls(refined_walls if len(refined_walls) >= 4 else walls + refined_walls)
+
+    symbol_fixtures, symbol_rects = detect_symbol_fixtures(image, room_rect, walls, blocked_rects, room_features)
+    if symbol_fixtures:
+        furniture = dedupe_furniture_items(furniture + symbol_fixtures, 7.0)
+        blocked_rects.extend(symbol_rects)
 
     doors = detect_door_openings(image, room_rect, walls, blocked_rects)
     windows = detect_window_openings(image, room_rect, walls, doors, blocked_rects, room_features)

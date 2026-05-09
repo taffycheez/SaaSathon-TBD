@@ -5,12 +5,12 @@ export default function ControlPanel({
   setPreferences,
   room,
   updateRoomDimensions,
-  showReferenceImage,
-  setShowReferenceImage,
   onAddWindow,
   onAddDoor,
   wallToolMode,
   setWallToolMode,
+  scaleToolActive,
+  setScaleToolActive,
   onAddObject,
   onGenerateLayout,
   onReset,
@@ -76,9 +76,32 @@ export default function ControlPanel({
           <button
             type="button"
             className={`object-chip quick-add-chip${wallToolMode === "add" ? " active" : ""}`}
-            onClick={() => setWallToolMode((current) => (current === "add" ? "select" : "add"))}
+            onClick={() => {
+              setScaleToolActive(false);
+              setWallToolMode((current) => (current === "add" ? "select" : "add"));
+            }}
           >
-            {wallToolMode === "add" ? "Finish Wall Tool" : "Add Wall"}
+            {wallToolMode === "add" ? "Exit Draw Walls" : "Draw Walls"}
+          </button>
+          <button
+            type="button"
+            className={`object-chip quick-add-chip${wallToolMode === "rect" ? " active" : ""}`}
+            onClick={() => {
+              setScaleToolActive(false);
+              setWallToolMode((current) => (current === "rect" ? "select" : "rect"));
+            }}
+          >
+            {wallToolMode === "rect" ? "Exit Rect Room" : "Rectangle Room"}
+          </button>
+          <button
+            type="button"
+            className={`object-chip quick-add-chip${scaleToolActive ? " active" : ""}`}
+            onClick={() => {
+              setWallToolMode("select");
+              setScaleToolActive((current) => !current);
+            }}
+          >
+            {scaleToolActive ? "Cancel Scale" : "Set Scale"}
           </button>
         </div>
       </div>
@@ -98,21 +121,6 @@ export default function ControlPanel({
           ))}
         </div>
       </div>
-
-      <label className="field toggle-field">
-        <span>
-          Show original floor plan
-          <small>Overlay the uploaded reference image on the canvas.</small>
-        </span>
-        <button
-          type="button"
-          className={`toggle-button ${showReferenceImage ? "active" : ""}`}
-          aria-pressed={showReferenceImage}
-          onClick={() => setShowReferenceImage((current) => !current)}
-        >
-          {showReferenceImage ? "On" : "Off"}
-        </button>
-      </label>
 
       <button type="button" className="primary-button" onClick={onGenerateLayout} disabled={isGenerating}>
         {isGenerating ? "Generating..." : "Generate Layout"}

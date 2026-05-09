@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getObjectDefinition } from "@/lib/objectCatalog";
+import { FloorPlanObjectIcon } from "@/components/FloorPlanIconPack";
 import { getScaledItemDimensions, normalizeObjectScale, normalizeWallGraph, snapEdgeItemToWalls } from "@/lib/roomGeometry";
 import {
+  deleteWallFromRoom,
   getSnappedWallPoint,
   moveWallByDelta,
   updateEdgeItemPosition,
   updatePlacedObject,
   updateWallEndpoint
 } from "@/lib/roomState";
+import { getZoneTypeOptions } from "@/lib/zoning";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
@@ -89,16 +92,7 @@ function pointsToString(points, width, height) {
 }
 
 function renderObjectLabel(label, width, height, stroke, options = {}) {
-  if (!label) {
-    return null;
-  }
-
-  const { y = Math.max(14, height / 2 + 4), fontSize = 12 } = options;
-  return (
-    <text x={width / 2} y={y} fontSize={fontSize} fill={stroke} textAnchor="middle">
-      {label}
-    </text>
-  );
+  return null;
 }
 
 function ChairShape({ width, height, fill, stroke, strokeWidth }) {
@@ -159,6 +153,47 @@ function WhiteboardShape({ width, height, stroke, strokeWidth }) {
   );
 }
 
+function CouchShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.3, strokeWidth * 0.65);
+  return (
+    <>
+      <rect x={width * 0.14} y={height * 0.2} width={width * 0.72} height={height * 0.38} rx={Math.max(8, width * 0.1)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <rect x={width * 0.18} y={height * 0.1} width={width * 0.64} height={height * 0.18} rx={Math.max(8, width * 0.1)} fill="#eef5ea" stroke={stroke} strokeWidth={detailStroke} />
+      <rect x={width * 0.06} y={height * 0.18} width={width * 0.12} height={height * 0.36} rx={Math.max(5, width * 0.08)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <rect x={width * 0.82} y={height * 0.18} width={width * 0.12} height={height * 0.36} rx={Math.max(5, width * 0.08)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <line x1={width * 0.2} y1={height * 0.58} x2={width * 0.16} y2={height * 0.88} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.8} y1={height * 0.58} x2={width * 0.84} y2={height * 0.88} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+    </>
+  );
+}
+
+function FridgeShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.1, strokeWidth * 0.62);
+  return (
+    <>
+      <rect x={width * 0.22} y={height * 0.08} width={width * 0.56} height={height * 0.84} rx={Math.max(6, width * 0.14)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <line x1={width * 0.22} y1={height * 0.46} x2={width * 0.78} y2={height * 0.46} stroke={stroke} strokeWidth={detailStroke} />
+      <line x1={width * 0.68} y1={height * 0.22} x2={width * 0.68} y2={height * 0.34} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.68} y1={height * 0.58} x2={width * 0.68} y2={height * 0.78} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+    </>
+  );
+}
+
+function KitchenetteShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.1, strokeWidth * 0.62);
+  return (
+    <>
+      <rect x={width * 0.06} y={height * 0.2} width={width * 0.88} height={height * 0.46} rx={Math.max(6, height * 0.18)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <rect x={width * 0.12} y={height * 0.26} width={width * 0.18} height={height * 0.32} rx={3} fill="#f8f5ef" stroke={stroke} strokeWidth={detailStroke} />
+      <rect x={width * 0.36} y={height * 0.28} width={width * 0.18} height={height * 0.2} rx={999} fill="#dbeaf3" stroke={stroke} strokeWidth={detailStroke} />
+      <circle cx={width * 0.68} cy={height * 0.38} r={Math.max(3, height * 0.09)} fill="#ffffff" stroke={stroke} strokeWidth={detailStroke} />
+      <circle cx={width * 0.8} cy={height * 0.38} r={Math.max(3, height * 0.09)} fill="#ffffff" stroke={stroke} strokeWidth={detailStroke} />
+      <line x1={width * 0.18} y1={height * 0.66} x2={width * 0.18} y2={height * 0.88} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.82} y1={height * 0.66} x2={width * 0.82} y2={height * 0.88} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+    </>
+  );
+}
+
 function DeskChairInset({ x, y, width, height, strokeWidth }) {
   const chairDefinition = getObjectDefinition("chair");
   return (
@@ -205,79 +240,9 @@ function LShapedDeskShape({ width, height, fill, stroke, strokeWidth, footprintP
 
 function SvgObjectShape({ item, roomBox, fill, stroke, strokeWidth = 2, label }) {
   const { width, height } = objectPixelSize(item, roomBox);
-  const definition = getObjectDefinition(item.type);
-  const shapeKind = item.shape_kind || definition.shape_kind;
-
-  if (item.type === "desk") {
-    return (
-      <>
-        <DeskShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-        {renderObjectLabel(label, width, height, stroke, { y: Math.max(12, height * 0.18), fontSize: 10.5 })}
-      </>
-    );
-  }
-
-  if (item.type === "l_shaped_desk") {
-    const footprintPoints = Array.isArray(item.footprint_points) && item.footprint_points.length >= 3
-      ? item.footprint_points
-      : definition.footprint_points;
-
-    return (
-      <>
-        <LShapedDeskShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} footprintPoints={footprintPoints} />
-        {renderObjectLabel(label, width, height, stroke, { y: Math.max(12, height * 0.18), fontSize: 10.5 })}
-      </>
-    );
-  }
-
-  if (item.type === "chair") {
-    return <ChairShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
-  }
-
-  if (item.type === "armchair") {
-    return <ArmchairShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
-  }
-
-  if (item.type === "plant") {
-    return <PlantShape width={width} height={height} stroke={stroke} />;
-  }
-
-  if (item.type === "whiteboard") {
-    return <WhiteboardShape width={width} height={height} stroke={stroke} strokeWidth={strokeWidth} />;
-  }
-
-  if (shapeKind === "ellipse") {
-    const seatCount = definition.seat_count || 0;
-    return (
-      <>
-        <ellipse cx={width / 2} cy={height / 2} rx={width / 2} ry={height / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-        {seatCount
-          ? Array.from({ length: seatCount }).map((_, index) => {
-              const angle = (Math.PI * 2 * index) / seatCount;
-              const seatX = width / 2 + Math.cos(angle) * (width * 0.42);
-              const seatY = height / 2 + Math.sin(angle) * (height * 0.58);
-              return (
-                <ellipse key={`seat-${index}`} cx={seatX} cy={seatY} rx={Math.max(5, width * 0.08)} ry={Math.max(4, height * 0.08)} fill="#f8f5ef" stroke={stroke} strokeWidth={1} />
-              );
-            })
-          : null}
-        {renderObjectLabel(label, width, height, stroke)}
-      </>
-    );
-  }
-
-  if (shapeKind === "polygon" && Array.isArray(item.footprint_points) && item.footprint_points.length >= 3) {
-    return (
-      <>
-        <polygon points={pointsToString(item.footprint_points, width, height)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-        {renderObjectLabel(label, width, height, stroke)}
-      </>
-    );
-  }
-
   return (
     <>
-      <rect width={width} height={height} rx={shapeKind === "rect" ? 6 : 0} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <FloorPlanObjectIcon item={item} width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
       {renderObjectLabel(label, width, height, stroke)}
     </>
   );
@@ -313,15 +278,42 @@ function TrashIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+function DoorShape() {
+  return (
+    <>
+      <line x1="-12" y1="-15" x2="-12" y2="15" stroke="#8b5e34" strokeWidth="3.4" strokeLinecap="round" />
+      <path d="M -12 -15 A 30 30 0 0 1 18 15" fill="none" stroke="#8b5e34" strokeWidth="2.2" strokeDasharray="4 3" />
+    </>
+  );
+}
+
 export default function FloorPlanEditor({
   room,
   setRoom,
   onRoomPreviewChange,
+  zones = [],
+  onZoneOverride,
   imagePreview,
   showReferenceImage = false,
+  setShowReferenceImage,
+  showZones = true,
+  setShowZones,
   wallToolMode = "select",
   setWallToolMode,
+  scaleToolActive = false,
+  setScaleToolActive,
   onAddWall,
+  onAddRectangleRoom,
+  onApplyScale,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -335,7 +327,10 @@ export default function FloorPlanEditor({
   const [dragState, setDragState] = useState(null);
   const [selectedWallIndex, setSelectedWallIndex] = useState(null);
   const [selectedPlacedItem, setSelectedPlacedItem] = useState(null);
-  const [pendingWallStart, setPendingWallStart] = useState(null);
+  const [scaleDraft, setScaleDraft] = useState(null);
+  const [scaleInputValue, setScaleInputValue] = useState("1");
+  const [hoveredZoneId, setHoveredZoneId] = useState(null);
+  const [pinnedZoneId, setPinnedZoneId] = useState(null);
   const wallGraph = useMemo(() => normalizeWallGraph(room.walls || []), [room.walls]);
   const walls = wallGraph.walls.length ? wallGraph.walls : Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
@@ -357,6 +352,7 @@ export default function FloorPlanEditor({
     width: roomSize.width,
     height: roomSize.height
   };
+  const zoneMarkerRadius = Math.max(6, Math.min(11, 12 - (roomBox.width / CANVAS_WIDTH) * 4));
 
   dragStateRef.current = dragState;
   roomBoxRef.current = roomBox;
@@ -382,10 +378,19 @@ export default function FloorPlanEditor({
   }, [selectedPlacedItem, furniture.length, desks.length]);
 
   useEffect(() => {
-    if (wallToolMode !== "add" && pendingWallStart) {
-      setPendingWallStart(null);
+    if (pinnedZoneId && !zones.some((zone) => zone.id === pinnedZoneId)) {
+      setPinnedZoneId(null);
     }
-  }, [pendingWallStart, wallToolMode]);
+    if (hoveredZoneId && !zones.some((zone) => zone.id === hoveredZoneId)) {
+      setHoveredZoneId(null);
+    }
+  }, [hoveredZoneId, pinnedZoneId, zones]);
+
+  useEffect(() => {
+    if (!scaleToolActive) {
+      setScaleDraft(null);
+    }
+  }, [scaleToolActive]);
 
   function withUpdatedPlacedItem(currentRoom, type, index, updates) {
     return {
@@ -461,6 +466,15 @@ export default function FloorPlanEditor({
     }));
   }
 
+  function removeSelectedWall() {
+    if (selectedWallIndex == null) {
+      return;
+    }
+
+    setRoom((currentRoom) => deleteWallFromRoom(currentRoom, selectedWallIndex));
+    setSelectedWallIndex(null);
+  }
+
   function getSvgPointFromClient(clientX, clientY) {
     const svg = svgRef.current;
     if (!svg) {
@@ -509,6 +523,19 @@ export default function FloorPlanEditor({
   }
 
   function startDrag(type, index, event) {
+    if (wallToolMode === "add") {
+      startWallDrawDrag(event);
+      return;
+    }
+    if (wallToolMode === "rect") {
+      startRectangleRoomDrag(event);
+      return;
+    }
+    if (scaleToolActive) {
+      startScaleDrag(event);
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
 
@@ -530,6 +557,19 @@ export default function FloorPlanEditor({
   }
 
   function startWallHandleDrag(wallIndex, endpoint, event) {
+    if (wallToolMode === "add") {
+      startWallDrawDrag(event);
+      return;
+    }
+    if (wallToolMode === "rect") {
+      startRectangleRoomDrag(event);
+      return;
+    }
+    if (scaleToolActive) {
+      startScaleDrag(event);
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
 
@@ -547,6 +587,19 @@ export default function FloorPlanEditor({
   }
 
   function startWallMoveDrag(wallIndex, event) {
+    if (wallToolMode === "add") {
+      startWallDrawDrag(event);
+      return;
+    }
+    if (wallToolMode === "rect") {
+      startRectangleRoomDrag(event);
+      return;
+    }
+    if (scaleToolActive) {
+      startScaleDrag(event);
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
 
@@ -560,6 +613,126 @@ export default function FloorPlanEditor({
       point,
       overTrash: false
     });
+  }
+
+  function startWallDrawDrag(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget?.setPointerCapture?.(event.pointerId);
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    const snappedPoint = snapWallEditorPoint(point);
+    setSelectedPlacedItem(null);
+    setSelectedWallIndex(null);
+    setPinnedZoneId(null);
+    setDragState({
+      kind: "wall-draw",
+      startPoint: point,
+      point,
+      startWallPoint: snappedPoint,
+      overTrash: false
+    });
+  }
+
+  function updateWallDrawPointer(point) {
+    setDragState((current) => (
+      current?.kind === "wall-draw"
+        ? {
+            ...current,
+            point
+          }
+        : current
+    ));
+  }
+
+  function finishWallDraw(clientX, clientY) {
+    const currentDrag = dragStateRef.current;
+    if (currentDrag?.kind !== "wall-draw") {
+      return;
+    }
+    finishDrag(clientX, clientY);
+  }
+
+  function startRectangleRoomDrag(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget?.setPointerCapture?.(event.pointerId);
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    const snappedPoint = snapWallEditorPoint(point);
+    setSelectedPlacedItem(null);
+    setSelectedWallIndex(null);
+    setPinnedZoneId(null);
+    setDragState({
+      kind: "room-rect",
+      startPoint: point,
+      point,
+      startRoomPoint: snappedPoint,
+      overTrash: false
+    });
+  }
+
+  function updateRectangleRoomPointer(point) {
+    setDragState((current) => (
+      current?.kind === "room-rect"
+        ? {
+            ...current,
+            point
+          }
+        : current
+    ));
+  }
+
+  function startScaleDrag(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget?.setPointerCapture?.(event.pointerId);
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    const snappedPoint = getSnappedWallPoint(room, pointerToRoomPosition(point, roomBoxRef.current, false));
+    setSelectedPlacedItem(null);
+    setSelectedWallIndex(null);
+    setPinnedZoneId(null);
+    setScaleDraft(null);
+    setDragState({
+      kind: "scale-measure",
+      startPoint: point,
+      point,
+      startMeasurePoint: snappedPoint,
+      overTrash: false
+    });
+  }
+
+  function updateScalePointer(point) {
+    setDragState((current) => (
+      current?.kind === "scale-measure"
+        ? {
+            ...current,
+            point
+          }
+        : current
+    ));
+  }
+
+  function finishScaleDrag(clientX, clientY) {
+    const currentDrag = dragStateRef.current;
+    if (currentDrag?.kind !== "scale-measure") {
+      return;
+    }
+    finishDrag(clientX, clientY);
+  }
+
+  function applyScaleDraft() {
+    if (!scaleDraft) {
+      return;
+    }
+    onApplyScale?.(scaleDraft.start, scaleDraft.end, scaleInputValue);
+    setScaleDraft(null);
+  }
+
+  function cancelScaleDraft() {
+    setScaleDraft(null);
+    setScaleToolActive?.(false);
   }
 
   function snapWallEditorPoint(point) {
@@ -592,6 +765,51 @@ export default function FloorPlanEditor({
     if (currentDrag.kind === "wall-move") {
       if (dragDistance >= DRAG_THRESHOLD) {
         commitWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
+      }
+      setDragState(null);
+      return;
+    }
+
+    if (currentDrag.kind === "wall-draw") {
+      const snappedEndPoint = snapWallEditorPoint(point);
+      if (
+        Math.hypot(
+          snappedEndPoint.x_percent - currentDrag.startWallPoint.x_percent,
+          snappedEndPoint.y_percent - currentDrag.startWallPoint.y_percent
+        ) >= 2
+      ) {
+        onAddWall?.(currentDrag.startWallPoint, snappedEndPoint);
+      }
+      setDragState(null);
+      return;
+    }
+
+    if (currentDrag.kind === "room-rect") {
+      const snappedEndPoint = snapWallEditorPoint(point);
+      if (
+        Math.abs(snappedEndPoint.x_percent - currentDrag.startRoomPoint.x_percent) >= 2 &&
+        Math.abs(snappedEndPoint.y_percent - currentDrag.startRoomPoint.y_percent) >= 2
+      ) {
+        onAddRectangleRoom?.(currentDrag.startRoomPoint, snappedEndPoint);
+      }
+      setDragState(null);
+      return;
+    }
+
+    if (currentDrag.kind === "scale-measure") {
+      if (dragDistance >= DRAG_THRESHOLD) {
+        const snappedEndPoint = getSnappedWallPoint(room, pointerToRoomPosition(point, roomBoxRef.current, false));
+        if (
+          Math.hypot(
+            snappedEndPoint.x_percent - currentDrag.startMeasurePoint.x_percent,
+            snappedEndPoint.y_percent - currentDrag.startMeasurePoint.y_percent
+          ) >= 1
+        ) {
+          setScaleDraft({
+            start: currentDrag.startMeasurePoint,
+            end: snappedEndPoint
+          });
+        }
       }
       setDragState(null);
       return;
@@ -638,6 +856,12 @@ export default function FloorPlanEditor({
         previewWallUpdate(currentDrag.wallIndex, currentDrag.endpoint, point);
       } else if (currentDrag?.kind === "wall-move") {
         previewWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
+      } else if (currentDrag?.kind === "wall-draw") {
+        clearRoomPreview();
+      } else if (currentDrag?.kind === "room-rect") {
+        clearRoomPreview();
+      } else if (currentDrag?.kind === "scale-measure") {
+        clearRoomPreview();
       } else {
         const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
 
@@ -673,6 +897,28 @@ export default function FloorPlanEditor({
       window.removeEventListener("pointercancel", handleWindowPointerUp);
     };
   }, [isDragging]);
+
+  const wallDraft =
+    dragState?.kind === "wall-draw"
+      ? {
+          start: dragState.startWallPoint,
+          end: snapWallEditorPoint(dragState.point)
+        }
+      : null;
+  const rectangleRoomDraft =
+    dragState?.kind === "room-rect"
+      ? {
+          start: dragState.startRoomPoint,
+          end: snapWallEditorPoint(dragState.point)
+        }
+      : null;
+  const scaleMeasureDraft =
+    dragState?.kind === "scale-measure"
+      ? {
+          start: dragState.startMeasurePoint,
+          end: getSnappedWallPoint(room, pointerToRoomPosition(dragState.point, roomBoxRef.current, false))
+        }
+      : null;
 
   return (
     <div className="editor-card">
@@ -750,27 +996,149 @@ export default function FloorPlanEditor({
         </div>
       ) : null}
 
+      {!selectedItem && selectedWallIndex != null ? (
+        <div
+          className="wall-action-panel"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="wall-action-copy">
+            <strong>Wall {selectedWallIndex + 1}</strong>
+            <small>Delete removes only this wall segment. You can reconnect or reshape neighbouring walls afterwards.</small>
+          </div>
+          <button
+            type="button"
+            className="wall-delete-button"
+            onClick={removeSelectedWall}
+          >
+            Delete wall
+          </button>
+        </div>
+      ) : null}
+
+      {wallToolMode === "add" ? (
+        <div
+          className="wall-action-panel"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="wall-action-copy">
+            <strong>Draw walls</strong>
+            <small>Click and drag to draw a snapped wall segment, like a build tool rather than a node editor.</small>
+          </div>
+        </div>
+      ) : null}
+
+      {wallToolMode === "rect" ? (
+        <div
+          className="wall-action-panel"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="wall-action-copy">
+            <strong>Rectangle room</strong>
+            <small>Click and drag to drop a four-wall room shell in one move.</small>
+          </div>
+        </div>
+      ) : null}
+
+      {scaleToolActive ? (
+        <div
+          className="wall-action-panel"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="wall-action-copy">
+            <strong>Set scale</strong>
+            <small>
+              {scaleDraft
+                ? "Enter the real distance for this line in metres, then apply it to calibrate the room size."
+                : "Click and drag a measurement line across something with a known real-world length."}
+            </small>
+          </div>
+          {scaleDraft ? (
+            <div className="scale-tool-actions">
+              <input
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={scaleInputValue}
+                onChange={(event) => setScaleInputValue(event.target.value)}
+                aria-label="Known real-world distance in metres"
+              />
+              <button
+                type="button"
+                className="wall-delete-button"
+                onClick={applyScaleDraft}
+              >
+                Apply scale
+              </button>
+              <button
+                type="button"
+                className="secondary-button scale-tool-cancel"
+                onClick={cancelScaleDraft}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="floor-stage-shell">
+        <div className="stage-overlay-controls">
+          {imagePreview ? (
+            <button
+              type="button"
+              className={`editor-toggle-button${showReferenceImage ? " is-active" : ""}`}
+              onClick={() => setShowReferenceImage?.((current) => !current)}
+            >
+              {showReferenceImage ? "Hide Original" : "Show Original"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={`editor-toggle-button${showZones ? " is-active" : ""}`}
+            onClick={() => setShowZones?.((current) => !current)}
+          >
+            {showZones ? "Hide Zones" : "Show Zones"}
+          </button>
+        </div>
         <svg
           ref={svgRef}
           className="floor-stage-svg"
           viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+          onPointerMove={(event) => {
+            if (dragStateRef.current?.kind === "wall-draw") {
+              updateWallDrawPointer(getSvgPointFromClient(event.clientX, event.clientY));
+            } else if (dragStateRef.current?.kind === "room-rect") {
+              updateRectangleRoomPointer(getSvgPointFromClient(event.clientX, event.clientY));
+            } else if (dragStateRef.current?.kind === "scale-measure") {
+              updateScalePointer(getSvgPointFromClient(event.clientX, event.clientY));
+            }
+          }}
+          onPointerUp={(event) => {
+            if (dragStateRef.current?.kind === "wall-draw") {
+              finishWallDraw(event.clientX, event.clientY);
+            } else if (dragStateRef.current?.kind === "room-rect") {
+              finishDrag(event.clientX, event.clientY);
+            } else if (dragStateRef.current?.kind === "scale-measure") {
+              finishScaleDrag(event.clientX, event.clientY);
+            }
+          }}
           onPointerDown={(event) => {
             if (wallToolMode === "add") {
-              const point = getSvgPointFromClient(event.clientX, event.clientY);
-              const snappedPoint = snapWallEditorPoint(point);
-              if (!pendingWallStart) {
-                setPendingWallStart(snappedPoint);
-              } else {
-                onAddWall?.(pendingWallStart, snappedPoint);
-                setPendingWallStart(null);
-              }
-              setSelectedWallIndex(null);
+              startWallDrawDrag(event);
+              return;
+            }
+            if (wallToolMode === "rect") {
+              startRectangleRoomDrag(event);
+              return;
+            }
+            if (scaleToolActive) {
+              startScaleDrag(event);
               return;
             }
             if (!dragStateRef.current) {
               setSelectedWallIndex(null);
               setSelectedPlacedItem(null);
+              setPinnedZoneId(null);
             }
           }}
         >
@@ -811,6 +1179,32 @@ export default function FloorPlanEditor({
               />
             </>
           ) : null}
+
+          <defs>
+            <filter id="zone-cloud-blur">
+              <feGaussianBlur stdDeviation="10" />
+            </filter>
+          </defs>
+
+          {zones.map((zone) => {
+            const center = toCanvasPoint({ x: zone.center.x, y: zone.center.y }, roomBox, roomSize.bounds);
+            const radiusX = Math.max(26, (zone.radiusX / 100) * roomBox.width);
+            const radiusY = Math.max(22, (zone.radiusY / 100) * roomBox.height);
+
+            return (
+              <ellipse
+                key={`${zone.id}-cloud`}
+                cx={center.x}
+                cy={center.y}
+                rx={radiusX}
+                ry={radiusY}
+                fill={zone.cloudColor}
+                filter="url(#zone-cloud-blur)"
+                opacity="0.95"
+                pointerEvents="none"
+              />
+            );
+          })}
 
           {walls.map((wall, index) => {
             const start = toCanvasPoint(
@@ -869,29 +1263,126 @@ export default function FloorPlanEditor({
                       strokeWidth="2"
                       onPointerDown={(event) => startWallHandleDrag(index, "end", event)}
                     />
+                    <g
+                      className="wall-inline-delete"
+                      transform={`translate(${(start.x + end.x) / 2} ${(start.y + end.y) / 2})`}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        removeSelectedWall();
+                      }}
+                    >
+                      <circle cx="0" cy="0" r="11" fill="#ffffff" stroke="#8f3a3a" strokeWidth="2" />
+                      <g transform="translate(-6 -6)">
+                        <CloseIcon />
+                      </g>
+                    </g>
                   </>
                 ) : null}
               </g>
             );
           })}
 
-          {pendingWallStart ? (
+          {wallDraft ? (
             <g pointerEvents="none">
+              <line
+                x1={toCanvasPoint(wallDraft.start, roomBox, roomSize.bounds).x}
+                y1={toCanvasPoint(wallDraft.start, roomBox, roomSize.bounds).y}
+                x2={toCanvasPoint(wallDraft.end, roomBox, roomSize.bounds).x}
+                y2={toCanvasPoint(wallDraft.end, roomBox, roomSize.bounds).y}
+                stroke="#1a3558"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray="10 7"
+                opacity="0.92"
+              />
               <circle
-                cx={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).x}
-                cy={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).y}
+                cx={toCanvasPoint(wallDraft.start, roomBox, roomSize.bounds).x}
+                cy={toCanvasPoint(wallDraft.start, roomBox, roomSize.bounds).y}
                 r="6"
                 fill="#10233d"
                 opacity="0.85"
               />
+              <circle
+                cx={toCanvasPoint(wallDraft.end, roomBox, roomSize.bounds).x}
+                cy={toCanvasPoint(wallDraft.end, roomBox, roomSize.bounds).y}
+                r="5"
+                fill="#ffffff"
+                stroke="#10233d"
+                strokeWidth="2"
+                opacity="0.95"
+              />
               <text
-                x={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).x + 10}
-                y={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).y - 10}
+                x={toCanvasPoint(wallDraft.start, roomBox, roomSize.bounds).x + 10}
+                y={toCanvasPoint(wallDraft.start, roomBox, roomSize.bounds).y - 10}
                 fill="#10233d"
                 fontSize="12"
               >
-                Click another point to finish the wall
+                Drag like The Sims: release to place the wall
               </text>
+            </g>
+          ) : null}
+
+          {rectangleRoomDraft ? (
+            <g pointerEvents="none">
+              {(() => {
+                const start = toCanvasPoint(rectangleRoomDraft.start, roomBox, roomSize.bounds);
+                const end = toCanvasPoint(rectangleRoomDraft.end, roomBox, roomSize.bounds);
+                const left = Math.min(start.x, end.x);
+                const top = Math.min(start.y, end.y);
+                const width = Math.abs(end.x - start.x);
+                const height = Math.abs(end.y - start.y);
+                return (
+                  <>
+                    <rect
+                      x={left}
+                      y={top}
+                      width={width}
+                      height={height}
+                      fill="rgba(35, 92, 168, 0.08)"
+                      stroke="#1a3558"
+                      strokeWidth="3.5"
+                      strokeDasharray="10 7"
+                      rx="4"
+                    />
+                    <text x={left + 10} y={top - 10} fill="#10233d" fontSize="12">
+                      Release to place a rectangular room
+                    </text>
+                  </>
+                );
+              })()}
+            </g>
+          ) : null}
+
+          {scaleMeasureDraft || scaleDraft ? (
+            <g pointerEvents="none">
+              <line
+                x1={toCanvasPoint((scaleMeasureDraft || scaleDraft).start, roomBox, roomSize.bounds).x}
+                y1={toCanvasPoint((scaleMeasureDraft || scaleDraft).start, roomBox, roomSize.bounds).y}
+                x2={toCanvasPoint((scaleMeasureDraft || scaleDraft).end, roomBox, roomSize.bounds).x}
+                y2={toCanvasPoint((scaleMeasureDraft || scaleDraft).end, roomBox, roomSize.bounds).y}
+                stroke="#c76f16"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                strokeDasharray="8 6"
+                opacity="0.94"
+              />
+              <circle
+                cx={toCanvasPoint((scaleMeasureDraft || scaleDraft).start, roomBox, roomSize.bounds).x}
+                cy={toCanvasPoint((scaleMeasureDraft || scaleDraft).start, roomBox, roomSize.bounds).y}
+                r="5"
+                fill="#fff7eb"
+                stroke="#c76f16"
+                strokeWidth="2"
+              />
+              <circle
+                cx={toCanvasPoint((scaleMeasureDraft || scaleDraft).end, roomBox, roomSize.bounds).x}
+                cy={toCanvasPoint((scaleMeasureDraft || scaleDraft).end, roomBox, roomSize.bounds).y}
+                r="5"
+                fill="#fff7eb"
+                stroke="#c76f16"
+                strokeWidth="2"
+              />
             </g>
           ) : null}
 
@@ -928,7 +1419,7 @@ export default function FloorPlanEditor({
                   updatePlacedItem("doors", index, { rotation_deg: ((doorItem.rotation_deg || 0) + 90) % 360 })
                 }
               >
-                <line x1="-18" y1="0" x2="18" y2="0" stroke="#8b5e34" strokeWidth="10" strokeLinecap="round" />
+                <DoorShape />
               </g>
             );
           })}
@@ -954,7 +1445,7 @@ export default function FloorPlanEditor({
                     fill={definition.tone}
                     stroke={definition.stroke}
                     strokeWidth={1.5}
-                    label={getLabel(item, "Object")}
+                    label={null}
                   />
                 </g>
               </g>
@@ -982,9 +1473,75 @@ export default function FloorPlanEditor({
                     fill={definition.tone}
                     stroke={definition.stroke}
                     strokeWidth={2}
-                    label={`${getLabel(desk, "Desk")} ${index + 1}`}
+                    label={null}
                   />
                 </g>
+              </g>
+            );
+          })}
+
+          {zones.map((zone) => {
+            const center = toCanvasPoint({ x: zone.center.x, y: zone.center.y }, roomBox, roomSize.bounds);
+            const isActive = hoveredZoneId === zone.id || pinnedZoneId === zone.id;
+            const popupWidth = 220;
+            const popupHeight = pinnedZoneId === zone.id ? 148 : 110;
+            const popupX = Math.min(CANVAS_WIDTH - popupWidth - 18, center.x + 18);
+            const popupY = Math.max(12, center.y - popupHeight - 16);
+
+            return (
+              <g key={`${zone.id}-marker-layer`}>
+                <circle
+                  cx={center.x}
+                  cy={center.y}
+                  r={isActive ? zoneMarkerRadius + 2 : zoneMarkerRadius}
+                  fill={zone.markerColor}
+                  fillOpacity={isActive ? "0.94" : "0.82"}
+                  stroke="#ffffff"
+                  strokeWidth="2.5"
+                  className={`zone-marker${isActive ? " is-active" : ""}`}
+                  onPointerEnter={() => setHoveredZoneId(zone.id)}
+                  onPointerLeave={() => setHoveredZoneId((current) => (current === zone.id && pinnedZoneId !== zone.id ? null : current))}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPinnedZoneId((current) => (current === zone.id ? null : zone.id));
+                  }}
+                />
+                {(isActive || pinnedZoneId === zone.id) ? (
+                  <foreignObject
+                    x={popupX}
+                    y={popupY}
+                    width={popupWidth}
+                    height={popupHeight}
+                    onPointerEnter={() => setHoveredZoneId(zone.id)}
+                    onPointerLeave={() => setHoveredZoneId((current) => (current === zone.id && pinnedZoneId !== zone.id ? null : current))}
+                  >
+                    <div
+                      className="zone-popup"
+                      style={{ background: zone.popupColor, borderColor: zone.markerColor }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <strong>{zone.label}</strong>
+                      <p>{zone.description}</p>
+                      {pinnedZoneId === zone.id ? (
+                        <label>
+                          <span>Zone type</span>
+                          <select
+                            value={zone.type}
+                            onChange={(event) => onZoneOverride?.(zone.id, event.target.value)}
+                          >
+                            {getZoneTypeOptions().map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : (
+                        <small>Click the marker to change this zone.</small>
+                      )}
+                    </div>
+                  </foreignObject>
+                ) : null}
               </g>
             );
           })}

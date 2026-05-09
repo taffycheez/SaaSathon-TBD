@@ -2,6 +2,7 @@ export default function ScorePanel({
   score,
   breakdown,
   advice = [],
+  zones = [],
   explanation = null,
   isPreviewing = false,
   isLoadingExplanation = false
@@ -26,6 +27,15 @@ export default function ScorePanel({
           <li key={`${index}-${item}`}>{item}</li>
         ))}
       </ul>
+
+      {zones.length ? (
+        <div className="score-advice">
+          <p className="upload-kicker">Detected zones</p>
+          <p>
+            {zones.length} zone(s): {zones.map((zone) => zone.label).join(", ")}.
+          </p>
+        </div>
+      ) : null}
 
       {advice.length ? (
         <div className="score-advice">

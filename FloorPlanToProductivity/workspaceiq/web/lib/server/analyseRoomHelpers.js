@@ -1,4 +1,4 @@
-import { canonicalizeObjectType, getObjectDefinition, isDeskType } from "@/lib/objectCatalog";
+import { canonicalizeObjectType, getObjectDefinition, isDeskType } from "../objectCatalog.js";
 
 export const fallbackRoom = {
   estimated_width_m: 8,
@@ -63,6 +63,54 @@ function normalizeWallSegment(item) {
     x2_percent: clampPercent(item?.x2_percent),
     y2_percent: clampPercent(item?.y2_percent)
   };
+}
+
+function furnitureDistance(a, b) {
+  return Math.hypot((a.x_percent || 0) - (b.x_percent || 0), (a.y_percent || 0) - (b.y_percent || 0));
+}
+
+function dedupeFurnitureItems(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const unique = [];
+
+  items.forEach((item) => {
+    const type = canonicalizeObjectType(item?.type);
+    const definition = getObjectDefinition(type);
+    const normalized = {
+      type,
+      shape_kind: normalizeShapeKind(item?.shape_kind, definition.shape_kind),
+      x_percent: clampPercent(item?.x_percent),
+      y_percent: clampPercent(item?.y_percent),
+      width_percent: Math.max(2, clampPercent(item?.width_percent ?? definition.width_percent)),
+      height_percent: Math.max(2, clampPercent(item?.height_percent ?? definition.height_percent)),
+      rotation_deg: normalizeRotation(item?.rotation_deg),
+      footprint_points: normalizeFootprintPoints(item?.footprint_points, definition.footprint_points)
+    };
+
+    const duplicate = unique.find((existing) => {
+      if (existing.type !== normalized.type) {
+        return false;
+      }
+
+      const maxDimension = Math.max(
+        existing.width_percent || 0,
+        existing.height_percent || 0,
+        normalized.width_percent || 0,
+        normalized.height_percent || 0
+      );
+
+      return furnitureDistance(existing, normalized) <= Math.max(6, maxDimension * 0.6);
+    });
+
+    if (!duplicate) {
+      unique.push(normalized);
+    }
+  });
+
+  return unique;
 }
 
 function wallLength(wall) {
@@ -291,10 +339,9 @@ export function mergeRoomAnalyses(primaryAnalysis, secondaryAnalysis) {
   const secondary = secondaryAnalysis?.room ? secondaryAnalysis : null;
   const primaryRoom = primary ? normalizeRoomDescription(primary.room) : null;
   const secondaryRoom = secondary ? normalizeRoomDescription(secondary.room) : null;
-  const mergedWalls = dedupeWalls([
-    ...(Array.isArray(primaryRoom?.walls) ? primaryRoom.walls : []),
-    ...(Array.isArray(secondaryRoom?.walls) ? secondaryRoom.walls : [])
-  ]);
+  const primaryWalls = Array.isArray(primaryRoom?.walls) ? primaryRoom.walls : [];
+  const secondaryWalls = Array.isArray(secondaryRoom?.walls) ? secondaryRoom.walls : [];
+  const mergedWalls = dedupeWalls(primaryWalls.length >= 3 ? primaryWalls : [...primaryWalls, ...secondaryWalls]);
   const walls = mergedWalls.length >= 2 ? mergedWalls : fallbackRoom.walls.map(normalizeWallSegment);
 
   const windows = dedupeEdgeItems([
@@ -305,11 +352,10 @@ export function mergeRoomAnalyses(primaryAnalysis, secondaryAnalysis) {
     ...normalizeEdgeItems(primaryRoom?.doors || [], walls, primaryRoom?.walls),
     ...normalizeEdgeItems(secondaryRoom?.doors || [], walls, secondaryRoom?.walls)
   ]);
-  const furniture = Array.isArray(primaryRoom?.furniture) && primaryRoom.furniture.length
-    ? primaryRoom.furniture
-    : Array.isArray(secondaryRoom?.furniture)
-      ? secondaryRoom.furniture
-      : [];
+  const furniture = dedupeFurnitureItems([
+    ...(Array.isArray(primaryRoom?.furniture) ? primaryRoom.furniture : []),
+    ...(Array.isArray(secondaryRoom?.furniture) ? secondaryRoom.furniture : [])
+  ]);
   const isValidRoom = Boolean(primary?.is_valid_room || secondary?.is_valid_room || windows.length || doors.length || furniture.length || walls.length >= 2);
   const rejectionReason =
     isValidRoom

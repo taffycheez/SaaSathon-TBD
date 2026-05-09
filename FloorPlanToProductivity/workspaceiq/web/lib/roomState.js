@@ -225,7 +225,13 @@ export function updatePlacedObject(room, collectionType, index, updates) {
   }
 
   if (!isPlacementValid(room, collectionType, index, nextItem)) {
-    if (updates?.scale != null || updates?.width_percent != null || updates?.height_percent != null) {
+    if (
+      updates?.scale != null ||
+      updates?.width_percent != null ||
+      updates?.height_percent != null ||
+      updates?.x_percent != null ||
+      updates?.y_percent != null
+    ) {
       const placement = findNearestValidObjectPlacement(room, nextItem, collectionType, index);
       if (placement) {
         nextItem.x_percent = placement.x_percent;
@@ -251,6 +257,83 @@ function endpointMatches(wall, endpoint, point) {
     Math.abs(Number(wall?.[xKey]) - point.x) <= WALL_ENDPOINT_MATCH_TOLERANCE &&
     Math.abs(Number(wall?.[yKey]) - point.y) <= WALL_ENDPOINT_MATCH_TOLERANCE
   );
+}
+
+function pointsMatch(a, b, tolerance = 0.6) {
+  return Math.abs(a.x - b.x) <= tolerance && Math.abs(a.y - b.y) <= tolerance;
+}
+
+function pointOnInfiniteLine(point, wall, tolerance = 0.6) {
+  const dx = wall.x2_percent - wall.x1_percent;
+  const dy = wall.y2_percent - wall.y1_percent;
+  return Math.abs((point.y - wall.y1_percent) * dx - (point.x - wall.x1_percent) * dy) <= tolerance;
+}
+
+function mergeCollinearWalls(walls) {
+  const nextWalls = [...walls];
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (let index = 0; index < nextWalls.length; index += 1) {
+      const wallA = nextWalls[index];
+      const startA = { x: wallA.x1_percent, y: wallA.y1_percent };
+      const endA = { x: wallA.x2_percent, y: wallA.y2_percent };
+
+      for (let compareIndex = index + 1; compareIndex < nextWalls.length; compareIndex += 1) {
+        const wallB = nextWalls[compareIndex];
+        const startB = { x: wallB.x1_percent, y: wallB.y1_percent };
+        const endB = { x: wallB.x2_percent, y: wallB.y2_percent };
+        const sharedPoint =
+          pointsMatch(startA, startB) ? startA
+            : pointsMatch(startA, endB) ? startA
+              : pointsMatch(endA, startB) ? endA
+                : pointsMatch(endA, endB) ? endA
+                  : null;
+
+        if (!sharedPoint) {
+          continue;
+        }
+
+        const angleA = lineAngleDegrees(wallA);
+        const angleB = lineAngleDegrees(wallB);
+        const delta = Math.min(
+          Math.abs(angleA - angleB),
+          Math.abs(angleA - ((angleB + 180) % 360))
+        );
+
+        if (delta > 1.5) {
+          continue;
+        }
+
+        const candidates = [startA, endA, startB, endB].filter((point) => !pointsMatch(point, sharedPoint));
+        if (candidates.length !== 2) {
+          continue;
+        }
+
+        if (!pointOnInfiniteLine(candidates[0], wallA) || !pointOnInfiniteLine(candidates[1], wallA)) {
+          continue;
+        }
+
+        nextWalls.splice(compareIndex, 1);
+        nextWalls.splice(index, 1, {
+          x1_percent: candidates[0].x,
+          y1_percent: candidates[0].y,
+          x2_percent: candidates[1].x,
+          y2_percent: candidates[1].y
+        });
+        changed = true;
+        break;
+      }
+
+      if (changed) {
+        break;
+      }
+    }
+  }
+
+  return nextWalls;
 }
 
 export function updateWallEndpoint(room, wallIndex, endpoint, pointerPosition) {
@@ -349,10 +432,101 @@ export function moveWallByDelta(room, wallIndex, rawDelta) {
 
 export function addWallToRoom(room, startPoint, endPoint) {
   const walls = Array.isArray(room?.walls) ? room.walls : [];
+  const insertedWalls = insertConnectedWall(walls, startPoint, endPoint);
+  const safeStart = {
+    x: clampPercent(startPoint?.x_percent ?? startPoint?.x),
+    y: clampPercent(startPoint?.y_percent ?? startPoint?.y)
+  };
+  const safeEnd = {
+    x: clampPercent(endPoint?.x_percent ?? endPoint?.x),
+    y: clampPercent(endPoint?.y_percent ?? endPoint?.y)
+  };
+  const hasMatchingWall = insertedWalls.some((wall) => (
+    (Math.abs(wall.x1_percent - safeStart.x) <= 0.9 &&
+      Math.abs(wall.y1_percent - safeStart.y) <= 0.9 &&
+      Math.abs(wall.x2_percent - safeEnd.x) <= 0.9 &&
+      Math.abs(wall.y2_percent - safeEnd.y) <= 0.9) ||
+    (Math.abs(wall.x1_percent - safeEnd.x) <= 0.9 &&
+      Math.abs(wall.y1_percent - safeEnd.y) <= 0.9 &&
+      Math.abs(wall.x2_percent - safeStart.x) <= 0.9 &&
+      Math.abs(wall.y2_percent - safeStart.y) <= 0.9)
+  ));
+  const nextWalls = hasMatchingWall
+    ? insertedWalls
+    : [
+        ...insertedWalls,
+        {
+          x1_percent: safeStart.x,
+          y1_percent: safeStart.y,
+          x2_percent: safeEnd.x,
+          y2_percent: safeEnd.y
+        }
+      ];
+
   return normalizeRoomLayout({
     ...room,
-    walls: insertConnectedWall(walls, startPoint, endPoint)
+    walls: nextWalls
   });
+}
+
+export function deleteWallFromRoom(room, wallIndex) {
+  const rawWalls = Array.isArray(room?.walls) ? room.walls : [];
+  const graph = normalizeWallGraph(rawWalls);
+  const displayWalls = graph.walls.length ? graph.walls : rawWalls;
+  const targetWall = displayWalls[wallIndex];
+
+  if (!targetWall || rawWalls.length <= 3) {
+    return room;
+  }
+
+  const rawIndex = rawWalls.findIndex((wall) => (
+    (Math.abs(wall.x1_percent - targetWall.x1_percent) <= 0.9 &&
+      Math.abs(wall.y1_percent - targetWall.y1_percent) <= 0.9 &&
+      Math.abs(wall.x2_percent - targetWall.x2_percent) <= 0.9 &&
+      Math.abs(wall.y2_percent - targetWall.y2_percent) <= 0.9) ||
+    (Math.abs(wall.x1_percent - targetWall.x2_percent) <= 0.9 &&
+      Math.abs(wall.y1_percent - targetWall.y2_percent) <= 0.9 &&
+      Math.abs(wall.x2_percent - targetWall.x1_percent) <= 0.9 &&
+      Math.abs(wall.y2_percent - targetWall.y1_percent) <= 0.9)
+  ));
+  const filteredWalls = rawWalls.filter((_wall, index) => index !== (rawIndex >= 0 ? rawIndex : wallIndex));
+  const mergedWalls = mergeCollinearWalls(filteredWalls);
+
+  return normalizeRoomLayout({
+    ...room,
+    walls: mergedWalls
+  });
+}
+
+export function addRectangleRoomToRoom(room, startPoint, endPoint) {
+  const start = {
+    x: clampPercent(startPoint?.x_percent ?? startPoint?.x),
+    y: clampPercent(startPoint?.y_percent ?? startPoint?.y)
+  };
+  const end = {
+    x: clampPercent(endPoint?.x_percent ?? endPoint?.x),
+    y: clampPercent(endPoint?.y_percent ?? endPoint?.y)
+  };
+
+  if (Math.abs(end.x - start.x) < 2 || Math.abs(end.y - start.y) < 2) {
+    return room;
+  }
+
+  const left = Math.min(start.x, end.x);
+  const right = Math.max(start.x, end.x);
+  const top = Math.min(start.y, end.y);
+  const bottom = Math.max(start.y, end.y);
+
+  const corners = [
+    { x_percent: left, y_percent: top },
+    { x_percent: right, y_percent: top },
+    { x_percent: right, y_percent: bottom },
+    { x_percent: left, y_percent: bottom }
+  ];
+
+  return normalizeRoomLayout(corners.reduce((nextRoom, corner, index) => (
+    addWallToRoom(nextRoom, corner, corners[(index + 1) % corners.length])
+  ), room));
 }
 
 export function getSnappedWallPoint(room, pointerPosition) {
@@ -364,4 +538,65 @@ export function getSnappedWallPoint(room, pointerPosition) {
     },
     walls
   ).point;
+}
+
+function getWallBounds(walls) {
+  const points = Array.isArray(walls)
+    ? walls.flatMap((wall) => [
+        { x: Number(wall?.x1_percent) || 0, y: Number(wall?.y1_percent) || 0 },
+        { x: Number(wall?.x2_percent) || 0, y: Number(wall?.y2_percent) || 0 }
+      ])
+    : [];
+
+  if (!points.length) {
+    return {
+      minX: 0,
+      maxX: 100,
+      minY: 0,
+      maxY: 100
+    };
+  }
+
+  return {
+    minX: Math.min(...points.map((point) => point.x)),
+    maxX: Math.max(...points.map((point) => point.x)),
+    minY: Math.min(...points.map((point) => point.y)),
+    maxY: Math.max(...points.map((point) => point.y))
+  };
+}
+
+export function applyScaleReference(room, startPoint, endPoint, distanceMeters) {
+  const numericDistance = Number(distanceMeters);
+  if (!Number.isFinite(numericDistance) || numericDistance <= 0) {
+    return room;
+  }
+
+  const start = {
+    x: clampPercent(startPoint?.x_percent ?? startPoint?.x),
+    y: clampPercent(startPoint?.y_percent ?? startPoint?.y)
+  };
+  const end = {
+    x: clampPercent(endPoint?.x_percent ?? endPoint?.x),
+    y: clampPercent(endPoint?.y_percent ?? endPoint?.y)
+  };
+  const measuredPercent = Math.hypot(end.x - start.x, end.y - start.y);
+  if (measuredPercent < 0.5) {
+    return room;
+  }
+
+  const bounds = getWallBounds(room?.walls || []);
+  const widthPercent = Math.max(1, bounds.maxX - bounds.minX);
+  const heightPercent = Math.max(1, bounds.maxY - bounds.minY);
+  const metersPerPercent = numericDistance / measuredPercent;
+
+  return {
+    ...room,
+    estimated_width_m: Math.max(1, Number((widthPercent * metersPerPercent).toFixed(2))),
+    estimated_height_m: Math.max(1, Number((heightPercent * metersPerPercent).toFixed(2))),
+    scale_reference: {
+      start,
+      end,
+      distance_m: Number(numericDistance.toFixed(2))
+    }
+  };
 }

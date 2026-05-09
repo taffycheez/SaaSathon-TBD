@@ -3,9 +3,12 @@ import assert from "node:assert/strict";
 
 import {
   addWallToRoom,
+  addRectangleRoomToRoom,
+  applyScaleReference,
   addObjectToRoom,
   createDoorForRoom,
   createWindowForRoom,
+  deleteWallFromRoom,
   normalizeFurnitureItem,
   moveWallByDelta,
   normalizeRoomLayout,
@@ -172,16 +175,17 @@ test("updatePlacedObjectPosition rejects overlapping moves", () => {
   let room = addObjectToRoom(normalizeRoomLayout(BASE_ROOM), "desk");
   room = addObjectToRoom(room, "desk");
 
-  const originalSecondDesk = room.desks[1];
   const moved = updatePlacedObjectPosition(room, "desks", 1, {
     x_percent: room.desks[0].x_percent,
     y_percent: room.desks[0].y_percent
   });
 
-  assert.deepEqual(moved.desks[1], originalSecondDesk);
+  assert.notDeepEqual(moved.desks[1], room.desks[1]);
+  assert.notEqual(moved.desks[1].x_percent, room.desks[0].x_percent);
+  assert.notEqual(moved.desks[1].y_percent, room.desks[0].y_percent);
 });
 
-test("updatePlacedObjectPosition rejects moves that place a desk on a wall", () => {
+test("updatePlacedObjectPosition nudges moves away from walls", () => {
   const room = addObjectToRoom(
     normalizeRoomLayout({
       ...BASE_ROOM,
@@ -193,13 +197,44 @@ test("updatePlacedObjectPosition rejects moves that place a desk on a wall", () 
     "desk"
   );
 
-  const originalDesk = room.desks[0];
   const moved = updatePlacedObjectPosition(room, "desks", 0, {
     x_percent: 50,
     y_percent: 50
   });
 
-  assert.deepEqual(moved.desks[0], originalDesk);
+  assert.notDeepEqual(moved.desks[0], room.desks[0]);
+  assert.notEqual(moved.desks[0].x_percent, 50);
+});
+
+test("updatePlacedObjectPosition nudges larger furniture to the nearest valid spot", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    furniture: [
+      normalizeFurnitureItem({
+        type: "couch",
+        x_percent: 25,
+        y_percent: 25,
+        width_percent: 14,
+        height_percent: 7
+      }),
+      normalizeFurnitureItem({
+        type: "couch",
+        x_percent: 50,
+        y_percent: 25,
+        width_percent: 14,
+        height_percent: 7
+      })
+    ]
+  });
+
+  const moved = updatePlacedObjectPosition(room, "furniture", 1, {
+    x_percent: 25,
+    y_percent: 25
+  });
+
+  assert.notDeepEqual(moved.furniture[1], room.furniture[1]);
+  assert.ok(Math.abs(moved.furniture[1].x_percent - 25) <= 16);
+  assert.ok(Math.abs(moved.furniture[1].y_percent - 25) <= 16);
 });
 
 test("updateEdgeItemPosition keeps windows snapped to the nearest wall", () => {
@@ -277,4 +312,105 @@ test("addWallToRoom creates a connected wall by splitting the touched outer wall
         (wall.x1_percent === 50 || wall.x2_percent === 50)
     )
   );
+});
+
+test("addWallToRoom preserves a free interior wall when no structural snap is possible", () => {
+  const room = normalizeRoomLayout(BASE_ROOM);
+  const updated = addWallToRoom(
+    room,
+    { x_percent: 24, y_percent: 24 },
+    { x_percent: 76, y_percent: 24 }
+  );
+
+  assert.ok(
+    updated.walls.some(
+      (wall) =>
+        wall.y1_percent === 24 &&
+        wall.y2_percent === 24 &&
+        ((wall.x1_percent === 24 && wall.x2_percent === 76) || (wall.x1_percent === 76 && wall.x2_percent === 24))
+    )
+  );
+});
+
+test("deleteWallFromRoom removes an interior partition when the layout stays connected", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    walls: [
+      ...BASE_ROOM.walls,
+      { x1_percent: 50, y1_percent: 0, x2_percent: 50, y2_percent: 100 }
+    ]
+  });
+
+  const updated = deleteWallFromRoom(room, 4);
+
+  assert.equal(updated.wallIssues.length, 0);
+  assert.equal(updated.walls.length, 4);
+  assert.ok(!updated.walls.some((wall) => wall.x1_percent === 50 && wall.x2_percent === 50));
+});
+
+test("deleteWallFromRoom merges split collinear walls after removing a partition", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    walls: [
+      { x1_percent: 0, y1_percent: 0, x2_percent: 50, y2_percent: 0 },
+      { x1_percent: 50, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
+      { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },
+      { x1_percent: 100, y1_percent: 100, x2_percent: 0, y2_percent: 100 },
+      { x1_percent: 0, y1_percent: 100, x2_percent: 0, y2_percent: 0 },
+      { x1_percent: 50, y1_percent: 0, x2_percent: 50, y2_percent: 100 }
+    ]
+  });
+
+  const updated = deleteWallFromRoom(room, 5);
+
+  assert.equal(updated.wallIssues.length, 0);
+  assert.ok(
+    updated.walls.some(
+      (wall) =>
+        wall.y1_percent === 0 &&
+        wall.y2_percent === 0 &&
+        ((wall.x1_percent === 0 && wall.x2_percent === 100) || (wall.x1_percent === 100 && wall.x2_percent === 0))
+    )
+  );
+});
+
+test("deleteWallFromRoom can remove a connected boundary wall without deleting neighbours", () => {
+  const room = normalizeRoomLayout(BASE_ROOM);
+  const updated = deleteWallFromRoom(room, 1);
+
+  assert.equal(updated.walls.length, room.walls.length - 1);
+  assert.ok(updated.wallIssues.length >= 1);
+});
+
+test("addRectangleRoomToRoom adds a four-wall room shell", () => {
+  const room = normalizeRoomLayout(BASE_ROOM);
+  const updated = addRectangleRoomToRoom(
+    room,
+    { x_percent: 20, y_percent: 20 },
+    { x_percent: 44, y_percent: 46 }
+  );
+
+  assert.ok(updated.walls.length >= 8);
+  assert.ok(updated.walls.some((wall) => Math.abs(wall.y1_percent - 20) <= 0.1 && Math.abs(wall.y2_percent - 20) <= 0.1));
+  assert.ok(updated.walls.some((wall) => Math.abs(wall.x1_percent - 44) <= 0.1 && Math.abs(wall.x2_percent - 44) <= 0.1));
+  assert.ok(updated.walls.some((wall) => Math.abs(wall.y1_percent - 46) <= 0.1 && Math.abs(wall.y2_percent - 46) <= 0.1));
+  assert.ok(updated.walls.some((wall) => Math.abs(wall.x1_percent - 20) <= 0.1 && Math.abs(wall.x2_percent - 20) <= 0.1));
+});
+
+test("applyScaleReference recalculates room dimensions from a measured line", () => {
+  const room = normalizeRoomLayout(BASE_ROOM);
+  const updated = applyScaleReference(
+    room,
+    { x_percent: 0, y_percent: 0 },
+    { x_percent: 50, y_percent: 0 },
+    4
+  );
+
+  assert.equal(updated.estimated_width_m, 8);
+  assert.equal(updated.estimated_height_m, 8);
+  assert.deepEqual(updated.scale_reference, {
+    start: { x: 0, y: 0 },
+    end: { x: 50, y: 0 },
+    distance_m: 4
+  });
 });

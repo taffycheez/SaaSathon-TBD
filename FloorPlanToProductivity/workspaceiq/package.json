@@ -14,7 +14,7 @@
     "dev:worker": "python -m uvicorn cv_worker:app --app-dir web/python-worker --reload --host 127.0.0.1 --port 8001",
     "build": "npm run build --workspace web",
     "build:web": "npm run build --workspace web",
-    "test": "node --test web/lib/roomState.test.js web/lib/fengShuiScore.test.js web/lib/server/scoreExplanation.test.js",
+    "test": "node --test web/lib/roomState.test.js web/lib/fengShuiScore.test.js web/lib/zoning.test.js web/lib/server/analyseRoomHelpers.test.js web/lib/server/scoreExplanation.test.js",
     "worker:check": "python -c \"import cv2, numpy, PIL, fastapi; print('worker deps ok')\""
   },
   "devDependencies": {

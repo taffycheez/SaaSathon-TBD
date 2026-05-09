@@ -1,4 +1,5 @@
 import { pointOnWall } from "./roomState.js";
+import { summarizeZoneImpact } from "./zoning.js";
 
 const DISRUPTIVE_TYPES = ["trashcan", "toilet", "sink", "shower"];
 const COLLABORATION_ANCHORS = ["meeting_table", "table", "chair", "armchair", "whiteboard"];
@@ -437,7 +438,8 @@ function buildAdvice({
   flowQuality,
   lightQuality,
   harmonyQuality,
-  natureQuality
+  natureQuality,
+  zoningQuality
 }) {
   const suggestions = [];
 
@@ -496,6 +498,13 @@ function buildAdvice({
     });
   }
 
+  if (zoningQuality < 0.62) {
+    suggestions.push({
+      priority: 0.79 - zoningQuality,
+      text: "Separate quieter focus desks from louder collaboration or utility areas so each zone supports the right kind of work."
+    });
+  }
+
   if (natureQuality < 0.65) {
     suggestions.push({
       priority: 0.76 - natureQuality,
@@ -522,6 +531,7 @@ function buildAdvice({
 }
 
 export function computeFengShuiScore(room, preferences = {}) {
+  const zoneAnalysis = preferences?.zoneAnalysis || null;
   const desks = Array.isArray(room?.desks) ? room.desks : [];
   const walls = Array.isArray(room?.walls) ? room.walls : [];
   const windows = Array.isArray(room?.windows) ? room.windows : [];
@@ -570,19 +580,22 @@ export function computeFengShuiScore(room, preferences = {}) {
     center
   );
   const nature = natureAndClutter(desks, furniture);
+  const zoning = summarizeZoneImpact(zoneAnalysis, preferences);
 
-  const commandPoints = Math.round(commandQuality * 30);
-  const supportPoints = Math.round(supportQuality * 20);
-  const flowPoints = Math.round(flowQuality * 15);
+  const commandPoints = Math.round(commandQuality * 24);
+  const supportPoints = Math.round(supportQuality * 18);
+  const flowPoints = Math.round(flowQuality * 14);
   const lightPoints = Math.round(lightQuality * 10);
-  const harmonyPoints = Math.round(harmony.quality * 15);
-  const naturePoints = Math.round(nature.quality * 10);
+  const harmonyPoints = Math.round(harmony.quality * 12);
+  const zoningPoints = Math.round(zoning.quality * 14);
+  const naturePoints = Math.round(nature.quality * 8);
   const score = clamp(
     commandPoints +
       supportPoints +
       flowPoints +
       lightPoints +
       harmonyPoints +
+      zoningPoints +
       naturePoints,
     0,
     100
@@ -602,6 +615,7 @@ export function computeFengShuiScore(room, preferences = {}) {
       `Flow: ${flowLabel}; average desk spacing is ${averageSpacing.toFixed(1)} grid units: +${flowPoints}`,
       `Light: ${daylightQualities.filter((value) => value >= 0.6).length}/${desks.length} desk(s) get balanced daylight: +${lightPoints}`,
       `Harmony (${workStyle}): ${harmony.summary}: +${harmonyPoints}`,
+      `Zoning: ${zoning.details[0]} ${zoning.details[1]}: +${zoningPoints}`,
       `Nature + clutter: ${nature.plantSupportedSeats}/${desks.length} desk(s) sit near plants; ${nature.clutterRiskSeats} sit too close to trashcans or other disruptive items: +${naturePoints}`
     ],
     advice: buildAdvice({
@@ -613,7 +627,8 @@ export function computeFengShuiScore(room, preferences = {}) {
       flowQuality,
       lightQuality,
       harmonyQuality: harmony.quality,
-      natureQuality: nature.quality
+      natureQuality: nature.quality,
+      zoningQuality: zoning.quality
     })
   };
 }
