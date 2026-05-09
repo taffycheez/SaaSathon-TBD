@@ -124,23 +124,6 @@ const HERO_LAYOUT_SCENES = [
   }
 ];
 
-function buildHeroSwoopPath(width) {
-  const safeWidth = Math.max(420, Math.round(width || 0));
-  const loopEndX = 190;
-  const tailStartX = Math.min(loopEndX + 28, safeWidth * 0.44);
-  const tailMidX = Math.max(tailStartX + 40, safeWidth * 0.72);
-  const endX = safeWidth;
-
-  return [
-    "M0 60",
-    "C42 28 82 16 115 24",
-    "C142 31 153 59 133 71",
-    "C113 83 92 61 107 43",
-    `C125 21 154 21 ${loopEndX} 36`,
-    `C${tailStartX} 49 ${tailMidX} 50 ${endX} 48`
-  ].join(" ");
-}
-
 function normalizeWallIndex(value, wallsLength) {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || wallsLength <= 0) {
@@ -1032,7 +1015,6 @@ export default function WorkspaceApp() {
           </aside>
         </main>
       )}
-      <Footer onHome={goHome} />
       {showResetConfirm ? (
         <div className="modal-backdrop" role="presentation" onClick={cancelResetWorkspace}>
           <div
@@ -1093,9 +1075,6 @@ function LoadingScreen() {
 
 function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, heroSceneIndex }) {
   const [pointerLight, setPointerLight] = useState({ x: 50, y: 50, active: false });
-  const heroSwoopRef = useRef(null);
-  const [heroSwoopWidth, setHeroSwoopWidth] = useState(1440);
-  const heroSwoopPath = useMemo(() => buildHeroSwoopPath(heroSwoopWidth), [heroSwoopWidth]);
 
   function handlePlanPointerMove(event) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1107,24 +1086,6 @@ function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, he
       active: true
     });
   }
-
-  useEffect(() => {
-    const node = heroSwoopRef.current;
-    if (!node || typeof ResizeObserver === "undefined") {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      const nextWidth = Math.round(entry?.contentRect?.width || 0);
-      if (nextWidth > 0) {
-        setHeroSwoopWidth(nextWidth);
-      }
-    });
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   return (
     <main className="home-page">
@@ -1145,14 +1106,6 @@ function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, he
             >
               {isLoading ? "Analysing..." : "Start with a photo"}
             </button>
-          </div>
-          <div ref={heroSwoopRef} className="hero-swoop" aria-hidden="true">
-            <svg viewBox={`0 0 ${heroSwoopWidth} 92`} fill="none" role="presentation">
-              <path
-                d={heroSwoopPath}
-                className="hero-swoop-line"
-              />
-            </svg>
           </div>
         </div>
 
@@ -1248,28 +1201,6 @@ function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, he
         <UploadScreen ref={uploadRef} onUpload={onUpload} isLoading={isLoading} error={error} />
       </div>
     </main>
-  );
-}
-
-function Footer({ onHome }) {
-  return (
-    <footer className="site-footer" id="footer">
-      <div className="footer-links">
-        <button type="button" className="brand-lockup brand-home-button footer-home-button" onClick={() => onHome("home")}>
-          <span className="brand-mark">WIQ</span>
-          <div>
-            <p className="eyebrow">WorkspaceIQ</p>
-            <h2>Quick links</h2>
-          </div>
-        </button>
-        <nav aria-label="Footer quick links">
-          <button type="button" className="footer-link-button" onClick={() => onHome("home")}>Home</button>
-          <button type="button" className="footer-link-button" onClick={() => onHome("upload")}>Upload</button>
-          <a href="mailto:hello@workspaceiq.local">Contact</a>
-        </nav>
-      </div>
-      <p className="copyright">&copy; {new Date().getFullYear()} WorkspaceIQ. All rights reserved.</p>
-    </footer>
   );
 }
 
