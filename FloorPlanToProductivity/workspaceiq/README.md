@@ -22,9 +22,17 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-That starts the single supported app:
+That starts the single supported local setup from one root command:
 
-- `http://localhost:3000`
+- `http://localhost:3000` for the Next.js web app
+- `http://127.0.0.1:8001` for the local Python CV worker
+
+This means local development and deployed development both use the same active source tree:
+
+- `web/`
+- `web/python-worker/`
+
+If someone edits the local app through this workflow, they are editing the same files that get deployed later.
 
 ## Build and test
 
@@ -32,6 +40,22 @@ That starts the single supported app:
 npm.cmd run build
 npm.cmd test
 ```
+
+## Local environment
+
+For local web development, put app secrets in:
+
+```text
+web/.env.local
+```
+
+Start from:
+
+```text
+web/.env.local.example
+```
+
+The root `npm.cmd run dev` command automatically points the web app at the local worker on `http://127.0.0.1:8001`.
 
 ## Environment variables
 
