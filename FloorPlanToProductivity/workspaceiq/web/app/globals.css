@@ -334,7 +334,7 @@ button:disabled {
   overflow: visible;
   filter: drop-shadow(0 4px 8px rgba(23, 32, 47, 0.14));
   transform-origin: 50% 78%;
-  animation: mini-plant-drift 4.8s ease-in-out infinite;
+  animation: mini-plant-drift 5.2s ease-in-out infinite;
   animation-delay: var(--plant-delay, 0ms);
 }
 
@@ -1507,11 +1507,11 @@ button:disabled {
 @keyframes mini-plant-drift {
   0%,
   100% {
-    transform: translate3d(0, 0, 0) rotate(-3deg);
+    transform: translate3d(0, 0, 0) rotate(-2deg);
   }
 
   35% {
-    transform: translate3d(-2px, -3px, 0) rotate(2deg);
+    transform: translate3d(-2px, -2px, 0) rotate(2deg);
   }
 
   70% {

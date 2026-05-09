@@ -90,8 +90,8 @@ const HERO_LAYOUT_SCENES = [
       { id: "desk-e", kind: "desk", left: "40%", top: "60%", rotate: "0deg" },
       { id: "desk-f", kind: "desk", left: "66%", top: "60%", rotate: "0deg" },
       { id: "table", kind: "zone", left: "43%", top: "42%", width: "15%", height: "10%", opacity: 0.22 },
-      { id: "plant-a", kind: "plant", left: "8%", top: "84%" },
-      { id: "plant-b", kind: "plant", left: "84%", top: "10%" },
+      { id: "plant-a", kind: "plant", left: "8%", top: "82%" },
+      { id: "plant-b", kind: "plant", left: "86%", top: "8%" },
       { id: "quiet-band", kind: "band", left: "9%", top: "10%", width: "74%", height: "22%", opacity: 0.85 }
     ]
   },
@@ -110,8 +110,8 @@ const HERO_LAYOUT_SCENES = [
       { id: "desk-e", kind: "desk", left: "68%", top: "62%", rotate: "0deg" },
       { id: "desk-f", kind: "desk", left: "43%", top: "67%", rotate: "90deg" },
       { id: "table", kind: "table", left: "40%", top: "44%", width: "20%", height: "14%", rotate: "0deg" },
-      { id: "plant-a", kind: "plant", left: "10%", top: "82%" },
-      { id: "plant-b", kind: "plant", left: "84%", top: "18%" },
+      { id: "plant-a", kind: "plant", left: "78%", top: "80%" },
+      { id: "plant-b", kind: "plant", left: "14%", top: "16%" },
       { id: "quiet-band", kind: "band", left: "10%", top: "12%", width: "78%", height: "18%", opacity: 0.52 }
     ]
   },
@@ -130,8 +130,8 @@ const HERO_LAYOUT_SCENES = [
       { id: "desk-e", kind: "desk", left: "22%", top: "68%", rotate: "0deg" },
       { id: "desk-f", kind: "desk", left: "68%", top: "68%", rotate: "0deg" },
       { id: "table", kind: "table", left: "36%", top: "44%", width: "28%", height: "18%", rotate: "0deg" },
-      { id: "plant-a", kind: "plant", left: "10%", top: "84%" },
-      { id: "plant-b", kind: "plant", left: "84%", top: "12%" },
+      { id: "plant-a", kind: "plant", left: "48%", top: "78%" },
+      { id: "plant-b", kind: "plant", left: "82%", top: "44%" },
       { id: "quiet-band", kind: "band", left: "12%", top: "60%", width: "76%", height: "18%", opacity: 0.3 }
     ]
   }
