@@ -6,12 +6,6 @@ import { getObjectDefinition } from "../objectCatalog";
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
 const PADDING = 40;
-const TRASH_TARGET = {
-  x: CANVAS_WIDTH - PADDING - 70,
-  y: CANVAS_HEIGHT - PADDING - 70,
-  size: 58
-};
-
 function getWallBounds(walls) {
   const points = walls.flatMap((wall) => [
     { x: wall.x1_percent, y: wall.y1_percent },
@@ -157,6 +151,7 @@ export default function FloorPlanEditor({
   canUndo
 }) {
   const shellRef = useRef(null);
+  const trashRef = useRef(null);
   const [stageScale, setStageScale] = useState(1);
   const walls = Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
@@ -195,12 +190,45 @@ export default function FloorPlanEditor({
     }));
   }
 
-  function isOverTrash(position) {
+  function getDragClientPoint(event) {
+    const sourceEvent = event.evt;
+    const touch = sourceEvent?.changedTouches?.[0] || sourceEvent?.touches?.[0];
+
+    if (touch) {
+      return { x: touch.clientX, y: touch.clientY };
+    }
+
+    if (typeof sourceEvent?.clientX === "number" && typeof sourceEvent?.clientY === "number") {
+      return { x: sourceEvent.clientX, y: sourceEvent.clientY };
+    }
+
+    const stage = event.target.getStage();
+    const pointer = stage?.getPointerPosition();
+    const containerRect = stage?.container().getBoundingClientRect();
+
+    if (pointer && containerRect) {
+      return {
+        x: containerRect.left + pointer.x * stageScale,
+        y: containerRect.top + pointer.y * stageScale
+      };
+    }
+
+    return null;
+  }
+
+  function isOverTrash(event) {
+    const trashRect = trashRef.current?.getBoundingClientRect();
+    const point = getDragClientPoint(event);
+
+    if (!trashRect || !point) {
+      return false;
+    }
+
     return (
-      position.x >= TRASH_TARGET.x &&
-      position.x <= TRASH_TARGET.x + TRASH_TARGET.size &&
-      position.y >= TRASH_TARGET.y &&
-      position.y <= TRASH_TARGET.y + TRASH_TARGET.size
+      point.x >= trashRect.left &&
+      point.x <= trashRect.right &&
+      point.y >= trashRect.top &&
+      point.y <= trashRect.bottom
     );
   }
 
@@ -214,7 +242,7 @@ export default function FloorPlanEditor({
   function handlePlacedItemDragEnd(type, index, event) {
     const position = event.target.position();
 
-    if (isOverTrash(position)) {
+    if (isOverTrash(event)) {
       removePlacedItem(type, index);
       return;
     }
@@ -287,7 +315,7 @@ export default function FloorPlanEditor({
         >
           Undo
         </button>
-        <div className="trash-indicator" aria-hidden="true">
+        <div ref={trashRef} className="trash-indicator" aria-hidden="true">
           <div className="trash-lid" />
           <div className="trash-handle" />
           <div className="trash-body">

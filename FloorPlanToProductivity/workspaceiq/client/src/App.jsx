@@ -77,7 +77,7 @@ function edgeItemFromLegacy(item, walls) {
 
 function normalizeRoomData(data) {
   const safeData = data && typeof data === "object" ? data : {};
-  const walls = Array.isArray(safeData.walls) && safeData.walls.length >= 3
+  const walls = Array.isArray(safeData.walls) && safeData.walls.length >= 2
     ? safeData.walls.map((wall) => ({
         x1_percent: clampPercent(wall?.x1_percent),
         y1_percent: clampPercent(wall?.y1_percent),
@@ -412,6 +412,19 @@ export default function App() {
     setShowResetConfirm(true);
   }
 
+  function goHome() {
+    setShowResetConfirm(false);
+    setRoom(DEFAULT_ROOM);
+    setBaseRoom(DEFAULT_ROOM);
+    setPreferences(defaultPreferences);
+    setImagePreview("");
+    setShowReferenceImage(false);
+    setError("");
+    setRoomNotes([]);
+    setLayoutNotes([]);
+    setUndoStack([]);
+  }
+
   function confirmResetWorkspace() {
     setShowResetConfirm(false);
     pushUndoSnapshot();
@@ -446,11 +459,7 @@ export default function App() {
         <button
           type="button"
           className="brand-lockup brand-home-button"
-          onClick={() => {
-            if (!imagePreview) {
-              resetWorkspace();
-            }
-          }}
+          onClick={goHome}
           aria-label="Go to WorkspaceIQ home"
         >
           <span className="brand-mark">WIQ</span>
