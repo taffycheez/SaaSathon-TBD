@@ -1,3 +1,20 @@
 .vercel
 .next
-.env.local
+
+# Local environment and secrets. Keep example templates tracked.
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+!.env.*.example
+!*.env.example
+!*.env.*.example
+
+# Private key / certificate material.
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519

@@ -51,13 +51,16 @@ Useful local template:
 
 ```env
 ANALYSIS_WORKER_URL=https://your-render-worker-url
-OPENROUTER_API_KEY=sk-or-v1-your-key
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_MODEL=openai/gpt-4o
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 Leave `ANALYSIS_WORKER_URL` blank when using `npm run dev:full`.
+
+Do not commit real `.env` files or real API keys. Keep secrets in local `.env.local`
+files and in the Vercel/Render environment variable dashboards only.
 
 ## More Detail
 
