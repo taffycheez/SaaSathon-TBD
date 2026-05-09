@@ -6,6 +6,11 @@ import { getObjectDefinition } from "../objectCatalog";
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
 const PADDING = 40;
+const TRASH_TARGET = {
+  x: CANVAS_WIDTH - PADDING - 70,
+  y: CANVAS_HEIGHT - PADDING - 70,
+  size: 58
+};
 
 function getWallBounds(walls) {
   const points = walls.flatMap((wall) => [
@@ -176,6 +181,39 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
   );
 }
 
+function TrashTarget() {
+  const centerX = TRASH_TARGET.x + TRASH_TARGET.size / 2;
+  const top = TRASH_TARGET.y + 18;
+  const left = TRASH_TARGET.x + 18;
+  const right = TRASH_TARGET.x + TRASH_TARGET.size - 18;
+  const bottom = TRASH_TARGET.y + TRASH_TARGET.size - 14;
+
+  return (
+    <Group listening={false}>
+      <Rect
+        x={TRASH_TARGET.x}
+        y={TRASH_TARGET.y}
+        width={TRASH_TARGET.size}
+        height={TRASH_TARGET.size}
+        fill="#fff2f2"
+        stroke="#f0b9b9"
+        strokeWidth={2}
+        cornerRadius={8}
+        shadowColor="rgba(23, 32, 47, 0.18)"
+        shadowBlur={12}
+        shadowOffset={{ x: 0, y: 5 }}
+      />
+      <Line points={[left - 2, top, right + 2, top]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
+      <Line points={[centerX - 8, top - 6, centerX + 8, top - 6]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
+      <Line points={[left, top + 7, left + 4, bottom]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
+      <Line points={[right, top + 7, right - 4, bottom]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
+      <Line points={[left + 4, bottom, right - 4, bottom]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
+      <Line points={[centerX - 7, top + 12, centerX - 5, bottom - 6]} stroke="#a83b3b" strokeWidth={2} lineCap="round" />
+      <Line points={[centerX + 7, top + 12, centerX + 5, bottom - 6]} stroke="#a83b3b" strokeWidth={2} lineCap="round" />
+    </Group>
+  );
+}
+
 export default function FloorPlanEditor({ room, setRoom, imagePreview, showReferenceImage = false }) {
   const shellRef = useRef(null);
   const [stageScale, setStageScale] = useState(1);
@@ -252,6 +290,33 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
     }));
   }
 
+  function isOverTrash(position) {
+    return (
+      position.x >= TRASH_TARGET.x &&
+      position.x <= TRASH_TARGET.x + TRASH_TARGET.size &&
+      position.y >= TRASH_TARGET.y &&
+      position.y <= TRASH_TARGET.y + TRASH_TARGET.size
+    );
+  }
+
+  function removePlacedItem(type, index) {
+    setRoom((currentRoom) => ({
+      ...currentRoom,
+      [type]: currentRoom[type].filter((_item, itemIndex) => itemIndex !== index)
+    }));
+  }
+
+  function handlePlacedItemDragEnd(type, index, event) {
+    const position = event.target.position();
+
+    if (isOverTrash(position)) {
+      removePlacedItem(type, index);
+      return;
+    }
+
+    updatePlacedItem(type, index, clampObjectPosition(position, roomBox));
+  }
+
   return (
     <div className="editor-card">
       <div className="editor-header">
@@ -259,7 +324,6 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
           <p className="upload-kicker">Step 2</p>
           <h2>Fine-tune the floor plan</h2>
         </div>
-        <p className="editor-note">Drag windows, doors, desks, and furniture. Double-click an object to rotate it.</p>
       </div>
 
       <div
@@ -418,10 +482,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                   offsetX={width / 2}
                   offsetY={height / 2}
                   draggable
-                  onDragMove={(event) => {
-                    const next = clampObjectPosition(event.target.position(), roomBox);
-                    updatePlacedItem("furniture", index, next);
-                  }}
+                  onDragEnd={(event) => handlePlacedItemDragEnd("furniture", index, event)}
                   onDblClick={() => updatePlacedItem("furniture", index, { rotation_deg: (item.rotation_deg + 90) % 360 })}
                 >
                   <FootprintShape
@@ -451,10 +512,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                   offsetX={width / 2}
                   offsetY={height / 2}
                   draggable
-                  onDragMove={(event) => {
-                    const next = clampObjectPosition(event.target.position(), roomBox);
-                    updatePlacedItem("desks", index, next);
-                  }}
+                  onDragEnd={(event) => handlePlacedItemDragEnd("desks", index, event)}
                   onDblClick={() => updatePlacedItem("desks", index, { rotation_deg: (desk.rotation_deg + 90) % 360 })}
                 >
                   <FootprintShape
@@ -462,11 +520,13 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                     roomBox={roomBox}
                     fill={definition.tone}
                     stroke={definition.stroke}
+                    strokeWidth={2}
                     label={`${getLabel(desk, "Desk")} ${index + 1}`}
                   />
                 </Group>
               );
             })}
+            <TrashTarget />
           </Layer>
         </Stage>
       </div>

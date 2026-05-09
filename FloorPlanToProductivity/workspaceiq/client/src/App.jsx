@@ -32,8 +32,7 @@ const DEFAULT_ROOM = {
 };
 
 const defaultPreferences = {
-  numPeople: 8,
-  workStyle: "balanced"
+  numPeople: 8
 };
 
 function normalizeWallIndex(value, wallsLength) {
@@ -182,28 +181,7 @@ function hasQuietZone(desks, doors, walls) {
   return farDesks.length >= Math.max(2, Math.ceil(desks.length / 2));
 }
 
-function hasCollaborationZone(desks, workStyle) {
-  if (workStyle !== "collaborative") {
-    return true;
-  }
-  if (desks.length < 3) {
-    return false;
-  }
-  let clusteredPairs = 0;
-  for (let i = 0; i < desks.length; i += 1) {
-    for (let j = i + 1; j < desks.length; j += 1) {
-      if (distance(
-        { x: desks[i].x_percent, y: desks[i].y_percent },
-        { x: desks[j].x_percent, y: desks[j].y_percent }
-      ) < 16) {
-        clusteredPairs += 1;
-      }
-    }
-  }
-  return clusteredPairs >= 2;
-}
-
-function computeScore(room, preferences) {
+function computeScore(room) {
   const desks = room.desks || [];
   const walls = room.walls || [];
   const windows = room.windows || [];
@@ -228,10 +206,6 @@ function computeScore(room, preferences) {
   const quietPoints = hasQuietZone(desks, doors, walls) ? 15 : 0;
   score += quietPoints;
   breakdown.push(`${quietPoints ? "Quiet zone present" : "Quiet zone missing"}: +${quietPoints}`);
-
-  const collaborationPoints = hasCollaborationZone(desks, preferences.workStyle) ? 10 : 0;
-  score += collaborationPoints;
-  breakdown.push(`${preferences.workStyle === "collaborative" ? "Collaboration zone check" : "Collaboration bonus not required"}: +${collaborationPoints}`);
 
   const areaPerDesk =
     desks.length > 0
@@ -259,7 +233,7 @@ export default function App() {
   const [roomNotes, setRoomNotes] = useState([]);
   const [layoutNotes, setLayoutNotes] = useState([]);
 
-  const scoreResult = useMemo(() => computeScore(room, preferences), [room, preferences]);
+  const scoreResult = useMemo(() => computeScore(room), [room]);
 
   useEffect(() => {
     if (!error) {
@@ -319,7 +293,7 @@ export default function App() {
         body: JSON.stringify({
           room,
           num_people: preferences.numPeople,
-          work_style: preferences.workStyle
+          work_style: "balanced"
         })
       });
 
@@ -542,7 +516,7 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
         <article>
           <span>02</span>
           <h3>Generate layouts</h3>
-          <p>Create desk arrangements based on headcount and the work style your space needs to support.</p>
+          <p>Create desk arrangements based on headcount and the practical flow your space needs to support.</p>
         </article>
         <article>
           <span>03</span>
