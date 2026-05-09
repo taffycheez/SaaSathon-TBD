@@ -353,6 +353,10 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, Number.isFinite(numeric) ? numeric : 0));
 }
 
+function clampValue(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function getWallLengthPercent(wall) {
   if (!wall) {
     return 0;
@@ -2131,10 +2135,18 @@ export default function FloorPlanEditor({
           {zones.map((zone) => {
             const center = toCanvasPoint({ x: zone.center.x, y: zone.center.y }, roomBox, roomSize.bounds);
             const isActive = hoveredZoneId === zone.id || pinnedZoneId === zone.id;
-            const popupWidth = 220;
-            const popupHeight = pinnedZoneId === zone.id ? 148 : 110;
-            const popupX = Math.min(CANVAS_WIDTH - popupWidth - 18, center.x + 18);
-            const popupY = Math.max(12, center.y - popupHeight - 16);
+            const popupMargin = 14;
+            const popupGap = 18;
+            const popupWidth = pinnedZoneId === zone.id ? 248 : 232;
+            const popupHeight = pinnedZoneId === zone.id ? 176 : 126;
+            const preferredPopupX = center.x <= CANVAS_WIDTH / 2
+              ? center.x + popupGap
+              : center.x - popupWidth - popupGap;
+            const preferredPopupY = center.y - popupHeight - popupGap >= popupMargin
+              ? center.y - popupHeight - popupGap
+              : center.y + popupGap;
+            const popupX = clampValue(preferredPopupX, popupMargin, CANVAS_WIDTH - popupWidth - popupMargin);
+            const popupY = clampValue(preferredPopupY, popupMargin, CANVAS_HEIGHT - popupHeight - popupMargin);
 
             return (
               <g key={`${zone.id}-marker-layer`}>
