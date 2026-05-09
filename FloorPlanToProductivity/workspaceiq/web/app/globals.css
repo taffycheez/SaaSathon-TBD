@@ -195,6 +195,36 @@ button:disabled {
   margin-top: 26px;
 }
 
+.hero-swoop {
+  width: 240px;
+  margin-top: 10px;
+  margin-left: 12px;
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.hero-swoop svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.hero-swoop-line {
+  stroke: rgba(24, 63, 150, 0.34);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 4 8;
+}
+
+.hero-swoop-arrow {
+  stroke: rgba(24, 63, 150, 0.34);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .primary-link,
 .secondary-link {
   display: inline-flex;
