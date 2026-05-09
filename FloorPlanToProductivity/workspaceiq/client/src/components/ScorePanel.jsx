@@ -1,5 +1,6 @@
 export default function ScorePanel({ score, breakdown }) {
-  const tone = score >= 75 ? "good" : score >= 45 ? "medium" : "low";
+  const segmentCount = 10;
+  const activeSegments = Math.max(0, Math.min(segmentCount, Math.round(score / 10)));
 
   return (
     <div className="panel-card score-card">
@@ -8,10 +9,15 @@ export default function ScorePanel({ score, breakdown }) {
           <p className="upload-kicker">Live score</p>
           <h2>Productivity score</h2>
         </div>
-        <div className={`score-badge ${tone}`}>{score}</div>
+        <div className="score-badge">{score}</div>
       </div>
       <div className="score-meter" aria-hidden="true">
-        <span style={{ width: `${score}%` }} />
+        {Array.from({ length: segmentCount }).map((_, index) => (
+          <span
+            key={`segment-${index}`}
+            className={index < activeSegments ? "active" : ""}
+          />
+        ))}
       </div>
 
       <ul className="score-list">
