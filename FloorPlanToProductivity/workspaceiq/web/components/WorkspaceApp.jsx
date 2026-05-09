@@ -669,6 +669,7 @@ export default function WorkspaceApp() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [pendingScrollTarget, setPendingScrollTarget] = useState("");
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
+  const [headerHidden, setHeaderHidden] = useState(false);
 
   const heroScene = HERO_LAYOUT_SCENES[heroSceneIndex];
   const activeRoom = roomPreview ?? room;
@@ -761,6 +762,38 @@ export default function WorkspaceApp() {
       window.clearTimeout(timeoutId);
     };
   }, [room, preferences, committedScoreResult]);
+
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+    let ticking = false;
+
+    function updateHeaderVisibility() {
+      const currentScrollY = window.scrollY;
+      const scrollDelta = currentScrollY - lastScrollY;
+
+      if (currentScrollY <= 8) {
+        setHeaderHidden(false);
+      } else if (scrollDelta > 6) {
+        setHeaderHidden(true);
+      } else if (scrollDelta < -6) {
+        setHeaderHidden(false);
+      }
+
+      lastScrollY = currentScrollY;
+      ticking = false;
+    }
+
+    function handleScroll() {
+      if (!ticking) {
+        window.requestAnimationFrame(updateHeaderVisibility);
+        ticking = true;
+      }
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   function syncRoomState(nextRoom) {
     roomRef.current = nextRoom;
@@ -984,7 +1017,7 @@ export default function WorkspaceApp() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
+      <header className={`app-header${headerHidden ? " app-header-hidden" : ""}`}>
         <button
           type="button"
           className="brand-lockup brand-home-button"

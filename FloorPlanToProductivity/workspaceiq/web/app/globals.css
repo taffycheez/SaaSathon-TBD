@@ -79,6 +79,16 @@ button:disabled {
   padding: 14px max(18px, calc((100vw - 1440px) / 2 + 18px));
   box-shadow: 0 14px 34px rgba(24, 63, 150, 0.1);
   backdrop-filter: blur(18px);
+  transform: translateY(0);
+  transition: transform 220ms ease, opacity 220ms ease, box-shadow 220ms ease;
+  will-change: transform;
+}
+
+.app-header-hidden {
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: none;
+  transform: translateY(calc(-100% - 18px));
 }
 
 .app-header h1 {
