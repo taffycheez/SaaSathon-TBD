@@ -6,8 +6,7 @@ export default function ScorePanel({
   isPreviewing = false,
   isLoadingExplanation = false
 }) {
-  const segmentCount = 10;
-  const activeSegments = Math.max(0, Math.min(segmentCount, Math.round(score / 10)));
+  const boundedScore = Math.max(0, Math.min(100, Number(score) || 0));
 
   return (
     <div className="panel-card score-card">
@@ -19,12 +18,7 @@ export default function ScorePanel({
         <div className="score-badge">{score}</div>
       </div>
       <div className="score-meter" aria-hidden="true">
-        {Array.from({ length: segmentCount }).map((_, index) => (
-          <span
-            key={`segment-${index}`}
-            className={index < activeSegments ? "active" : ""}
-          />
-        ))}
+        <div className="score-meter-fill" style={{ width: `${boundedScore}%` }} />
       </div>
 
       <ul className="score-list">
