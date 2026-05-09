@@ -8,7 +8,7 @@ export default function ControlPanel({
   showReferenceImage,
   setShowReferenceImage,
   onAddWindow,
-  onAddTable,
+  onAddDoor,
   onAddObject,
   onGenerateLayout,
   onReset,
@@ -68,14 +68,14 @@ export default function ControlPanel({
           <button type="button" className="object-chip quick-add-chip" onClick={onAddWindow}>
             Add Window
           </button>
-          <button type="button" className="object-chip quick-add-chip" onClick={onAddTable}>
-            Add Table
+          <button type="button" className="object-chip quick-add-chip" onClick={onAddDoor}>
+            Add Door
           </button>
         </div>
       </div>
 
       <div className="field">
-        <span>Add objects</span>
+        <span>Add office objects</span>
         <div className="object-palette">
           {OBJECT_PALETTE.map((type) => (
             <button

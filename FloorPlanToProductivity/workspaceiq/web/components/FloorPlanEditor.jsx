@@ -75,46 +75,180 @@ function pointsToString(points, width, height) {
     .join(" ");
 }
 
+function renderObjectLabel(label, width, height, stroke, options = {}) {
+  if (!label) {
+    return null;
+  }
+
+  const { y = Math.max(14, height / 2 + 4), fontSize = 12 } = options;
+  return (
+    <text x={width / 2} y={y} fontSize={fontSize} fill={stroke} textAnchor="middle">
+      {label}
+    </text>
+  );
+}
+
+function ChairShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.4, strokeWidth * 0.7);
+  return (
+    <>
+      <rect x={width * 0.22} y={height * 0.26} width={width * 0.56} height={height * 0.28} rx={Math.max(4, width * 0.08)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <rect x={width * 0.2} y={height * 0.06} width={width * 0.6} height={height * 0.24} rx={Math.max(4, width * 0.08)} fill="#f7fbff" stroke={stroke} strokeWidth={detailStroke} />
+      <line x1={width * 0.3} y1={height * 0.54} x2={width * 0.24} y2={height * 0.86} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.7} y1={height * 0.54} x2={width * 0.76} y2={height * 0.86} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.38} y1={height * 0.54} x2={width * 0.38} y2={height * 0.92} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.62} y1={height * 0.54} x2={width * 0.62} y2={height * 0.92} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.33} y1={height * 0.78} x2={width * 0.67} y2={height * 0.78} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" opacity={0.72} />
+    </>
+  );
+}
+
+function ArmchairShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.3, strokeWidth * 0.68);
+  return (
+    <>
+      <rect x={width * 0.22} y={height * 0.2} width={width * 0.56} height={height * 0.32} rx={Math.max(6, width * 0.12)} fill="#eef8f2" stroke={stroke} strokeWidth={detailStroke} />
+      <rect x={width * 0.14} y={height * 0.34} width={width * 0.14} height={height * 0.2} rx={Math.max(4, width * 0.1)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <rect x={width * 0.72} y={height * 0.34} width={width * 0.14} height={height * 0.2} rx={Math.max(4, width * 0.1)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <rect x={width * 0.24} y={height * 0.32} width={width * 0.52} height={height * 0.28} rx={Math.max(6, width * 0.12)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <line x1={width * 0.3} y1={height * 0.6} x2={width * 0.25} y2={height * 0.88} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.7} y1={height * 0.6} x2={width * 0.75} y2={height * 0.88} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+    </>
+  );
+}
+
+function PlantShape({ width, height, stroke }) {
+  return (
+    <>
+      <line x1={width * 0.5} y1={height * 0.46} x2={width * 0.5} y2={height * 0.6} stroke={stroke} strokeWidth={Math.max(1.5, width * 0.08)} strokeLinecap="round" />
+      <ellipse cx={width * 0.5} cy={height * 0.18} rx={Math.max(6, width * 0.14)} ry={Math.max(8, height * 0.22)} transform={`rotate(-4 ${width * 0.5} ${height * 0.18})`} fill="#89c86f" stroke={stroke} strokeWidth={1.6} />
+      <ellipse cx={width * 0.34} cy={height * 0.3} rx={Math.max(5, width * 0.12)} ry={Math.max(8, height * 0.2)} transform={`rotate(-34 ${width * 0.34} ${height * 0.3})`} fill="#b8e4a2" stroke={stroke} strokeWidth={1.4} />
+      <ellipse cx={width * 0.66} cy={height * 0.3} rx={Math.max(5, width * 0.12)} ry={Math.max(8, height * 0.2)} transform={`rotate(34 ${width * 0.66} ${height * 0.3})`} fill="#c8ebb7" stroke={stroke} strokeWidth={1.4} />
+      <rect x={width * 0.26} y={height * 0.6} width={width * 0.48} height={height * 0.18} rx={Math.max(4, width * 0.08)} fill="#b57c47" stroke="#7a512f" strokeWidth={1.6} />
+      <ellipse cx={width * 0.5} cy={height * 0.8} rx={Math.max(7, width * 0.26)} ry={Math.max(3, height * 0.05)} fill="#8f6036" stroke="#7a512f" strokeWidth={1.2} />
+    </>
+  );
+}
+
+function WhiteboardShape({ width, height, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.2, strokeWidth * 0.62);
+  return (
+    <>
+      <rect x={width * 0.12} y={height * 0.08} width={width * 0.76} height={height * 0.48} rx={Math.max(6, height * 0.14)} fill="#ffffff" stroke={stroke} strokeWidth={strokeWidth} />
+      <line x1={width * 0.2} y1={height * 0.22} x2={width * 0.8} y2={height * 0.22} stroke="#d7e4ef" strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.2} y1={height * 0.38} x2={width * 0.72} y2={height * 0.38} stroke="#e7eef5" strokeWidth={detailStroke} strokeLinecap="round" />
+      <ellipse cx={width * 0.22} cy={height * 0.18} rx={2.2} ry={2.2} fill="#74a3d3" />
+      <ellipse cx={width * 0.78} cy={height * 0.18} rx={2.2} ry={2.2} fill="#7ec18e" />
+      <rect x={width * 0.28} y={height * 0.58} width={width * 0.44} height={Math.max(3, height * 0.05)} rx={999} fill={stroke} opacity={0.72} />
+      <line x1={width * 0.34} y1={height * 0.58} x2={width * 0.22} y2={height * 0.92} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.66} y1={height * 0.58} x2={width * 0.78} y2={height * 0.92} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+    </>
+  );
+}
+
+function DeskChairInset({ x, y, width, height, strokeWidth }) {
+  const chairDefinition = getObjectDefinition("chair");
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <ChairShape width={width} height={height} fill={chairDefinition.tone} stroke={chairDefinition.stroke} strokeWidth={strokeWidth} />
+    </g>
+  );
+}
+
+function DeskShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.15, strokeWidth * 0.7);
+  const chairWidth = Math.max(12, width * 0.32);
+  const chairHeight = Math.max(10, height * 0.42);
+
+  return (
+    <>
+      <rect x={width * 0.14} y={height * 0.08} width={width * 0.72} height={height * 0.34} rx={Math.max(4, width * 0.08)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      <line x1={width * 0.2} y1={height * 0.42} x2={width * 0.18} y2={height * 0.66} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.32} y1={height * 0.42} x2={width * 0.32} y2={height * 0.58} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.68} y1={height * 0.42} x2={width * 0.68} y2={height * 0.58} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <line x1={width * 0.8} y1={height * 0.42} x2={width * 0.82} y2={height * 0.66} stroke={stroke} strokeWidth={detailStroke} strokeLinecap="round" />
+      <DeskChairInset x={width * 0.34} y={height * 0.48} width={chairWidth} height={chairHeight} strokeWidth={detailStroke} />
+    </>
+  );
+}
+
+function LShapedDeskShape({ width, height, fill, stroke, strokeWidth, footprintPoints }) {
+  const detailStroke = Math.max(1.15, strokeWidth * 0.68);
+  return (
+    <>
+      <polygon points={pointsToString(footprintPoints, width, height)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />
+      <polyline
+        points={`${width * 0.58},${height * 0.08} ${width * 0.58},${height * 0.42} ${width * 0.86},${height * 0.42}`}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={detailStroke}
+        strokeLinejoin="round"
+        opacity={0.34}
+      />
+      <DeskChairInset x={width * 0.16} y={height * 0.52} width={Math.max(12, width * 0.3)} height={Math.max(10, height * 0.36)} strokeWidth={detailStroke} />
+    </>
+  );
+}
+
 function SvgObjectShape({ item, roomBox, fill, stroke, strokeWidth = 2, label }) {
   const { width, height } = objectPixelSize(item, roomBox);
   const definition = getObjectDefinition(item.type);
   const shapeKind = item.shape_kind || definition.shape_kind;
 
+  if (item.type === "desk") {
+    return (
+      <>
+        <DeskShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+        {renderObjectLabel(label, width, height, stroke, { y: Math.max(12, height * 0.18), fontSize: 10.5 })}
+      </>
+    );
+  }
+
+  if (item.type === "l_shaped_desk") {
+    const footprintPoints = Array.isArray(item.footprint_points) && item.footprint_points.length >= 3
+      ? item.footprint_points
+      : definition.footprint_points;
+
+    return (
+      <>
+        <LShapedDeskShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} footprintPoints={footprintPoints} />
+        {renderObjectLabel(label, width, height, stroke, { y: Math.max(12, height * 0.18), fontSize: 10.5 })}
+      </>
+    );
+  }
+
+  if (item.type === "chair") {
+    return <ChairShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+  }
+
+  if (item.type === "armchair") {
+    return <ArmchairShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+  }
+
+  if (item.type === "plant") {
+    return <PlantShape width={width} height={height} stroke={stroke} />;
+  }
+
+  if (item.type === "whiteboard") {
+    return <WhiteboardShape width={width} height={height} stroke={stroke} strokeWidth={strokeWidth} />;
+  }
+
   if (shapeKind === "ellipse") {
     const seatCount = definition.seat_count || 0;
     return (
       <>
-        <ellipse
-          cx={width / 2}
-          cy={height / 2}
-          rx={width / 2}
-          ry={height / 2}
-          fill={fill}
-          stroke={stroke}
-          strokeWidth={strokeWidth}
-        />
+        <ellipse cx={width / 2} cy={height / 2} rx={width / 2} ry={height / 2} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
         {seatCount
           ? Array.from({ length: seatCount }).map((_, index) => {
               const angle = (Math.PI * 2 * index) / seatCount;
               const seatX = width / 2 + Math.cos(angle) * (width * 0.42);
               const seatY = height / 2 + Math.sin(angle) * (height * 0.58);
               return (
-                <ellipse
-                  key={`seat-${index}`}
-                  cx={seatX}
-                  cy={seatY}
-                  rx={Math.max(5, width * 0.08)}
-                  ry={Math.max(4, height * 0.08)}
-                  fill="#f8f5ef"
-                  stroke={stroke}
-                  strokeWidth={1}
-                />
+                <ellipse key={`seat-${index}`} cx={seatX} cy={seatY} rx={Math.max(5, width * 0.08)} ry={Math.max(4, height * 0.08)} fill="#f8f5ef" stroke={stroke} strokeWidth={1} />
               );
             })
           : null}
-        <text x={6} y={Math.max(14, height / 2 + 4)} fontSize="12" fill={stroke}>
-          {label}
-        </text>
+        {renderObjectLabel(label, width, height, stroke)}
       </>
     );
   }
@@ -122,32 +256,16 @@ function SvgObjectShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
   if (shapeKind === "polygon" && Array.isArray(item.footprint_points) && item.footprint_points.length >= 3) {
     return (
       <>
-        <polygon
-          points={pointsToString(item.footprint_points, width, height)}
-          fill={fill}
-          stroke={stroke}
-          strokeWidth={strokeWidth}
-        />
-        <text x={6} y={Math.max(14, height / 2 + 4)} fontSize="12" fill={stroke}>
-          {label}
-        </text>
+        <polygon points={pointsToString(item.footprint_points, width, height)} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+        {renderObjectLabel(label, width, height, stroke)}
       </>
     );
   }
 
   return (
     <>
-      <rect
-        width={width}
-        height={height}
-        rx={shapeKind === "rect" ? 6 : 0}
-        fill={fill}
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-      />
-      <text x={6} y={Math.max(14, height / 2 + 4)} fontSize="12" fill={stroke}>
-        {label}
-      </text>
+      <rect width={width} height={height} rx={shapeKind === "rect" ? 6 : 0} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+      {renderObjectLabel(label, width, height, stroke)}
     </>
   );
 }
@@ -366,6 +484,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
             return (
               <g
                 key={`window-${index}`}
+                className={`workspace-opening${dragState?.type === "windows" && dragState?.index === index ? " is-dragging" : ""}`}
                 transform={`translate(${x} ${y}) rotate(${windowItem.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("windows", index, event)}
                 onDoubleClick={() =>
@@ -383,6 +502,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
             return (
               <g
                 key={`door-${index}`}
+                className={`workspace-opening${dragState?.type === "doors" && dragState?.index === index ? " is-dragging" : ""}`}
                 transform={`translate(${x} ${y}) rotate(${doorItem.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("doors", index, event)}
                 onDoubleClick={() =>
@@ -407,6 +527,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                 onPointerDown={(event) => startDrag("furniture", index, event)}
                 onDoubleClick={() => updatePlacedItem("furniture", index, { rotation_deg: (item.rotation_deg + 90) % 360 })}
               >
+                <g className={`workspace-object workspace-object--${item.type.replace(/_/g, "-")}${dragState?.type === "furniture" && dragState?.index === index ? " is-dragging" : ""}`}>
                 <SvgObjectShape
                   item={item}
                   roomBox={roomBox}
@@ -415,6 +536,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                   strokeWidth={1.5}
                   label={getLabel(item, "Object")}
                 />
+                </g>
               </g>
             );
           })}
@@ -432,6 +554,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                 onPointerDown={(event) => startDrag("desks", index, event)}
                 onDoubleClick={() => updatePlacedItem("desks", index, { rotation_deg: (desk.rotation_deg + 90) % 360 })}
               >
+                <g className={`workspace-object workspace-object--${desk.type.replace(/_/g, "-")}${dragState?.type === "desks" && dragState?.index === index ? " is-dragging" : ""}`}>
                 <SvgObjectShape
                   item={desk}
                   roomBox={roomBox}
@@ -440,6 +563,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                   strokeWidth={2}
                   label={`${getLabel(desk, "Desk")} ${index + 1}`}
                 />
+                </g>
               </g>
             );
           })}

@@ -58,7 +58,9 @@ function normalizeRoomData(data) {
     : DEFAULT_ROOM.walls;
 
   const furniture = Array.isArray(safeData.furniture)
-    ? safeData.furniture.map(normalizeFurnitureItem)
+    ? safeData.furniture
+        .map(normalizeFurnitureItem)
+        .filter((item) => item.type !== "office_equipment")
     : [];
   const detectedDesks = furniture.filter(isDeskLikeFurniture).map(normalizeFurnitureItem);
 

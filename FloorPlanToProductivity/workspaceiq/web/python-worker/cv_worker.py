@@ -14,7 +14,7 @@ SUPPORTED_TYPES = {
     "desk": "desk",
     "table": "table",
     "dining table": "meeting_table",
-    "chair": "armchair",
+    "chair": "chair",
     "couch": "armchair",
     "sofa": "armchair",
     "potted plant": "plant",
@@ -23,11 +23,6 @@ SUPPORTED_TYPES = {
     "sink": "sink",
     "shower": "shower",
     "bathtub": "shower",
-    "tv": "office_equipment",
-    "laptop": "office_equipment",
-    "keyboard": "office_equipment",
-    "mouse": "office_equipment",
-    "printer": "office_equipment",
 }
 
 

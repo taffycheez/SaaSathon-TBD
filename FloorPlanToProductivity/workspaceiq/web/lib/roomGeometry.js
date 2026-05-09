@@ -298,13 +298,19 @@ export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_
 
   const wallLengthPercent = Math.max(lineLength(best.wall), widthPercent);
   const halfSpanPercent = Math.min(49, (widthPercent / wallLengthPercent) * 50);
-  const clampedPosition = Math.max(halfSpanPercent, Math.min(100 - halfSpanPercent, best.positionPercent));
+  const clampedPosition = Number(
+    Math.max(halfSpanPercent, Math.min(100 - halfSpanPercent, best.positionPercent)).toFixed(2)
+  );
   const t = clampedPosition / 100;
 
   return {
     ...item,
-    x_percent: clampPercent(best.wall.x1_percent + (best.wall.x2_percent - best.wall.x1_percent) * t),
-    y_percent: clampPercent(best.wall.y1_percent + (best.wall.y2_percent - best.wall.y1_percent) * t),
+    x_percent: Number(
+      clampPercent(best.wall.x1_percent + (best.wall.x2_percent - best.wall.x1_percent) * t).toFixed(2)
+    ),
+    y_percent: Number(
+      clampPercent(best.wall.y1_percent + (best.wall.y2_percent - best.wall.y1_percent) * t).toFixed(2)
+    ),
     rotation_deg: lineAngleDegrees(best.wall),
     wall_index: best.wallIndex,
     position_percent: clampedPosition
