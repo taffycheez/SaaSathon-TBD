@@ -249,9 +249,9 @@ export default function FloorPlanPreview3D({ room }) {
     }
 
     let renderer;
+    const width = mountRef.current.clientWidth || 600;
+    const height = mountRef.current.clientHeight || 340;
     try {
-      const width = mountRef.current.clientWidth || 600;
-      const height = mountRef.current.clientHeight || 340;
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(width, height);
