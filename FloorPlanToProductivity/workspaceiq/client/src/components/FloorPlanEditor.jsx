@@ -72,25 +72,6 @@ function objectPixelSize(item, roomBox) {
   };
 }
 
-function clampObjectScale(widthPixels, heightPixels, roomBox) {
-  return {
-    width_percent: Math.max(2, Math.min(100, (widthPixels / roomBox.width) * 100)),
-    height_percent: Math.max(2, Math.min(100, (heightPixels / roomBox.height) * 100))
-  };
-}
-
-function getLocalPointFromDrag(event) {
-  const group = event.target.getParent();
-  const stage = event.target.getStage();
-  const pointer = stage?.getPointerPosition();
-
-  if (!group || !pointer) {
-    return null;
-  }
-
-  return group.getAbsoluteTransform().copy().invert().point(pointer);
-}
-
 function getLabel(item, fallbackLabel) {
   return getObjectDefinition(item.type).label || fallbackLabel;
 }
@@ -744,24 +725,6 @@ export default function FloorPlanEditor(
     updatePlacedItem(type, index, getObjectPosition(position, roomBox));
   }
 
-  function handleResizeDrag(type, index, event) {
-    event.cancelBubble = true;
-    const localPoint = getLocalPointFromDrag(event);
-    if (!localPoint) {
-      return;
-    }
-
-    const nextWidth = Math.max(18, localPoint.x + 6);
-    const nextHeight = Math.max(14, localPoint.y + 6);
-    updatePlacedItem(type, index, clampObjectScale(nextWidth, nextHeight, roomBox));
-  }
-
-  function handleResizeEnd(event) {
-    event.cancelBubble = true;
-    setIsTrashHot(false);
-    event.target.stopDrag();
-  }
-
   function handleOpeningDragMove(type, openingType, item, index, event) {
     updateTrashHover(event);
 
@@ -1090,30 +1053,6 @@ export default function FloorPlanEditor(
                     strokeWidth={1.5}
                     label={getLabel(item, "Object")}
                   />
-                  <Rect
-                    x={Math.max(14, width) - 10}
-                    y={Math.max(14, height) - 10}
-                    width={12}
-                    height={12}
-                    fill="#ffffff"
-                    stroke={definition.stroke}
-                    strokeWidth={2}
-                    cornerRadius={3}
-                    draggable
-                    onDragStart={(event) => {
-                      event.cancelBubble = true;
-                      onActionStart?.();
-                      setIsTrashHot(false);
-                    }}
-                    onDragMove={(event) => handleResizeDrag("furniture", index, event)}
-                    onDragEnd={handleResizeEnd}
-                    onMouseDown={(event) => {
-                      event.cancelBubble = true;
-                    }}
-                    onTouchStart={(event) => {
-                      event.cancelBubble = true;
-                    }}
-                  />
                 </Group>
               );
             })}
@@ -1152,30 +1091,6 @@ export default function FloorPlanEditor(
                     stroke={definition.stroke}
                     strokeWidth={2}
                     label={`${getLabel(desk, "Desk")} ${index + 1}`}
-                  />
-                  <Rect
-                    x={Math.max(14, width) - 10}
-                    y={Math.max(14, height) - 10}
-                    width={12}
-                    height={12}
-                    fill="#ffffff"
-                    stroke={definition.stroke}
-                    strokeWidth={2}
-                    cornerRadius={3}
-                    draggable
-                    onDragStart={(event) => {
-                      event.cancelBubble = true;
-                      onActionStart?.();
-                      setIsTrashHot(false);
-                    }}
-                    onDragMove={(event) => handleResizeDrag("desks", index, event)}
-                    onDragEnd={handleResizeEnd}
-                    onMouseDown={(event) => {
-                      event.cancelBubble = true;
-                    }}
-                    onTouchStart={(event) => {
-                      event.cancelBubble = true;
-                    }}
                   />
                 </Group>
               );
