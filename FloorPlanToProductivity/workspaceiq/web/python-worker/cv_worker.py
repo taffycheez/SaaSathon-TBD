@@ -349,8 +349,19 @@ def filter_structural_walls(walls: List[Dict], room_rect: Tuple[int, int, int, i
 
         if connection_score >= 2 and anchor_score >= 1 and length >= 18:
             filtered.append(wall)
+            continue
+
+        if length >= 24 and (anchor_score >= 1 or connection_score >= 1):
+            filtered.append(wall)
 
     return filtered
+
+
+def wall_quality_score(walls: List[Dict]) -> float:
+    if not walls:
+        return 0.0
+
+    return sum(segment_length(wall) for wall in walls) + (min(len(walls), 8) * 8.0)
 
 
 def build_room_features(room_crop: np.ndarray) -> Dict[str, np.ndarray]:
@@ -983,6 +994,9 @@ def opening_from_hinge_point(point: Tuple[float, float], walls: List[Dict], max_
     return {
         "wall_index": best["wall_index"],
         "position_percent": round(best["position_percent"], 2),
+        "opening_anchor": "edge",
+        "hinge_side": "end" if best["position_percent"] >= 50 else "start",
+        "swing_direction": 1,
     }
 
 
@@ -1203,6 +1217,9 @@ def detect_door_openings_from_wall_gaps(
             doors.append({
                 "wall_index": wall_index,
                 "position_percent": round((start_percent + end_percent) / 2.0, 2),
+                "opening_anchor": "edge",
+                "hinge_side": "end" if ((start_percent + end_percent) / 2.0) >= 50 else "start",
+                "swing_direction": 1,
             })
 
     return doors
@@ -1248,7 +1265,11 @@ def build_response(image: np.ndarray) -> Dict:
     room_crop = image[room_rect[1]:room_rect[1] + room_rect[3], room_rect[0]:room_rect[0] + room_rect[2]]
     room_features = build_room_features(room_crop) if room_crop.size != 0 else None
     preblocked_rects = detect_object_candidate_rects(room_crop, room_rect, room_features)
-    detected_walls = detect_wall_segments(image, room_rect, preblocked_rects, room_features)
+    blocked_detected_walls = detect_wall_segments(image, room_rect, preblocked_rects, room_features)
+    unblocked_detected_walls = detect_wall_segments(image, room_rect, [], room_features)
+    detected_walls = blocked_detected_walls
+    if wall_quality_score(unblocked_detected_walls) > wall_quality_score(blocked_detected_walls) * 1.15:
+        detected_walls = unblocked_detected_walls
     contour_walls = contour_to_walls(contour, room_rect)
     walls = dedupe_walls(detected_walls if len(detected_walls) >= 4 else contour_walls + detected_walls)
     furniture = []

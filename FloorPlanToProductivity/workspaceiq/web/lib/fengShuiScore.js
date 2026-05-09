@@ -1,5 +1,6 @@
 import { pointOnWall } from "./roomState.js";
 import { summarizeZoneImpact } from "./zoning.js";
+import { estimateRoomAreaSquareMeters } from "./roomGeometry.js";
 
 const DISRUPTIVE_TYPES = ["trashcan", "toilet", "sink", "shower"];
 const COLLABORATION_ANCHORS = ["meeting_table", "table", "chair", "armchair", "whiteboard"];
@@ -315,6 +316,8 @@ function areaPerDeskQuality(room, desks) {
   }
 
   const roomArea =
+    Number(room?.estimated_area_m2) ||
+    estimateRoomAreaSquareMeters(room) ||
     (Number(room?.estimated_width_m) || 0) * (Number(room?.estimated_height_m) || 0);
 
   return clamp((roomArea / desks.length - 3.5) / 3.5, 0, 1);

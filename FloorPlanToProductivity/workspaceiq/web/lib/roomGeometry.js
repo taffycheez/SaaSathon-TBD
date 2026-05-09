@@ -585,6 +585,7 @@ export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_
 
   const target = edgeItemAnchorPoint(item, safeWalls);
   const preferredWallIndex = Number.isInteger(Number(item?.wall_index)) ? Number(item.wall_index) : -1;
+  const effectiveWidthPercent = Math.max(4, clampPercent(item?.width_percent ?? widthPercent));
   const openingAnchor = item?.opening_anchor === "edge" ? "edge" : "center";
   const hingeSide = item?.hinge_side === "end" ? "end" : "start";
   const swingDirection = Number(item?.swing_direction) === -1 ? -1 : 1;
@@ -599,8 +600,8 @@ export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_
     }
   });
 
-  const wallLengthPercent = Math.max(lineLength(best.wall), widthPercent);
-  const spanPercent = Math.min(98, (widthPercent / wallLengthPercent) * 100);
+  const wallLengthPercent = Math.max(lineLength(best.wall), effectiveWidthPercent);
+  const spanPercent = Math.min(98, (effectiveWidthPercent / wallLengthPercent) * 100);
   const halfSpanPercent = spanPercent / 2;
   let clampedPosition;
   if (openingAnchor === "edge") {
@@ -624,10 +625,52 @@ export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_
     rotation_deg: lineAngleDegrees(best.wall),
     wall_index: best.wallIndex,
     position_percent: clampedPosition,
+    width_percent: effectiveWidthPercent,
     opening_anchor: openingAnchor,
     hinge_side: hingeSide,
     swing_direction: swingDirection
   };
+}
+
+function polygonArea(points) {
+  if (!Array.isArray(points) || points.length < 3) {
+    return 0;
+  }
+
+  let total = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    total += current.x * next.y - next.x * current.y;
+  }
+
+  return Math.abs(total) / 2;
+}
+
+export function getRoomPolygonAreaPercent(walls) {
+  const graph = normalizeWallGraph(walls || []);
+  if (!Array.isArray(graph.outerPolygon) || graph.outerPolygon.length < 3) {
+    return null;
+  }
+
+  const area = polygonArea(graph.outerPolygon);
+  return area > 0 ? area : null;
+}
+
+export function estimateRoomAreaSquareMeters(room) {
+  const widthMeters = Number(room?.estimated_width_m) || 0;
+  const heightMeters = Number(room?.estimated_height_m) || 0;
+  const bounds = getWallBounds(room?.walls || []);
+  const widthPercent = Math.max(1, bounds.maxX - bounds.minX);
+  const heightPercent = Math.max(1, bounds.maxY - bounds.minY);
+  const polygonAreaPercent = getRoomPolygonAreaPercent(room?.walls || []);
+  const areaPercent = Number.isFinite(polygonAreaPercent) ? polygonAreaPercent : widthPercent * heightPercent;
+
+  if (widthMeters <= 0 || heightMeters <= 0) {
+    return 0;
+  }
+
+  return areaPercent * (widthMeters / widthPercent) * (heightMeters / heightPercent);
 }
 
 function rotateLocalPoint(point, rotationDeg) {
@@ -780,7 +823,7 @@ export function polygonsIntersect(polygonA, polygonB) {
   return pointInPolygon(polygonA[0], polygonB) || pointInPolygon(polygonB[0], polygonA);
 }
 
-function footprintIntersectsWalls(footprint, walls, tolerance = 0.35) {
+function footprintIntersectsWalls(footprint, walls, tolerance = 0.14) {
   if (!Array.isArray(footprint) || footprint.length < 3 || !Array.isArray(walls) || !walls.length) {
     return false;
   }
@@ -862,32 +905,46 @@ export function findFirstFreeObjectPlacement(room, item, collectionType, exclude
   const graph = normalizeWallGraph(room?.walls || []);
   const bounds = getWallBounds(graph.walls.length ? graph.walls : room?.walls || []);
   const candidates = [];
+  const centerCandidate = {
+    x_percent: clampPercent((bounds.minX + bounds.maxX) / 2),
+    y_percent: clampPercent((bounds.minY + bounds.maxY) / 2)
+  };
 
   for (let row = 0; row < 6; row += 1) {
     for (let column = 0; column < 6; column += 1) {
       candidates.push({
-        x_percent: clampPercent(bounds.minX + 12 + column * 14),
-        y_percent: clampPercent(bounds.minY + 12 + row * 14)
+        x_percent: clampPercent(bounds.minX + 8 + column * 16),
+        y_percent: clampPercent(bounds.minY + 8 + row * 16)
       });
     }
   }
 
+  candidates.unshift(centerCandidate);
   candidates.unshift({
     x_percent: clampPercent(item.x_percent),
     y_percent: clampPercent(item.y_percent)
   });
 
-  return (
-    candidates.find((candidate) =>
-      isPlacementValid(room, collectionType, excludedIndex, {
-        ...item,
-        x_percent: candidate.x_percent,
-        y_percent: candidate.y_percent
-      })
-    ) || {
-      x_percent: clampPercent(item.x_percent),
-      y_percent: clampPercent(item.y_percent)
-    }
+  const firstValidCandidate = candidates.find((candidate) =>
+    isPlacementValid(room, collectionType, excludedIndex, {
+      ...item,
+      x_percent: candidate.x_percent,
+      y_percent: candidate.y_percent
+    })
+  );
+
+  if (firstValidCandidate) {
+    return firstValidCandidate;
+  }
+
+  return findNearestValidObjectPlacement(
+    room,
+    {
+      ...item,
+      ...centerCandidate
+    },
+    collectionType,
+    excludedIndex
   );
 }
 

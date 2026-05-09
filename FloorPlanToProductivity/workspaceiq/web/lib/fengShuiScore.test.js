@@ -7,6 +7,7 @@ import { inferZones } from "./zoning.js";
 const BASE_ROOM = {
   estimated_width_m: 8,
   estimated_height_m: 6,
+  estimated_area_m2: 48,
   walls: [
     { x1_percent: 0, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
     { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },

@@ -1,8 +1,11 @@
 import { canonicalizeObjectType, getObjectDefinition, isDeskType } from "../objectCatalog.js";
+import { estimateRoomAreaSquareMeters } from "../roomGeometry.js";
 
 export const fallbackRoom = {
   estimated_width_m: 8,
   estimated_height_m: 6,
+  estimated_area_m2: 48,
+  north_direction_deg: 0,
   walls: [
     { x1_percent: 0, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
     { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },
@@ -310,6 +313,21 @@ export function normalizeRoomDescription(payload) {
   return {
     estimated_width_m: Math.max(1, Number(safePayload.estimated_width_m) || 8),
     estimated_height_m: Math.max(1, Number(safePayload.estimated_height_m) || 6),
+    estimated_area_m2: Math.max(
+      1,
+      Number(
+        (
+          Number(safePayload.estimated_area_m2) ||
+          estimateRoomAreaSquareMeters({
+            estimated_width_m: Math.max(1, Number(safePayload.estimated_width_m) || 8),
+            estimated_height_m: Math.max(1, Number(safePayload.estimated_height_m) || 6),
+            walls
+          }) ||
+          48
+        ).toFixed(2)
+      )
+    ),
+    north_direction_deg: normalizeRotation(safePayload.north_direction_deg),
     walls,
     windows: normalizeEdgeItems(safePayload.windows, walls, safePayload.walls),
     doors: normalizeEdgeItems(safePayload.doors, walls, safePayload.walls),
@@ -374,6 +392,13 @@ export function mergeRoomAnalyses(primaryAnalysis, secondaryAnalysis) {
         1,
         Number(primaryRoom?.estimated_height_m) || Number(secondaryRoom?.estimated_height_m) || fallbackRoom.estimated_height_m
       ),
+      estimated_area_m2: Math.max(
+        1,
+        Number(primaryRoom?.estimated_area_m2) || Number(secondaryRoom?.estimated_area_m2) || fallbackRoom.estimated_area_m2
+      ),
+      north_direction_deg: normalizeRotation(
+        primaryRoom?.north_direction_deg ?? secondaryRoom?.north_direction_deg ?? fallbackRoom.north_direction_deg
+      ),
       walls,
       windows,
       doors,
@@ -414,7 +439,7 @@ export function buildRoomNotes(room, isFallback) {
   notes.push(
     isFallback
       ? "Automatic vision analysis did not complete, so WorkspaceIQ created a starter room you can edit manually."
-      : `Estimated room size is ${room.estimated_width_m}m by ${room.estimated_height_m}m.`
+      : `Estimated room size is ${room.estimated_width_m}m by ${room.estimated_height_m}m, or about ${Math.round(Number(room.estimated_area_m2) || (room.estimated_width_m * room.estimated_height_m))}m².`
   );
   notes.push(`${wallCount} wall segment(s), ${windowCount} window(s), ${doorCount} door(s), ${deskCount} detected desk(s), and ${furnitureCount} other object(s) were mapped.`);
 

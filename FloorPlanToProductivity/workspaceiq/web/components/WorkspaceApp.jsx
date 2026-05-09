@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import UploadScreen from "@/components/UploadScreen";
 import ControlPanel from "@/components/ControlPanel";
 import FloorPlanEditor from "@/components/FloorPlanEditor";
 import FloorPlanEditorBoundary from "@/components/FloorPlanEditorBoundary";
 import { FloorPlanObjectIcon } from "@/components/FloorPlanIconPack";
-import FloorPlanPreview3D from "@/components/FloorPlanPreview3D";
 import ScorePanel from "@/components/ScorePanel";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import { computeFengShuiScore } from "@/lib/fengShuiScore";
@@ -15,6 +15,7 @@ import {
   addWallToRoom,
   addRectangleRoomToRoom,
   addObjectToRoom,
+  applyNorthDirection,
   applyScaleReference,
   clampPercent,
   createDoorForRoom,
@@ -28,11 +29,17 @@ import {
 } from "@/lib/roomState";
 import { normalizeObjectScale } from "@/lib/roomGeometry";
 
+const FloorPlanPreview3D = dynamic(() => import("@/components/FloorPlanPreview3D.jsx"), {
+  ssr: false
+});
+
 const API_BASE_URL = "/api";
 
 const DEFAULT_ROOM = {
   estimated_width_m: 8,
   estimated_height_m: 6,
+  estimated_area_m2: 48,
+  north_direction_deg: 0,
   walls: [
     { x1_percent: 0, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
     { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },
@@ -150,11 +157,11 @@ const LOADING_MESSAGES = [
 ];
 
 const LOADING_FLOATING_OBJECTS = [
-  { id: "desk", type: "desk", size: 66, top: "-10%", left: "-18%", rotate: -8, delay: "0ms" },
-  { id: "chair", type: "chair", size: 52, top: "-8%", right: "-16%", rotate: 12, delay: "620ms" },
-  { id: "plant", type: "plant", size: 50, top: "36%", left: "-22%", rotate: -10, delay: "1220ms" },
-  { id: "couch", type: "couch", size: 82, bottom: "-8%", left: "-16%", rotate: -4, delay: "1820ms" },
-  { id: "sink", type: "sink", size: 52, bottom: "-6%", right: "-16%", rotate: 8, delay: "2420ms" }
+  { id: "desk", type: "desk", size: 66, top: "-18%", left: "-28%", rotate: -8, delay: "0ms" },
+  { id: "chair", type: "chair", size: 52, top: "-16%", right: "-26%", rotate: 12, delay: "620ms" },
+  { id: "plant", type: "plant", size: 50, top: "34%", left: "-30%", rotate: -10, delay: "1220ms" },
+  { id: "couch", type: "couch", size: 82, bottom: "-14%", left: "-24%", rotate: -4, delay: "1820ms" },
+  { id: "sink", type: "sink", size: 52, bottom: "-12%", right: "-24%", rotate: 8, delay: "2420ms" }
 ];
 
 function normalizeWallIndex(value, wallsLength) {
@@ -230,6 +237,8 @@ function normalizeRoomData(data) {
     ...DEFAULT_ROOM,
     estimated_width_m: Math.max(1, Number(safeData.estimated_width_m) || DEFAULT_ROOM.estimated_width_m),
     estimated_height_m: Math.max(1, Number(safeData.estimated_height_m) || DEFAULT_ROOM.estimated_height_m),
+    estimated_area_m2: Math.max(1, Number(safeData.estimated_area_m2) || DEFAULT_ROOM.estimated_area_m2),
+    north_direction_deg: normalizeRotation(safeData.north_direction_deg),
     walls,
     windows: Array.isArray(safeData.windows)
       ? safeData.windows.map((item) => edgeItemFromLegacy(item, walls))
@@ -573,6 +582,7 @@ export default function WorkspaceApp() {
   const [showZones, setShowZones] = useState(true);
   const [wallToolMode, setWallToolMode] = useState("select");
   const [scaleToolActive, setScaleToolActive] = useState(false);
+  const [northToolActive, setNorthToolActive] = useState(false);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -814,6 +824,11 @@ export default function WorkspaceApp() {
     setScaleToolActive(false);
   }
 
+  function applyNorthAngle(angleDeg) {
+    setRoom((currentRoom) => applyNorthDirection(currentRoom, angleDeg));
+    setNorthToolActive(false);
+  }
+
   function updateZoneOverride(zoneId, nextType) {
     setRoom((currentRoom) => ({
       ...currentRoom,
@@ -1038,6 +1053,7 @@ export default function WorkspaceApp() {
             <FloorPlanEditorBoundary>
               <FloorPlanEditor
                 room={room}
+                displayRoom={activeRoom}
                 setRoom={setRoom}
                 onRoomPreviewChange={setRoomPreview}
                 zones={showZones ? zoneAnalysis.zones : []}
@@ -1046,9 +1062,12 @@ export default function WorkspaceApp() {
                 setWallToolMode={setWallToolMode}
                 scaleToolActive={scaleToolActive}
                 setScaleToolActive={setScaleToolActive}
+                northToolActive={northToolActive}
+                setNorthToolActive={setNorthToolActive}
                 onAddWall={addWall}
                 onAddRectangleRoom={addRectangleRoom}
                 onApplyScale={applyScale}
+                onApplyNorthDirection={applyNorthAngle}
                 imagePreview={imagePreview}
                 showReferenceImage={showReferenceImage}
                 setShowReferenceImage={setShowReferenceImage}
@@ -1085,6 +1104,8 @@ export default function WorkspaceApp() {
               setWallToolMode={setWallToolMode}
               scaleToolActive={scaleToolActive}
               setScaleToolActive={setScaleToolActive}
+              northToolActive={northToolActive}
+              setNorthToolActive={setNorthToolActive}
               onAddObject={addObject}
               onGenerateLayout={handleGenerateLayout}
               onReset={resetWorkspace}

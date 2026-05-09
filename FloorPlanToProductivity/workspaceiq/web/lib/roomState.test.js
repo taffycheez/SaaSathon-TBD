@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   addWallToRoom,
   addRectangleRoomToRoom,
+  applyNorthDirection,
   applyScaleReference,
   addObjectToRoom,
   createDoorForRoom,
@@ -13,6 +14,8 @@ import {
   moveWallByDelta,
   normalizeRoomLayout,
   pointOnWall,
+  resizeRoomBounds,
+  updateEdgeItem,
   updatePlacedObject,
   updateWallEndpoint,
   updateEdgeItemPosition,
@@ -23,6 +26,7 @@ import { getScaledItemDimensions } from "./roomGeometry.js";
 const BASE_ROOM = {
   estimated_width_m: 8,
   estimated_height_m: 6,
+  estimated_area_m2: 48,
   walls: [
     { x1_percent: 0, y1_percent: 0, x2_percent: 98, y2_percent: 0 },
     { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },
@@ -68,6 +72,7 @@ test("createWindowForRoom attaches a new window to a wall", () => {
   assert.equal(windowItem.wall_index, 0);
   assert.equal(windowItem.y_percent, 0);
   assert.equal(windowItem.position_percent, 28);
+  assert.equal(windowItem.width_percent, 14);
 });
 
 test("createDoorForRoom attaches a new door to a wall", () => {
@@ -96,6 +101,7 @@ test("normalizeRoomLayout keeps legacy opening metadata anchored to the intended
   assert.equal(room.doors[0].wall_index, 1);
   assert.equal(room.doors[0].x_percent, 100);
   assert.equal(room.doors[0].y_percent, 40);
+  assert.equal(room.doors[0].opening_anchor, "edge");
 });
 
 test("addObjectToRoom chooses a non-overlapping catalog placement", () => {
@@ -114,6 +120,22 @@ test("addObjectToRoom chooses a non-overlapping catalog placement", () => {
       y_percent: secondRoom.desks[1].y_percent
     }
   );
+});
+
+test("addObjectToRoom does not place a desk directly on an interior wall", () => {
+  const room = addObjectToRoom(
+    normalizeRoomLayout({
+      ...BASE_ROOM,
+      walls: [
+        ...BASE_ROOM.walls,
+        { x1_percent: 50, y1_percent: 16, x2_percent: 50, y2_percent: 84 }
+      ]
+    }),
+    "desk"
+  );
+
+  assert.equal(room.desks.length, 1);
+  assert.notEqual(room.desks[0].x_percent, 50);
 });
 
 test("normalizeFurnitureItem preserves individual scale factors", () => {
@@ -172,6 +194,26 @@ test("updatePlacedObject nudges wall-touching furniture while scaling", () => {
   const updated = updatePlacedObject(room, "desks", 0, { scale: 1.5 });
   assert.equal(updated.desks[0].scale, 1.5);
   assert.ok(updated.desks[0].y_percent > firstDesk.y_percent);
+});
+
+test("updatePlacedObject allows rotation controls to nudge items into a valid orientation", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    desks: [
+      normalizeFurnitureItem({
+        type: "desk",
+        x_percent: 8,
+        y_percent: 50,
+        width_percent: 10,
+        height_percent: 6,
+        rotation_deg: 0
+      })
+    ]
+  });
+
+  const rotated = updatePlacedObject(room, "desks", 0, { rotation_deg: 45 });
+  assert.equal(rotated.desks[0].rotation_deg, 45);
+  assert.ok(rotated.desks[0].x_percent >= room.desks[0].x_percent);
 });
 
 test("updatePlacedObjectPosition rejects overlapping moves", () => {
@@ -253,6 +295,23 @@ test("updateEdgeItemPosition keeps windows snapped to the nearest wall", () => {
 
   assert.equal(moved.windows[0].wall_index, 1);
   assert.equal(moved.windows[0].x_percent, 100);
+});
+
+test("updateEdgeItem preserves door orientation metadata while re-snapping to the wall", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    doors: [createDoorForRoom(BASE_ROOM)]
+  });
+
+  const updated = updateEdgeItem(room, "doors", 0, {
+    hinge_side: "end",
+    swing_direction: -1
+  });
+
+  assert.equal(updated.doors[0].opening_anchor, "edge");
+  assert.equal(updated.doors[0].hinge_side, "end");
+  assert.equal(updated.doors[0].swing_direction, -1);
+  assert.equal(updated.doors[0].y_percent, 0);
 });
 
 test("updateWallEndpoint moves connected wall endpoints together", () => {
@@ -400,6 +459,28 @@ test("addRectangleRoomToRoom adds a four-wall room shell", () => {
   assert.ok(updated.walls.some((wall) => Math.abs(wall.x1_percent - 20) <= 0.1 && Math.abs(wall.x2_percent - 20) <= 0.1));
 });
 
+test("resizeRoomBounds resizes the room shell while keeping object sizes intact", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    furniture: [
+      normalizeFurnitureItem({
+        type: "couch",
+        x_percent: 50,
+        y_percent: 50,
+        width_percent: 14,
+        height_percent: 7
+      })
+    ]
+  });
+
+  const resized = resizeRoomBounds(room, "e", { x_percent: 80, y_percent: 50 });
+
+  assert.ok(resized.walls[1].x1_percent < 100);
+  assert.ok(resized.walls[1].x2_percent < 100);
+  assert.equal(resized.furniture[0].width_percent, room.furniture[0].width_percent);
+  assert.equal(resized.furniture[0].height_percent, room.furniture[0].height_percent);
+});
+
 test("applyScaleReference recalculates room dimensions from a measured line", () => {
   const room = normalizeRoomLayout(BASE_ROOM);
   const updated = applyScaleReference(
@@ -411,9 +492,39 @@ test("applyScaleReference recalculates room dimensions from a measured line", ()
 
   assert.equal(updated.estimated_width_m, 8);
   assert.equal(updated.estimated_height_m, 8);
+  assert.equal(updated.estimated_area_m2, 64);
   assert.deepEqual(updated.scale_reference, {
     start: { x: 0, y: 0 },
     end: { x: 50, y: 0 },
     distance_m: 4
   });
+});
+
+test("applyScaleReference calculates polygon area for irregular rooms", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    walls: [
+      { x1_percent: 0, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
+      { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 40 },
+      { x1_percent: 100, y1_percent: 40, x2_percent: 40, y2_percent: 40 },
+      { x1_percent: 40, y1_percent: 40, x2_percent: 40, y2_percent: 100 },
+      { x1_percent: 40, y1_percent: 100, x2_percent: 0, y2_percent: 100 },
+      { x1_percent: 0, y1_percent: 100, x2_percent: 0, y2_percent: 0 }
+    ]
+  });
+  const updated = applyScaleReference(
+    room,
+    { x_percent: 0, y_percent: 0 },
+    { x_percent: 50, y_percent: 0 },
+    4
+  );
+
+  assert.equal(updated.estimated_width_m, 8);
+  assert.equal(updated.estimated_height_m, 8);
+  assert.equal(updated.estimated_area_m2, 40.96);
+});
+
+test("applyNorthDirection normalizes and stores the room compass direction", () => {
+  const updated = applyNorthDirection(BASE_ROOM, 450);
+  assert.equal(updated.north_direction_deg, 90);
 });

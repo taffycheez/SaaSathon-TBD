@@ -2,6 +2,7 @@ import { canonicalizeObjectType, getObjectDefinition, isDeskType } from "./objec
 import {
   findFirstFreeObjectPlacement,
   findNearestValidObjectPlacement,
+  estimateRoomAreaSquareMeters,
   normalizeObjectScale,
   insertConnectedWall,
   isPlacementValid,
@@ -92,6 +93,9 @@ export function addObjectToRoom(room, type) {
   const nextItem = createPlacedObject(canonicalType, seedIndex);
   const collectionType = isDeskType(canonicalType) ? "desks" : "furniture";
   const placement = findFirstFreeObjectPlacement(room, nextItem, collectionType);
+  if (!placement) {
+    return room;
+  }
   const placedItem = {
     ...nextItem,
     ...placement
@@ -127,17 +131,37 @@ export function normalizeFurnitureItem(item) {
 export function normalizeRoomLayout(room) {
   const graph = normalizeWallGraph(room?.walls || []);
   const snappedWalls = graph.walls.length ? graph.walls : room?.walls || [];
+  const metrics = computeRoomMetrics({
+    ...room,
+    walls: snappedWalls
+  });
 
   return {
     ...room,
+    estimated_width_m: metrics.estimated_width_m,
+    estimated_height_m: metrics.estimated_height_m,
+    estimated_area_m2: metrics.estimated_area_m2,
+    north_direction_deg: normalizeRotation(room?.north_direction_deg),
     walls: snappedWalls,
     wallIssues: graph.issues,
     windows: Array.isArray(room?.windows)
-      ? room.windows.map((item) => snapEdgeItemToWalls(item, snappedWalls))
+      ? room.windows.map((item) => snapEdgeItemToWalls(item, snappedWalls, item?.width_percent ?? 14))
       : [],
     doors: Array.isArray(room?.doors)
-      ? room.doors.map((item) => snapEdgeItemToWalls(item, snappedWalls))
+      ? room.doors.map((item) => snapEdgeItemToWalls({
+        opening_anchor: "edge",
+        hinge_side: "start",
+        swing_direction: 1,
+        ...item
+      }, snappedWalls, item?.width_percent ?? 10))
       : []
+  };
+}
+
+export function applyNorthDirection(room, angleDeg) {
+  return {
+    ...room,
+    north_direction_deg: normalizeRotation(angleDeg)
   };
 }
 
@@ -166,9 +190,11 @@ function createEdgeItemForRoom(room, type) {
       y_percent,
       rotation_deg: 0,
       wall_index,
-      position_percent
+      position_percent,
+      width_percent: type === "window" ? 14 : 10
     },
-    walls
+    walls,
+    type === "window" ? 14 : 10
   );
 }
 
@@ -189,11 +215,22 @@ export function createDoorForRoom(room) {
 }
 
 export function updateEdgeItemPosition(room, collectionType, index, pointerPosition) {
+  return updateEdgeItem(room, collectionType, index, pointerPosition);
+}
+
+export function updateEdgeItem(room, collectionType, index, updates) {
   const walls = Array.isArray(room?.walls) ? room.walls : [];
+  const items = Array.isArray(room?.[collectionType]) ? room[collectionType] : [];
   return {
     ...room,
-    [collectionType]: (room?.[collectionType] || []).map((item, itemIndex) =>
-      itemIndex === index ? snapEdgeItemToWalls({ ...item, ...pointerPosition }, walls) : item
+    [collectionType]: items.map((item, itemIndex) =>
+      itemIndex === index
+        ? snapEdgeItemToWalls(
+            { ...item, ...updates },
+            walls,
+            collectionType === "windows" ? item?.width_percent ?? 14 : item?.width_percent ?? 10
+          )
+        : item
     )
   };
 }
@@ -234,6 +271,7 @@ export function updatePlacedObject(room, collectionType, index, updates) {
 
   if (!isPlacementValid(room, collectionType, index, nextItem)) {
     if (
+      updates?.rotation_deg != null ||
       updates?.scale != null ||
       updates?.width_percent != null ||
       updates?.height_percent != null ||
@@ -383,6 +421,33 @@ function applyDeltaToPoint(point, delta) {
   };
 }
 
+function clampBoundsSize(min, max, minimumSize = 8) {
+  if (max - min >= minimumSize) {
+    return { min, max };
+  }
+
+  const center = (min + max) / 2;
+  const half = minimumSize / 2;
+  return {
+    min: clampPercent(center - half),
+    max: clampPercent(center + half)
+  };
+}
+
+function transformPointWithinBounds(point, fromBounds, toBounds) {
+  const sourceWidth = Math.max(1, fromBounds.maxX - fromBounds.minX);
+  const sourceHeight = Math.max(1, fromBounds.maxY - fromBounds.minY);
+  const nextWidth = Math.max(1, toBounds.maxX - toBounds.minX);
+  const nextHeight = Math.max(1, toBounds.maxY - toBounds.minY);
+  const xRatio = (point.x - fromBounds.minX) / sourceWidth;
+  const yRatio = (point.y - fromBounds.minY) / sourceHeight;
+
+  return {
+    x: clampPercent(toBounds.minX + xRatio * nextWidth),
+    y: clampPercent(toBounds.minY + yRatio * nextHeight)
+  };
+}
+
 export function moveWallByDelta(room, wallIndex, rawDelta) {
   const walls = Array.isArray(room?.walls) ? room.walls : [];
   const targetWall = walls[wallIndex];
@@ -436,6 +501,93 @@ export function moveWallByDelta(room, wallIndex, rawDelta) {
       return nextWall;
     })
   });
+}
+
+export function resizeRoomBounds(room, handle, pointerPosition) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  if (!walls.length) {
+    return room;
+  }
+
+  const bounds = getWallBounds(walls);
+  let nextBounds = { ...bounds };
+  const targetX = clampPercent(pointerPosition?.x_percent);
+  const targetY = clampPercent(pointerPosition?.y_percent);
+
+  if (handle.includes("w")) {
+    nextBounds.minX = Math.min(targetX, bounds.maxX - 8);
+  }
+  if (handle.includes("e")) {
+    nextBounds.maxX = Math.max(targetX, bounds.minX + 8);
+  }
+  if (handle.includes("n")) {
+    nextBounds.minY = Math.min(targetY, bounds.maxY - 8);
+  }
+  if (handle.includes("s")) {
+    nextBounds.maxY = Math.max(targetY, bounds.minY + 8);
+  }
+
+  const widthClamped = clampBoundsSize(nextBounds.minX, nextBounds.maxX, 8);
+  const heightClamped = clampBoundsSize(nextBounds.minY, nextBounds.maxY, 8);
+  nextBounds = {
+    minX: widthClamped.min,
+    maxX: widthClamped.max,
+    minY: heightClamped.min,
+    maxY: heightClamped.max
+  };
+
+  const transform = (point) => transformPointWithinBounds(point, bounds, nextBounds);
+
+  const transformedWalls = walls.map((wall) => {
+    const start = transform({ x: Number(wall.x1_percent) || 0, y: Number(wall.y1_percent) || 0 });
+    const end = transform({ x: Number(wall.x2_percent) || 0, y: Number(wall.y2_percent) || 0 });
+    return {
+      ...wall,
+      x1_percent: start.x,
+      y1_percent: start.y,
+      x2_percent: end.x,
+      y2_percent: end.y
+    };
+  });
+
+  const transformEdgeItem = (item) => {
+    if (!item || item.x_percent == null || item.y_percent == null) {
+      return item;
+    }
+    const nextPoint = transform({ x: Number(item.x_percent) || 0, y: Number(item.y_percent) || 0 });
+    return {
+      ...item,
+      x_percent: nextPoint.x,
+      y_percent: nextPoint.y
+    };
+  };
+
+  const transformPlacedItem = (item) => {
+    const nextPoint = transform({ x: Number(item?.x_percent) || 0, y: Number(item?.y_percent) || 0 });
+    return {
+      ...item,
+      x_percent: nextPoint.x,
+      y_percent: nextPoint.y
+    };
+  };
+
+  const nextRoom = {
+    ...room,
+    walls: transformedWalls,
+    windows: Array.isArray(room?.windows) ? room.windows.map(transformEdgeItem) : [],
+    doors: Array.isArray(room?.doors) ? room.doors.map(transformEdgeItem) : [],
+    furniture: Array.isArray(room?.furniture) ? room.furniture.map(transformPlacedItem) : [],
+    desks: Array.isArray(room?.desks) ? room.desks.map(transformPlacedItem) : [],
+    scale_reference: room?.scale_reference
+      ? {
+          ...room.scale_reference,
+          start: transform(room.scale_reference.start),
+          end: transform(room.scale_reference.end)
+        }
+      : room?.scale_reference
+  };
+
+  return normalizeRoomLayout(nextRoom);
 }
 
 export function addWallToRoom(room, startPoint, endPoint) {
@@ -592,19 +744,52 @@ export function applyScaleReference(room, startPoint, endPoint, distanceMeters) 
     return room;
   }
 
-  const bounds = getWallBounds(room?.walls || []);
-  const widthPercent = Math.max(1, bounds.maxX - bounds.minX);
-  const heightPercent = Math.max(1, bounds.maxY - bounds.minY);
-  const metersPerPercent = numericDistance / measuredPercent;
-
-  return {
+  return computeRoomMetrics({
     ...room,
-    estimated_width_m: Math.max(1, Number((widthPercent * metersPerPercent).toFixed(2))),
-    estimated_height_m: Math.max(1, Number((heightPercent * metersPerPercent).toFixed(2))),
     scale_reference: {
       start,
       end,
       distance_m: Number(numericDistance.toFixed(2))
     }
+  });
+}
+
+function computeRoomMetrics(room) {
+  const bounds = getWallBounds(room?.walls || []);
+  const widthPercent = Math.max(1, bounds.maxX - bounds.minX);
+  const heightPercent = Math.max(1, bounds.maxY - bounds.minY);
+  const measuredDistance = Number(room?.scale_reference?.distance_m);
+  const scaleStart = room?.scale_reference?.start;
+  const scaleEnd = room?.scale_reference?.end;
+  const measuredPercent =
+    scaleStart && scaleEnd
+      ? Math.hypot((Number(scaleEnd.x) || 0) - (Number(scaleStart.x) || 0), (Number(scaleEnd.y) || 0) - (Number(scaleStart.y) || 0))
+      : 0;
+  const hasScaleReference = Number.isFinite(measuredDistance) && measuredDistance > 0 && measuredPercent >= 0.5;
+  const metersPerPercent = hasScaleReference ? measuredDistance / measuredPercent : 0;
+  const estimated_width_m = hasScaleReference
+    ? Math.max(1, Number((widthPercent * metersPerPercent).toFixed(2)))
+    : Math.max(1, Number(room?.estimated_width_m) || 0);
+  const estimated_height_m = hasScaleReference
+    ? Math.max(1, Number((heightPercent * metersPerPercent).toFixed(2)))
+    : Math.max(1, Number(room?.estimated_height_m) || 0);
+  const estimated_area_m2 = Math.max(
+    1,
+    Number(
+      (
+        estimateRoomAreaSquareMeters({
+          ...room,
+          estimated_width_m,
+          estimated_height_m
+        }) || estimated_width_m * estimated_height_m
+      ).toFixed(2)
+    )
+  );
+
+  return {
+    ...room,
+    estimated_width_m,
+    estimated_height_m,
+    estimated_area_m2
   };
 }

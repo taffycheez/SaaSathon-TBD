@@ -12,6 +12,8 @@ export default function ControlPanel({
   setWallToolMode,
   scaleToolActive,
   setScaleToolActive,
+  northToolActive,
+  setNorthToolActive,
   onAddObject,
   onGenerateLayout,
   onReset,
@@ -75,13 +77,25 @@ export default function ControlPanel({
             className={`object-chip quick-add-chip${scaleToolActive ? " active" : ""}`}
             onClick={() => {
               setWallToolMode("select");
+              setNorthToolActive(false);
               setScaleToolActive((current) => !current);
             }}
           >
             {scaleToolActive ? "Cancel Scale" : "Set Scale"}
           </button>
+          <button
+            type="button"
+            className={`object-chip quick-add-chip${northToolActive ? " active" : ""}`}
+            onClick={() => {
+              setWallToolMode("select");
+              setScaleToolActive(false);
+              setNorthToolActive((current) => !current);
+            }}
+          >
+            {northToolActive ? "Cancel North" : "Set North"}
+          </button>
         </div>
-        <small className="field-hint">Use Set Scale to calibrate the plan from a known real-world measurement.</small>
+        <small className="field-hint">Use Set Scale to calibrate the plan, and Set North to aim daylight in the 3D room.</small>
       </div>
 
       <div className="field">

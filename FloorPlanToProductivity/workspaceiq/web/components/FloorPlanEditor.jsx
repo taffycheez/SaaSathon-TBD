@@ -6,7 +6,9 @@ import {
   deleteWallFromRoom,
   getSnappedWallPoint,
   moveWallByDelta,
-  updateEdgeItemPosition,
+  normalizeRotation,
+  resizeRoomBounds,
+  updateEdgeItem,
   updatePlacedObject,
   updateWallEndpoint
 } from "@/lib/roomState";
@@ -280,13 +282,47 @@ function TrashIcon() {
   );
 }
 
-function CloseIcon() {
+function CloseGlyph({ size = 12, stroke = "currentColor", strokeWidth = 2 }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
+    <g aria-hidden="true">
+      <line
+        x1="0"
+        y1="0"
+        x2={size}
+        y2={size}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+      <line
+        x1="0"
+        y1={size}
+        x2={size}
+        y2="0"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+    </g>
   );
+}
+
+function pointerToBoundedRoomPosition(pointer, roomBox, bounds, shouldClamp = true) {
+  const rawX = bounds.minX + ((pointer.x - roomBox.x) / roomBox.width) * Math.max(1, bounds.maxX - bounds.minX);
+  const rawY = bounds.minY + ((pointer.y - roomBox.y) / roomBox.height) * Math.max(1, bounds.maxY - bounds.minY);
+
+  return {
+    x_percent: shouldClamp ? Math.max(0, Math.min(100, rawX)) : rawX,
+    y_percent: shouldClamp ? Math.max(0, Math.min(100, rawY)) : rawY
+  };
+}
+
+function northAngleFromPoint(point, bounds) {
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  const dx = point.x_percent - centerX;
+  const dy = point.y_percent - centerY;
+  return ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
 }
 
 function rotateByStep(rotationDeg, step = ROTATION_STEP_DEGREES) {
@@ -297,40 +333,35 @@ function cycleDoorOrientation(door) {
   const currentHingeSide = door?.hinge_side === "end" ? "end" : "start";
   const currentSwingDirection = Number(door?.swing_direction) === -1 ? -1 : 1;
 
-  if (currentHingeSide === "start" && currentSwingDirection === 1) {
-    return { hinge_side: "start", swing_direction: -1, opening_anchor: "edge" };
-  }
-  if (currentHingeSide === "start" && currentSwingDirection === -1) {
-    return { hinge_side: "end", swing_direction: 1, opening_anchor: "edge" };
-  }
-  if (currentHingeSide === "end" && currentSwingDirection === 1) {
-    return { hinge_side: "end", swing_direction: -1, opening_anchor: "edge" };
-  }
-  return { hinge_side: "start", swing_direction: 1, opening_anchor: "edge" };
+  return {
+    hinge_side: currentHingeSide,
+    swing_direction: currentSwingDirection === 1 ? -1 : 1,
+    opening_anchor: "edge"
+  };
 }
 
 function DoorShape({ hingeSide = "start", swingDirection = 1 }) {
-  const hingeX = hingeSide === "end" ? DOOR_RENDER_LENGTH / 2 : -DOOR_RENDER_LENGTH / 2;
-  const closedX = hingeSide === "end" ? hingeX - DOOR_RENDER_LENGTH : hingeX + DOOR_RENDER_LENGTH;
+  const closedX = hingeSide === "end" ? -DOOR_RENDER_LENGTH : DOOR_RENDER_LENGTH;
   const openY = DOOR_RENDER_LENGTH * swingDirection;
   const arcSweep = swingDirection > 0 ? 1 : 0;
   return (
     <>
-      <line x1={hingeX} y1="0" x2={hingeX} y2={openY} stroke="#8b5e34" strokeWidth="2.8" strokeLinecap="round" />
+      <line x1="0" y1="0" x2="0" y2={openY} stroke="#8b5e34" strokeWidth="2.8" strokeLinecap="round" />
       <path
-        d={`M ${closedX} 0 A ${DOOR_RENDER_LENGTH} ${DOOR_RENDER_LENGTH} 0 0 ${arcSweep} ${hingeX} ${openY}`}
+        d={`M ${closedX} 0 A ${DOOR_RENDER_LENGTH} ${DOOR_RENDER_LENGTH} 0 0 ${arcSweep} 0 ${openY}`}
         fill="none"
         stroke="#8b5e34"
         strokeWidth="2"
         strokeDasharray="4 3"
       />
-      <circle cx={hingeX} cy="0" r="2.1" fill="#8b5e34" />
+      <circle cx="0" cy="0" r="2.1" fill="#8b5e34" />
     </>
   );
 }
 
 export default function FloorPlanEditor({
   room,
+  displayRoom = room,
   setRoom,
   onRoomPreviewChange,
   zones = [],
@@ -344,9 +375,12 @@ export default function FloorPlanEditor({
   setWallToolMode,
   scaleToolActive = false,
   setScaleToolActive,
+  northToolActive = false,
+  setNorthToolActive,
   onAddWall,
   onAddRectangleRoom,
   onApplyScale,
+  onApplyNorthDirection,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -360,12 +394,14 @@ export default function FloorPlanEditor({
   const [dragState, setDragState] = useState(null);
   const [selectedWallIndex, setSelectedWallIndex] = useState(null);
   const [selectedPlacedItem, setSelectedPlacedItem] = useState(null);
+  const [selectedEdgeItem, setSelectedEdgeItem] = useState(null);
   const [scaleDraft, setScaleDraft] = useState(null);
   const [scaleInputValue, setScaleInputValue] = useState("1");
   const [hoveredZoneId, setHoveredZoneId] = useState(null);
   const [pinnedZoneId, setPinnedZoneId] = useState(null);
-  const wallGraph = useMemo(() => normalizeWallGraph(room.walls || []), [room.walls]);
-  const walls = wallGraph.walls.length ? wallGraph.walls : Array.isArray(room.walls) ? room.walls : [];
+  const renderedRoom = displayRoom || room;
+  const wallGraph = useMemo(() => normalizeWallGraph(renderedRoom.walls || []), [renderedRoom.walls]);
+  const walls = wallGraph.walls.length ? wallGraph.walls : Array.isArray(renderedRoom.walls) ? renderedRoom.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
   const doors = Array.isArray(room.doors) ? room.doors : [];
   const furniture = Array.isArray(room.furniture) ? room.furniture : [];
@@ -373,6 +409,10 @@ export default function FloorPlanEditor({
   const selectedItem =
     selectedPlacedItem && (selectedPlacedItem.type === "furniture" || selectedPlacedItem.type === "desks")
       ? room?.[selectedPlacedItem.type]?.[selectedPlacedItem.index]
+      : null;
+  const selectedOpening =
+    selectedEdgeItem && (selectedEdgeItem.type === "windows" || selectedEdgeItem.type === "doors")
+      ? room?.[selectedEdgeItem.type]?.[selectedEdgeItem.index]
       : null;
   const selectedItemLabel = selectedItem
     ? `${getLabel(selectedItem, "Object")}${selectedPlacedItem.type === "desks" ? ` ${selectedPlacedItem.index + 1}` : ""}`
@@ -386,6 +426,14 @@ export default function FloorPlanEditor({
     height: roomSize.height
   };
   const zoneMarkerRadius = Math.max(6, Math.min(11, 12 - (roomBox.width / CANVAS_WIDTH) * 4));
+  const roomCenter = {
+    x: (roomSize.bounds.minX + roomSize.bounds.maxX) / 2,
+    y: (roomSize.bounds.minY + roomSize.bounds.maxY) / 2
+  };
+  const currentNorthAngle =
+    dragState?.kind === "north-set"
+      ? northAngleFromPoint(pointerToBoundedRoomPosition(dragState.point, roomBoxRef.current, roomSize.bounds, false), roomSize.bounds)
+      : normalizeRotation(room?.north_direction_deg);
 
   dragStateRef.current = dragState;
   roomBoxRef.current = roomBox;
@@ -418,6 +466,16 @@ export default function FloorPlanEditor({
       setSelectedPlacedItem(null);
     }
   }, [selectedPlacedItem, furniture.length, desks.length]);
+
+  useEffect(() => {
+    if (!selectedEdgeItem) {
+      return;
+    }
+    const items = selectedEdgeItem.type === "windows" ? windows : doors;
+    if (selectedEdgeItem.index < 0 || selectedEdgeItem.index >= items.length) {
+      setSelectedEdgeItem(null);
+    }
+  }, [selectedEdgeItem, windows.length, doors.length]);
 
   useEffect(() => {
     if (pinnedZoneId && !zones.some((zone) => zone.id === pinnedZoneId)) {
@@ -467,6 +525,13 @@ export default function FloorPlanEditor({
           return;
         }
 
+        if (selectedEdgeItem?.type === "windows" || selectedEdgeItem?.type === "doors") {
+          event.preventDefault();
+          removePlacedItem(selectedEdgeItem.type, selectedEdgeItem.index);
+          setSelectedEdgeItem(null);
+          return;
+        }
+
         if (selectedPlacedItem?.type === "furniture" || selectedPlacedItem?.type === "desks") {
           event.preventDefault();
           removeSelectedPlacedItem();
@@ -476,7 +541,7 @@ export default function FloorPlanEditor({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onRedo, onUndo, selectedPlacedItem, selectedWallIndex]);
+  }, [onRedo, onUndo, selectedEdgeItem, selectedPlacedItem, selectedWallIndex]);
 
   function withUpdatedPlacedItem(currentRoom, type, index, updates) {
     return {
@@ -498,7 +563,7 @@ export default function FloorPlanEditor({
   function updatePlacedItem(type, index, updates, options) {
     setRoom((currentRoom) => {
       if (type === "windows" || type === "doors") {
-        return updateEdgeItemPosition(currentRoom, type, index, updates);
+        return updateEdgeItem(currentRoom, type, index, updates);
       }
 
       return updatePlacedObject(currentRoom, type, index, updates);
@@ -511,6 +576,43 @@ export default function FloorPlanEditor({
     }
 
     updatePlacedItem(selectedPlacedItem.type, selectedPlacedItem.index, { scale });
+  }
+
+  function updateSelectedWindowWidth(widthPercent) {
+    if (selectedEdgeItem?.type !== "windows") {
+      return;
+    }
+
+    updatePlacedItem("windows", selectedEdgeItem.index, { width_percent: Number(widthPercent) });
+  }
+
+  function rotateSelectedItem(step = ROTATION_STEP_DEGREES) {
+    if (!selectedPlacedItem) {
+      return;
+    }
+
+    const collection = selectedPlacedItem.type === "desks" ? desks : furniture;
+    const item = collection?.[selectedPlacedItem.index];
+    if (!item) {
+      return;
+    }
+
+    updatePlacedItem(selectedPlacedItem.type, selectedPlacedItem.index, {
+      rotation_deg: rotateByStep(item.rotation_deg, step)
+    });
+  }
+
+  function cycleSelectedDoorOrientation() {
+    if (selectedEdgeItem?.type !== "doors") {
+      return;
+    }
+
+    const item = doors?.[selectedEdgeItem.index];
+    if (!item) {
+      return;
+    }
+
+    updatePlacedItem("doors", selectedEdgeItem.index, cycleDoorOrientation(item));
   }
 
   function previewWallUpdate(wallIndex, endpoint, point) {
@@ -543,6 +645,16 @@ export default function FloorPlanEditor({
       (currentRoom) => moveWallByDelta(currentRoom, wallIndex, wallDragDeltaToRoomPercent(startPoint, point)),
       options
     );
+  }
+
+  function previewRoomResize(handle, point) {
+    const previewPosition = pointerToBoundedRoomPosition(point, roomBoxRef.current, roomSize.bounds, false);
+    onRoomPreviewChange?.(resizeRoomBounds(room, handle, previewPosition));
+  }
+
+  function commitRoomResize(handle, point, options) {
+    const previewPosition = pointerToBoundedRoomPosition(point, roomBoxRef.current, roomSize.bounds, false);
+    setRoom((currentRoom) => resizeRoomBounds(currentRoom, handle, previewPosition), options);
   }
 
   function removePlacedItem(type, index) {
@@ -637,9 +749,15 @@ export default function FloorPlanEditor({
     const point = getSvgPointFromClient(event.clientX, event.clientY);
     if (type === "furniture" || type === "desks") {
       setSelectedPlacedItem({ type, index });
+      setSelectedEdgeItem(null);
+      setSelectedWallIndex(null);
+    } else if (type === "windows" || type === "doors") {
+      setSelectedEdgeItem({ type, index });
+      setSelectedPlacedItem(null);
       setSelectedWallIndex(null);
     } else {
       setSelectedPlacedItem(null);
+      setSelectedEdgeItem(null);
     }
     setLiveDragState({
       kind: "item",
@@ -704,6 +822,28 @@ export default function FloorPlanEditor({
     setLiveDragState({
       kind: "wall-move",
       wallIndex,
+      startPoint: point,
+      point,
+      overTrash: false
+    });
+  }
+
+  function startRoomResizeDrag(handle, event) {
+    if (wallToolMode !== "select" || scaleToolActive) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    setSelectedPlacedItem(null);
+    setSelectedEdgeItem(null);
+    setSelectedWallIndex(null);
+    setPinnedZoneId(null);
+    setLiveDragState({
+      kind: "room-resize",
+      handle,
       startPoint: point,
       point,
       overTrash: false
@@ -798,9 +938,37 @@ export default function FloorPlanEditor({
     });
   }
 
+  function startNorthDrag(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget?.setPointerCapture?.(event.pointerId);
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    setSelectedPlacedItem(null);
+    setSelectedWallIndex(null);
+    setPinnedZoneId(null);
+    setLiveDragState({
+      kind: "north-set",
+      startPoint: point,
+      point,
+      overTrash: false
+    });
+  }
+
   function updateScalePointer(point) {
     setLiveDragState((current) => (
       current?.kind === "scale-measure"
+        ? {
+            ...current,
+            point
+          }
+        : current
+    ));
+  }
+
+  function updateNorthPointer(point) {
+    setLiveDragState((current) => (
+      current?.kind === "north-set"
         ? {
             ...current,
             point
@@ -815,6 +983,39 @@ export default function FloorPlanEditor({
       return;
     }
     finishDrag(clientX, clientY);
+  }
+
+  function finishNorthDrag(clientX, clientY) {
+    const currentDrag = dragStateRef.current;
+    if (currentDrag?.kind !== "north-set") {
+      return;
+    }
+    finishDrag(clientX, clientY);
+  }
+
+  function promptForScaleDraft(start, end) {
+    if (typeof window === "undefined") {
+      setScaleDraft({ start, end });
+      return;
+    }
+
+    const response = window.prompt(
+      "Enter the real-world length of that line in metres.",
+      scaleInputValue || "1"
+    );
+
+    if (response == null) {
+      return;
+    }
+
+    const numericDistance = Number(response);
+    if (!Number.isFinite(numericDistance) || numericDistance <= 0) {
+      window.alert("Please enter a positive number in metres.");
+      return;
+    }
+
+    setScaleInputValue(String(numericDistance));
+    onApplyScale?.(start, end, numericDistance);
   }
 
   function applyScaleDraft() {
@@ -865,6 +1066,14 @@ export default function FloorPlanEditor({
       return;
     }
 
+    if (currentDrag.kind === "room-resize") {
+      if (dragDistance >= DRAG_THRESHOLD) {
+        commitRoomResize(currentDrag.handle, point);
+      }
+      setLiveDragState(null);
+      return;
+    }
+
     if (currentDrag.kind === "wall-draw") {
       const snappedEndPoint = snapWallEditorPoint(point);
       if (
@@ -900,12 +1109,17 @@ export default function FloorPlanEditor({
             snappedEndPoint.y_percent - currentDrag.startMeasurePoint.y_percent
           ) >= 1
         ) {
-          setScaleDraft({
-            start: currentDrag.startMeasurePoint,
-            end: snappedEndPoint
-          });
+          promptForScaleDraft(currentDrag.startMeasurePoint, snappedEndPoint);
         }
       }
+      setLiveDragState(null);
+      return;
+    }
+
+    if (currentDrag.kind === "north-set") {
+      const nextPosition = pointerToBoundedRoomPosition(point, roomBoxRef.current, roomSize.bounds, false);
+      onApplyNorthDirection?.(northAngleFromPoint(nextPosition, roomSize.bounds));
+      setNorthToolActive?.(false);
       setLiveDragState(null);
       return;
     }
@@ -951,6 +1165,8 @@ export default function FloorPlanEditor({
         previewWallUpdate(currentDrag.wallIndex, currentDrag.endpoint, point);
       } else if (currentDrag?.kind === "wall-move") {
         previewWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
+      } else if (currentDrag?.kind === "room-resize") {
+        previewRoomResize(currentDrag.handle, point);
       } else if (currentDrag?.kind === "wall-draw") {
         updateWallDrawPointer(point);
         clearRoomPreview();
@@ -959,6 +1175,9 @@ export default function FloorPlanEditor({
         clearRoomPreview();
       } else if (currentDrag?.kind === "scale-measure") {
         updateScalePointer(point);
+        clearRoomPreview();
+      } else if (currentDrag?.kind === "north-set") {
+        updateNorthPointer(point);
         clearRoomPreview();
       } else {
         const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
@@ -1010,6 +1229,19 @@ export default function FloorPlanEditor({
           end: snapWallEditorPoint(dragState.point)
         }
       : null;
+  const roomResizeHandles = useMemo(() => {
+    const { minX, maxX, minY, maxY } = roomSize.bounds;
+    return [
+      { id: "nw", point: { x: minX, y: minY }, cursor: "nwse-resize" },
+      { id: "n", point: { x: (minX + maxX) / 2, y: minY }, cursor: "ns-resize" },
+      { id: "ne", point: { x: maxX, y: minY }, cursor: "nesw-resize" },
+      { id: "e", point: { x: maxX, y: (minY + maxY) / 2 }, cursor: "ew-resize" },
+      { id: "se", point: { x: maxX, y: maxY }, cursor: "nwse-resize" },
+      { id: "s", point: { x: (minX + maxX) / 2, y: maxY }, cursor: "ns-resize" },
+      { id: "sw", point: { x: minX, y: maxY }, cursor: "nesw-resize" },
+      { id: "w", point: { x: minX, y: (minY + maxY) / 2 }, cursor: "ew-resize" }
+    ];
+  }, [roomSize.bounds]);
   const scaleMeasureDraft =
     dragState?.kind === "scale-measure"
       ? {
@@ -1091,10 +1323,71 @@ export default function FloorPlanEditor({
           >
             Reset
           </button>
+          <div className="object-scale-actions">
+            <button
+              type="button"
+              className="object-scale-reset"
+              onClick={() => rotateSelectedItem(-ROTATION_STEP_DEGREES)}
+            >
+              Rotate -45°
+            </button>
+            <button
+              type="button"
+              className="object-scale-reset"
+              onClick={() => rotateSelectedItem(ROTATION_STEP_DEGREES)}
+            >
+              Rotate +45°
+            </button>
+          </div>
         </div>
       ) : null}
 
-      {!selectedItem && selectedWallIndex != null ? (
+      {!selectedItem && selectedOpening ? (
+        <div
+          className="object-scale-panel"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {selectedEdgeItem?.type === "windows" ? (
+            <>
+              <label className="object-scale-field">
+                <span>
+                  <strong>Window size</strong>
+                  <small>Width {Math.round(Number(selectedOpening.width_percent) || 14)}%</small>
+                </span>
+                <input
+                  type="range"
+                  min="4"
+                  max="30"
+                  step="1"
+                  value={Number(selectedOpening.width_percent) || 14}
+                  onChange={(event) => updateSelectedWindowWidth(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="object-scale-reset"
+                onClick={() => updateSelectedWindowWidth(14)}
+                disabled={(Number(selectedOpening.width_percent) || 14) === 14}
+              >
+                Reset
+              </button>
+            </>
+          ) : null}
+          {selectedEdgeItem?.type === "doors" ? (
+            <div className="object-scale-actions">
+              <button
+                type="button"
+                className="object-scale-reset"
+                onClick={cycleSelectedDoorOrientation}
+              >
+                Flip door swing
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!selectedItem && !selectedOpening && selectedWallIndex != null ? (
         <div
           className="wall-action-panel"
           onPointerDown={(event) => event.stopPropagation()}
@@ -1149,6 +1442,18 @@ export default function FloorPlanEditor({
                 ? "Measured line captured. Enter the real-world length to calibrate the plan."
                 : "Click and drag a measurement line across something with a known real-world length."}
             </small>
+          </div>
+        </div>
+      ) : null}
+
+      {northToolActive ? (
+        <div
+          className="wall-action-panel"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="wall-action-copy">
+            <strong>Set north</strong>
+            <small>Drag anywhere on the room to rotate the compass. The 3D daylight will use this north direction.</small>
           </div>
         </div>
       ) : null}
@@ -1272,6 +1577,34 @@ export default function FloorPlanEditor({
             </filter>
           </defs>
 
+          <g className={`editor-compass${northToolActive ? " is-active" : ""}`}>
+            {(() => {
+              const compassCenter = {
+                x: roomBox.x + roomBox.width - 44,
+                y: roomBox.y + 44
+              };
+              const compassRadius = 24;
+              const radians = (currentNorthAngle * Math.PI) / 180;
+              const arrowX = compassCenter.x + Math.sin(radians) * compassRadius;
+              const arrowY = compassCenter.y - Math.cos(radians) * compassRadius;
+              return (
+                <>
+                  <circle cx={compassCenter.x} cy={compassCenter.y} r="26" fill="rgba(255,255,255,0.84)" stroke="#a98c68" strokeWidth="2" />
+                  <circle cx={compassCenter.x} cy={compassCenter.y} r="4" fill="#7b5d3f" />
+                  <line x1={compassCenter.x} y1={compassCenter.y} x2={arrowX} y2={arrowY} stroke="#7b5d3f" strokeWidth="3" strokeLinecap="round" />
+                  <polygon
+                    points={`${arrowX},${arrowY - 6} ${arrowX + 5},${arrowY + 6} ${arrowX - 5},${arrowY + 6}`}
+                    fill="#7b5d3f"
+                    transform={`rotate(${currentNorthAngle} ${arrowX} ${arrowY})`}
+                  />
+                  <text x={compassCenter.x} y={compassCenter.y - 33} textAnchor="middle" fill="#7b5d3f" fontSize="11" fontWeight="800">
+                    N
+                  </text>
+                </>
+              );
+            })()}
+          </g>
+
           {zones.map((zone) => {
             const center = toCanvasPoint({ x: zone.center.x, y: zone.center.y }, roomBox, roomSize.bounds);
             const radiusX = Math.max(26, (zone.radiusX / 100) * roomBox.width);
@@ -1291,6 +1624,41 @@ export default function FloorPlanEditor({
               />
             );
           })}
+
+          {wallToolMode === "select" ? (
+            <g className="room-resize-overlay">
+              <rect
+                x={roomBox.x}
+                y={roomBox.y}
+                width={roomBox.width}
+                height={roomBox.height}
+                fill="none"
+                stroke="#7f93ad"
+                strokeWidth="1.5"
+                strokeDasharray="7 6"
+                opacity="0.7"
+                pointerEvents="none"
+              />
+              {roomResizeHandles.map((handle) => {
+                const handlePoint = toCanvasPoint(handle.point, roomBox, roomSize.bounds);
+                return (
+                  <rect
+                    key={`room-resize-${handle.id}`}
+                    x={handlePoint.x - 6}
+                    y={handlePoint.y - 6}
+                    width="12"
+                    height="12"
+                    rx="2.5"
+                    fill="#ffffff"
+                    stroke="#10233d"
+                    strokeWidth="2"
+                    style={{ cursor: handle.cursor }}
+                    onPointerDown={(event) => startRoomResizeDrag(handle.id, event)}
+                  />
+                );
+              })}
+            </g>
+          ) : null}
 
           {walls.map((wall, index) => {
             const start = toCanvasPoint(
@@ -1359,8 +1727,8 @@ export default function FloorPlanEditor({
                       }}
                     >
                       <circle cx="0" cy="0" r="11" fill="#ffffff" stroke="#8f3a3a" strokeWidth="2" />
-                      <g transform="translate(-6 -6)">
-                        <CloseIcon />
+                      <g transform="translate(-6 -6)" color="#8f3a3a">
+                        <CloseGlyph />
                       </g>
                     </g>
                   </>
@@ -1476,6 +1844,7 @@ export default function FloorPlanEditor({
             const renderedWindow = getPreviewItem("windows", index, windowItem);
             const x = roomBox.x + (renderedWindow.x_percent / 100) * roomBox.width;
             const y = roomBox.y + (renderedWindow.y_percent / 100) * roomBox.height;
+            const windowLength = Math.max(24, ((Number(renderedWindow.width_percent) || 14) / 100) * Math.min(roomBox.width, roomBox.height));
             return (
               <g
                 key={`window-${index}`}
@@ -1486,7 +1855,7 @@ export default function FloorPlanEditor({
                   updatePlacedItem("windows", index, { rotation_deg: ((windowItem.rotation_deg || 0) + 90) % 360 })
                 }
               >
-                <line x1="-26" y1="0" x2="26" y2="0" stroke="#1877f2" strokeWidth="8" strokeLinecap="round" />
+                <line x1={-windowLength / 2} y1="0" x2={windowLength / 2} y2="0" stroke="#1877f2" strokeWidth="8" strokeLinecap="round" />
               </g>
             );
           })}
@@ -1635,7 +2004,7 @@ export default function FloorPlanEditor({
             );
           })}
 
-          {(wallToolMode === "add" || wallToolMode === "rect" || scaleToolActive) ? (
+          {(wallToolMode === "add" || wallToolMode === "rect" || scaleToolActive || northToolActive) ? (
             <rect
               x={roomBox.x}
               y={roomBox.y}
@@ -1654,6 +2023,10 @@ export default function FloorPlanEditor({
                 }
                 if (scaleToolActive) {
                   startScaleDrag(event);
+                  return;
+                }
+                if (northToolActive) {
+                  startNorthDrag(event);
                 }
               }}
               onPointerMove={(event) => {
@@ -1663,6 +2036,8 @@ export default function FloorPlanEditor({
                   updateRectangleRoomPointer(getSvgPointFromClient(event.clientX, event.clientY));
                 } else if (dragStateRef.current?.kind === "scale-measure") {
                   updateScalePointer(getSvgPointFromClient(event.clientX, event.clientY));
+                } else if (dragStateRef.current?.kind === "north-set") {
+                  updateNorthPointer(getSvgPointFromClient(event.clientX, event.clientY));
                 }
               }}
               onPointerUp={(event) => {
@@ -1672,6 +2047,8 @@ export default function FloorPlanEditor({
                   finishDrag(event.clientX, event.clientY);
                 } else if (dragStateRef.current?.kind === "scale-measure") {
                   finishScaleDrag(event.clientX, event.clientY);
+                } else if (dragStateRef.current?.kind === "north-set") {
+                  finishNorthDrag(event.clientX, event.clientY);
                 }
               }}
             />

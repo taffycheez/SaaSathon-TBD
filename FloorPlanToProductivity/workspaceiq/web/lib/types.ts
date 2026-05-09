@@ -11,6 +11,7 @@ export type EdgeItem = {
   rotation_deg?: number;
   wall_index: number;
   position_percent: number;
+  width_percent?: number;
   opening_anchor?: "center" | "edge";
   hinge_side?: "start" | "end";
   swing_direction?: -1 | 1;
@@ -30,6 +31,8 @@ export type FurnitureItem = {
 export type RoomAnalysis = {
   estimated_width_m: number;
   estimated_height_m: number;
+  estimated_area_m2?: number;
+  north_direction_deg?: number;
   walls: WallSegment[];
   windows: EdgeItem[];
   doors: EdgeItem[];
