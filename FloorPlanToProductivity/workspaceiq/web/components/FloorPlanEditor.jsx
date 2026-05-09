@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { getObjectDefinition } from "@/lib/objectCatalog";
+import { normalizeWallGraph } from "@/lib/roomGeometry";
+import { updateEdgeItemPosition, updatePlacedObjectPosition } from "@/lib/roomState";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
@@ -183,7 +185,8 @@ function TrashTarget() {
 export default function FloorPlanEditor({ room, setRoom, imagePreview, showReferenceImage = false }) {
   const svgRef = useRef(null);
   const [dragState, setDragState] = useState(null);
-  const walls = Array.isArray(room.walls) ? room.walls : [];
+  const wallGraph = useMemo(() => normalizeWallGraph(room.walls || []), [room.walls]);
+  const walls = wallGraph.walls.length ? wallGraph.walls : Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
   const doors = Array.isArray(room.doors) ? room.doors : [];
   const furniture = Array.isArray(room.furniture) ? room.furniture : [];
@@ -197,12 +200,13 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
   };
 
   function updatePlacedItem(type, index, updates) {
-    setRoom((currentRoom) => ({
-      ...currentRoom,
-      [type]: currentRoom[type].map((item, itemIndex) =>
-        itemIndex === index ? { ...item, ...updates } : item
-      )
-    }));
+    setRoom((currentRoom) => {
+      if (type === "windows" || type === "doors") {
+        return updateEdgeItemPosition(currentRoom, type, index, updates);
+      }
+
+      return updatePlacedObjectPosition(currentRoom, type, index, updates);
+    });
   }
 
   function removePlacedItem(type, index) {
@@ -336,9 +340,22 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
                 y1={start.y}
                 x2={end.x}
                 y2={end.y}
-                stroke="#10233d"
+                stroke={wallGraph.isValid ? "#10233d" : "#b03a3a"}
                 strokeWidth="4"
                 strokeLinecap="round"
+              />
+            );
+          })}
+
+          {wallGraph.nodes.map((node, index) => {
+            const point = toCanvasPoint(node, roomBox, roomSize.bounds);
+            return (
+              <circle
+                key={`wall-node-${index}`}
+                cx={point.x}
+                cy={point.y}
+                r="4"
+                fill={wallGraph.isValid ? "#10233d" : "#b03a3a"}
               />
             );
           })}

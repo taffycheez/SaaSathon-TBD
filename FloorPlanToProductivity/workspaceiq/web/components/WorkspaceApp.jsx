@@ -10,7 +10,9 @@ import { getObjectDefinition } from "@/lib/objectCatalog";
 import {
   addObjectToRoom,
   clampPercent,
+  createWindowForRoom,
   isDeskLikeFurniture,
+  normalizeRoomLayout,
   normalizeFootprintPoints,
   normalizeFurnitureItem,
   normalizeRotation,
@@ -119,7 +121,8 @@ function normalizeRoomData(data) {
       : [],
     furniture: furniture.filter((item) => !isDeskLikeFurniture(item)),
     desks: detectedDesks,
-    notes: Array.isArray(safeData.notes) ? safeData.notes : []
+    notes: Array.isArray(safeData.notes) ? safeData.notes : [],
+    wallIssues: []
   };
 }
 
@@ -614,7 +617,7 @@ export default function WorkspaceApp() {
       ...currentRoom,
       windows: [
         ...(currentRoom.windows || []),
-        { x_percent: 50, y_percent: 12, rotation_deg: 0 }
+        createWindowForRoom(currentRoom)
       ]
     }));
   }
@@ -648,9 +651,11 @@ export default function WorkspaceApp() {
       }
 
       const data = await response.json();
-      const normalizedRoom = chooseBestWalls(
-        remapRoomToOriginalBounds(normalizeRoomData(data), analysisBounds),
-        detectedWalls
+      const normalizedRoom = normalizeRoomLayout(
+        chooseBestWalls(
+          remapRoomToOriginalBounds(normalizeRoomData(data), analysisBounds),
+          detectedWalls
+        )
       );
       setImagePreview(originalDataUrl);
       setShowReferenceImage(false);
@@ -658,6 +663,9 @@ export default function WorkspaceApp() {
       setBaseRoom(normalizedRoom);
       setRoomNotes([
         ...(Array.isArray(data.notes) ? data.notes : []),
+        ...(normalizedRoom.wallIssues?.length
+          ? normalizedRoom.wallIssues.map((issue) => `Wall validation: ${issue}`)
+          : []),
         ...(detectedWalls.length >= 4 ? ["WorkspaceIQ also extracted wall-line candidates directly from the image to avoid snapping only to the photo border."] : []),
         ...preprocessingNotes
       ]);
