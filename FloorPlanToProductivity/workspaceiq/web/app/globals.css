@@ -774,19 +774,62 @@ button:disabled {
 .score-meter {
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 6px;
+  gap: 7px;
   margin-top: 16px;
+  padding: 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(232, 240, 255, 0.92) 100%);
+  border: 1px solid rgba(36, 99, 235, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92), 0 10px 22px rgba(24, 63, 150, 0.08);
 }
 
 .score-meter span {
-  height: 12px;
-  border-radius: 3px;
-  background: #dbe6fb;
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(219, 231, 255, 0.95) 0%, rgba(199, 216, 247, 0.94) 100%);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.82), inset 0 -1px 0 rgba(97, 128, 188, 0.12);
+  overflow: hidden;
+}
+
+.score-meter span::after {
+  content: "";
+  position: absolute;
+  inset: 1px 18% auto 18%;
+  height: 40%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.42);
 }
 
 .score-meter span.active {
-  background: linear-gradient(90deg, var(--accent) 0%, var(--warm) 100%);
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36), 0 4px 10px rgba(36, 99, 235, 0.16);
+}
+
+.score-meter span.active:nth-child(1),
+.score-meter span.active:nth-child(2) {
+  background: linear-gradient(180deg, #4f8fff 0%, #2e68eb 100%);
+}
+
+.score-meter span.active:nth-child(3),
+.score-meter span.active:nth-child(4) {
+  background: linear-gradient(180deg, #69a1ff 0%, #3f79eb 100%);
+}
+
+.score-meter span.active:nth-child(5),
+.score-meter span.active:nth-child(6) {
+  background: linear-gradient(180deg, #83b3ff 0%, #568eee 100%);
+}
+
+.score-meter span.active:nth-child(7),
+.score-meter span.active:nth-child(8) {
+  background: linear-gradient(180deg, #a2c4ff 0%, #6da2f0 100%);
+}
+
+.score-meter span.active:nth-child(9),
+.score-meter span.active:nth-child(10) {
+  background: linear-gradient(180deg, #ffe07b 0%, #f4be38 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 4px 10px rgba(241, 189, 55, 0.22);
 }
 
 .score-list {
