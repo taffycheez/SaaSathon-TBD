@@ -108,10 +108,296 @@ function HistoryIcon({ direction = "undo" }) {
   );
 }
 
+const ANIMATED_FURNITURE_TYPES = new Set(["chair", "armchair", "plant", "whiteboard"]);
+
+function renderObjectLabel(label, width, height, stroke, options = {}) {
+  if (!label) {
+    return null;
+  }
+
+  const { y = Math.max(4, height - 14), fontSize = 10.5 } = options;
+  return (
+    <Text
+      text={label}
+      x={4}
+      y={y}
+      width={Math.max(24, width - 8)}
+      align="center"
+      fontSize={fontSize}
+      fill={stroke}
+      listening={false}
+    />
+  );
+}
+
+function ChairShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.4, strokeWidth * 0.7);
+  return (
+    <>
+      <Rect
+        x={width * 0.22}
+        y={height * 0.26}
+        width={width * 0.56}
+        height={height * 0.28}
+        cornerRadius={Math.max(4, width * 0.08)}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <Rect
+        x={width * 0.2}
+        y={height * 0.06}
+        width={width * 0.6}
+        height={height * 0.24}
+        cornerRadius={Math.max(4, width * 0.08)}
+        fill="#f7fbff"
+        stroke={stroke}
+        strokeWidth={detailStroke}
+      />
+      <Line points={[width * 0.3, height * 0.54, width * 0.24, height * 0.86]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.7, height * 0.54, width * 0.76, height * 0.86]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.38, height * 0.54, width * 0.38, height * 0.92]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.62, height * 0.54, width * 0.62, height * 0.92]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.33, height * 0.78, width * 0.67, height * 0.78]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" opacity={0.72} />
+    </>
+  );
+}
+
+function ArmchairShape({ width, height, fill, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.3, strokeWidth * 0.68);
+  return (
+    <>
+      <Rect
+        x={width * 0.22}
+        y={height * 0.2}
+        width={width * 0.56}
+        height={height * 0.32}
+        cornerRadius={Math.max(6, width * 0.12)}
+        fill="#eef8f2"
+        stroke={stroke}
+        strokeWidth={detailStroke}
+      />
+      <Rect
+        x={width * 0.14}
+        y={height * 0.34}
+        width={width * 0.14}
+        height={height * 0.2}
+        cornerRadius={Math.max(4, width * 0.1)}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <Rect
+        x={width * 0.72}
+        y={height * 0.34}
+        width={width * 0.14}
+        height={height * 0.2}
+        cornerRadius={Math.max(4, width * 0.1)}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <Rect
+        x={width * 0.24}
+        y={height * 0.32}
+        width={width * 0.52}
+        height={height * 0.28}
+        cornerRadius={Math.max(6, width * 0.12)}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <Line points={[width * 0.3, height * 0.6, width * 0.25, height * 0.88]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.7, height * 0.6, width * 0.75, height * 0.88]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+    </>
+  );
+}
+
+function PlantShape({ width, height, stroke }) {
+  return (
+    <>
+      <Line points={[width * 0.5, height * 0.46, width * 0.5, height * 0.6]} stroke={stroke} strokeWidth={Math.max(1.5, width * 0.08)} lineCap="round" />
+      <Ellipse
+        x={width * 0.5}
+        y={height * 0.18}
+        radiusX={Math.max(6, width * 0.14)}
+        radiusY={Math.max(8, height * 0.22)}
+        rotation={-4}
+        fill="#89c86f"
+        stroke={stroke}
+        strokeWidth={1.6}
+      />
+      <Ellipse
+        x={width * 0.34}
+        y={height * 0.3}
+        radiusX={Math.max(5, width * 0.12)}
+        radiusY={Math.max(8, height * 0.2)}
+        rotation={-34}
+        fill="#b8e4a2"
+        stroke={stroke}
+        strokeWidth={1.4}
+      />
+      <Ellipse
+        x={width * 0.66}
+        y={height * 0.3}
+        radiusX={Math.max(5, width * 0.12)}
+        radiusY={Math.max(8, height * 0.2)}
+        rotation={34}
+        fill="#c8ebb7"
+        stroke={stroke}
+        strokeWidth={1.4}
+      />
+      <Rect
+        x={width * 0.26}
+        y={height * 0.6}
+        width={width * 0.48}
+        height={height * 0.18}
+        cornerRadius={Math.max(4, width * 0.08)}
+        fill="#b57c47"
+        stroke="#7a512f"
+        strokeWidth={1.6}
+      />
+      <Ellipse
+        x={width * 0.5}
+        y={height * 0.8}
+        radiusX={Math.max(7, width * 0.26)}
+        radiusY={Math.max(3, height * 0.05)}
+        fill="#8f6036"
+        stroke="#7a512f"
+        strokeWidth={1.2}
+      />
+    </>
+  );
+}
+
+function WhiteboardShape({ width, height, stroke, strokeWidth }) {
+  const detailStroke = Math.max(1.2, strokeWidth * 0.62);
+  return (
+    <>
+      <Rect
+        x={width * 0.12}
+        y={height * 0.08}
+        width={width * 0.76}
+        height={height * 0.48}
+        cornerRadius={Math.max(6, height * 0.14)}
+        fill="#ffffff"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <Line points={[width * 0.2, height * 0.22, width * 0.8, height * 0.22]} stroke="#d7e4ef" strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.2, height * 0.38, width * 0.72, height * 0.38]} stroke="#e7eef5" strokeWidth={detailStroke} lineCap="round" />
+      <Ellipse x={width * 0.22} y={height * 0.18} radiusX={2.2} radiusY={2.2} fill="#74a3d3" />
+      <Ellipse x={width * 0.78} y={height * 0.18} radiusX={2.2} radiusY={2.2} fill="#7ec18e" />
+      <Rect
+        x={width * 0.28}
+        y={height * 0.58}
+        width={width * 0.44}
+        height={Math.max(3, height * 0.05)}
+        cornerRadius={999}
+        fill={stroke}
+        opacity={0.72}
+      />
+      <Line points={[width * 0.34, height * 0.58, width * 0.22, height * 0.92]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+      <Line points={[width * 0.66, height * 0.58, width * 0.78, height * 0.92]} stroke={stroke} strokeWidth={detailStroke} lineCap="round" />
+    </>
+  );
+}
+
+function getInteractiveMotion(type, mode = "idle") {
+  if (!ANIMATED_FURNITURE_TYPES.has(type)) {
+    return null;
+  }
+
+  const shadowColor = type === "plant"
+    ? "#48703d"
+    : type === "whiteboard"
+      ? "#607587"
+      : type === "chair"
+        ? "#31526f"
+        : "#2b6b53";
+
+  if (mode === "dragging") {
+    return {
+      duration: 0.16,
+      scale: type === "whiteboard" ? 1.04 : 1.08,
+      shadowColor,
+      shadowBlur: 24,
+      shadowOpacity: 0.18,
+      shadowOffsetY: 7
+    };
+  }
+
+  if (mode === "hover") {
+    return {
+      duration: 0.18,
+      scale: type === "whiteboard" ? 1.025 : 1.05,
+      shadowColor,
+      shadowBlur: 16,
+      shadowOpacity: 0.12,
+      shadowOffsetY: 4
+    };
+  }
+
+  return {
+    duration: 0.14,
+    scale: 1,
+    shadowColor,
+    shadowBlur: 0,
+    shadowOpacity: 0,
+    shadowOffsetY: 0
+  };
+}
+
+function animateInteractiveNode(node, type, mode = "idle") {
+  const motion = getInteractiveMotion(type, mode);
+  if (!node || !motion) {
+    return;
+  }
+
+  node.to({
+    duration: motion.duration,
+    scaleX: motion.scale,
+    scaleY: motion.scale,
+    shadowColor: motion.shadowColor,
+    shadowBlur: motion.shadowBlur,
+    shadowOpacity: motion.shadowOpacity,
+    shadowOffsetX: 0,
+    shadowOffsetY: motion.shadowOffsetY
+  });
+}
+
+function markNodeDragging(node, dragging) {
+  if (!node) {
+    return;
+  }
+
+  node.setAttr("workspaceiqDragging", dragging);
+}
+
+function nodeIsDragging(node) {
+  return Boolean(node?.getAttr?.("workspaceiqDragging"));
+}
+
 function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label }) {
   const { width, height } = objectPixelSize(item, roomBox);
   const definition = getObjectDefinition(item.type);
   const shapeKind = item.shape_kind || definition.shape_kind;
+
+  if (item.type === "chair") {
+    return <ChairShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+  }
+
+  if (item.type === "armchair") {
+    return <ArmchairShape width={width} height={height} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+  }
+
+  if (item.type === "plant") {
+    return <PlantShape width={width} height={height} stroke={stroke} />;
+  }
+
+  if (item.type === "whiteboard") {
+    return <WhiteboardShape width={width} height={height} stroke={stroke} strokeWidth={strokeWidth} />;
+  }
 
   if (shapeKind === "ellipse") {
     const seatCount = definition.seat_count || 0;
@@ -145,7 +431,7 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
               );
             })
           : null}
-        <Text text={label} x={6} y={Math.max(2, height / 2 - 8)} fontSize={12} fill={stroke} />
+        {renderObjectLabel(label, width, height, stroke, { y: Math.max(4, height / 2 - 8), fontSize: 12 })}
       </>
     );
   }
@@ -158,7 +444,7 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
     return (
       <>
         <Line points={points} closed fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-        <Text text={label} x={6} y={Math.max(2, height / 2 - 8)} fontSize={12} fill={stroke} />
+        {renderObjectLabel(label, width, height, stroke, { y: Math.max(4, height / 2 - 8), fontSize: 12 })}
       </>
     );
   }
@@ -173,12 +459,13 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
         strokeWidth={strokeWidth}
         cornerRadius={shapeKind === "rect" ? 6 : 0}
       />
-      <Text text={label} x={6} y={Math.max(2, height / 2 - 8)} fontSize={12} fill={stroke} />
+      {renderObjectLabel(label, width, height, stroke, { y: Math.max(4, height / 2 - 8), fontSize: 12 })}
     </>
   );
 }
 
-export default function FloorPlanEditor({
+export default function FloorPlanEditor(
+{
   room,
   setRoom,
   onRoomPreviewChange,
@@ -660,13 +947,25 @@ export default function FloorPlanEditor({
                   offsetX={width / 2}
                   offsetY={height / 2}
                   draggable
-                  onDragStart={() => {
+                  onDragStart={(event) => {
                     onActionStart?.();
                     clearRoomPreview();
                     setIsTrashHot(false);
+                    markNodeDragging(event.target, true);
+                    animateInteractiveNode(event.target, item.type, "dragging");
                   }}
                   onDragMove={(event) => handlePlacedItemDragMove("furniture", index, event)}
-                  onDragEnd={(event) => handlePlacedItemDragEnd("furniture", index, event)}
+                  onDragEnd={(event) => {
+                    markNodeDragging(event.target, false);
+                    animateInteractiveNode(event.target, item.type, "idle");
+                    handlePlacedItemDragEnd("furniture", index, event);
+                  }}
+                  onMouseEnter={(event) => animateInteractiveNode(event.target, item.type, "hover")}
+                  onMouseLeave={(event) => {
+                    if (!nodeIsDragging(event.target)) {
+                      animateInteractiveNode(event.target, item.type, "idle");
+                    }
+                  }}
                   onDblClick={() => {
                     onActionStart?.();
                     updatePlacedItem("furniture", index, { rotation_deg: (item.rotation_deg + 90) % 360 });

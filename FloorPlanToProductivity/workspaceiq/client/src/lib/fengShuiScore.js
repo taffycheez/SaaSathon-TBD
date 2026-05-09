@@ -1,7 +1,7 @@
 import { pointOnWall } from "./roomState.js";
 
 const DISRUPTIVE_TYPES = ["office_equipment", "trashcan", "toilet", "sink", "shower"];
-const COLLABORATION_ANCHORS = ["meeting_table", "table", "armchair", "whiteboard"];
+const COLLABORATION_ANCHORS = ["meeting_table", "table", "chair", "armchair", "whiteboard"];
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
