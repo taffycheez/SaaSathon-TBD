@@ -3,6 +3,7 @@ import { createAiClient, openRouterModel } from "@/lib/server/ai";
 import {
   buildRoomNotes,
   fallbackRoom,
+  normalizeAnalysisResult,
   normalizeRoomDescription
 } from "@/lib/server/analyseRoomHelpers";
 import { analyseRoomImage } from "@/lib/server/analyseRoomVision";
@@ -47,7 +48,7 @@ async function analyseRoomWithWorker(image: string) {
     throw new Error(payload?.detail || payload?.error || `CV worker failed with ${response.status}.`);
   }
 
-  return response.json();
+  return normalizeAnalysisResult(await response.json());
 }
 
 export async function POST(request: Request) {

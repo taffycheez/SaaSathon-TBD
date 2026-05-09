@@ -8,8 +8,9 @@
   "scripts": {
     "install:all": "npm install --workspaces",
     "dev": "npm run dev:web",
+    "dev:match": "npm run dev:web",
     "dev:web": "npm run dev --workspace web",
-    "dev:full": "concurrently \"npm run dev:web\" \"npm run dev:worker\"",
+    "dev:full": "concurrently \"cross-env ANALYSIS_WORKER_URL=http://127.0.0.1:8001 npm run dev --workspace web\" \"npm run dev:worker\"",
     "dev:worker": "python -m uvicorn cv_worker:app --app-dir web/python-worker --reload --host 127.0.0.1 --port 8001",
     "build": "npm run build --workspace web",
     "build:web": "npm run build --workspace web",
@@ -17,6 +18,7 @@
     "worker:check": "python -c \"import cv2, numpy, PIL, fastapi; print('worker deps ok')\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3"
   }
 }

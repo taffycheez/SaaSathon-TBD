@@ -22,7 +22,25 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-That starts the single supported local setup from one root command:
+That starts the preferred local mode:
+
+- `http://localhost:3000` for the Next.js web app
+
+To make localhost use the same analysis source as the deployed site, put this in `web/.env.local`:
+
+```env
+ANALYSIS_WORKER_URL=https://your-render-worker-url
+```
+
+This mode is the recommended day-to-day setup for the team.
+
+If you want the full stack locally instead, run:
+
+```powershell
+npm.cmd run dev:full
+```
+
+That starts:
 
 - `http://localhost:3000` for the Next.js web app
 - `http://127.0.0.1:8001` for the local Python CV worker
@@ -55,7 +73,25 @@ Start from:
 web/.env.local.example
 ```
 
-The root `npm.cmd run dev` command automatically points the web app at the local worker on `http://127.0.0.1:8001`.
+Use `ANALYSIS_WORKER_URL=https://your-render-worker-url` in `web/.env.local` if you want localhost to match production.
+
+Use `npm.cmd run dev:full` if you want localhost to use the local Python worker instead.
+
+## Supported environments
+
+There are only three environments you should care about:
+
+1. **Production website**: Vercel + Render
+2. **Local production-match**: `npm.cmd run dev` with `ANALYSIS_WORKER_URL` set to Render
+3. **Full local stack**: `npm.cmd run dev:full`
+
+Do not use an ad-hoc LAN/network copy as a reference environment.
+
+For the detailed team workflow, see:
+
+```text
+TEAM_WORKFLOW.md
+```
 
 ## Environment variables
 
