@@ -1,6 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
-import { Layer, Line, Rect, Stage, Text, Group, Ellipse, Image as KonvaImage } from "react-konva";
-import useImage from "use-image";
+import { useMemo, useRef, useState } from "react";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 
 const CANVAS_WIDTH = 900;
@@ -40,7 +38,6 @@ function getRoomPixelSize(walls) {
   return {
     width: widthPercent * scale,
     height: heightPercent * scale,
-    scale,
     bounds
   };
 }
@@ -70,7 +67,13 @@ function getLabel(item, fallbackLabel) {
   return getObjectDefinition(item.type).label || fallbackLabel;
 }
 
-function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label }) {
+function pointsToString(points, width, height) {
+  return points
+    .map((point) => `${width / 2 + (point.x_percent / 100) * width},${height / 2 + (point.y_percent / 100) * height}`)
+    .join(" ");
+}
+
+function SvgObjectShape({ item, roomBox, fill, stroke, strokeWidth = 2, label }) {
   const { width, height } = objectPixelSize(item, roomBox);
   const definition = getObjectDefinition(item.type);
   const shapeKind = item.shape_kind || definition.shape_kind;
@@ -79,11 +82,11 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
     const seatCount = definition.seat_count || 0;
     return (
       <>
-        <Ellipse
-          x={width / 2}
-          y={height / 2}
-          radiusX={width / 2}
-          radiusY={height / 2}
+        <ellipse
+          cx={width / 2}
+          cy={height / 2}
+          rx={width / 2}
+          ry={height / 2}
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
@@ -94,12 +97,12 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
               const seatX = width / 2 + Math.cos(angle) * (width * 0.42);
               const seatY = height / 2 + Math.sin(angle) * (height * 0.58);
               return (
-                <Ellipse
+                <ellipse
                   key={`seat-${index}`}
-                  x={seatX}
-                  y={seatY}
-                  radiusX={Math.max(5, width * 0.08)}
-                  radiusY={Math.max(4, height * 0.08)}
+                  cx={seatX}
+                  cy={seatY}
+                  rx={Math.max(5, width * 0.08)}
+                  ry={Math.max(4, height * 0.08)}
                   fill="#f8f5ef"
                   stroke={stroke}
                   strokeWidth={1}
@@ -107,35 +110,42 @@ function FootprintShape({ item, roomBox, fill, stroke, strokeWidth = 2, label })
               );
             })
           : null}
-        <Text text={label} x={6} y={Math.max(2, height / 2 - 8)} fontSize={12} fill={stroke} />
+        <text x={6} y={Math.max(14, height / 2 + 4)} fontSize="12" fill={stroke}>
+          {label}
+        </text>
       </>
     );
   }
 
   if (shapeKind === "polygon" && Array.isArray(item.footprint_points) && item.footprint_points.length >= 3) {
-    const points = item.footprint_points.flatMap((point) => [
-      width / 2 + (point.x_percent / 100) * width,
-      height / 2 + (point.y_percent / 100) * height
-    ]);
     return (
       <>
-        <Line points={points} closed fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-        <Text text={label} x={6} y={Math.max(2, height / 2 - 8)} fontSize={12} fill={stroke} />
+        <polygon
+          points={pointsToString(item.footprint_points, width, height)}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+        />
+        <text x={6} y={Math.max(14, height / 2 + 4)} fontSize="12" fill={stroke}>
+          {label}
+        </text>
       </>
     );
   }
 
   return (
     <>
-      <Rect
+      <rect
         width={width}
         height={height}
+        rx={shapeKind === "rect" ? 6 : 0}
         fill={fill}
         stroke={stroke}
         strokeWidth={strokeWidth}
-        cornerRadius={shapeKind === "rect" ? 6 : 0}
       />
-      <Text text={label} x={6} y={Math.max(2, height / 2 - 8)} fontSize={12} fill={stroke} />
+      <text x={6} y={Math.max(14, height / 2 + 4)} fontSize="12" fill={stroke}>
+        {label}
+      </text>
     </>
   );
 }
@@ -148,8 +158,8 @@ function TrashTarget() {
   const bottom = TRASH_TARGET.y + TRASH_TARGET.size - 14;
 
   return (
-    <Group listening={false}>
-      <Rect
+    <g pointerEvents="none">
+      <rect
         x={TRASH_TARGET.x}
         y={TRASH_TARGET.y}
         width={TRASH_TARGET.size}
@@ -157,63 +167,34 @@ function TrashTarget() {
         fill="#fff2f2"
         stroke="#f0b9b9"
         strokeWidth={2}
-        cornerRadius={8}
-        shadowColor="rgba(23, 32, 47, 0.18)"
-        shadowBlur={12}
-        shadowOffset={{ x: 0, y: 5 }}
+        rx={8}
       />
-      <Line points={[left - 2, top, right + 2, top]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
-      <Line points={[centerX - 8, top - 6, centerX + 8, top - 6]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
-      <Line points={[left, top + 7, left + 4, bottom]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
-      <Line points={[right, top + 7, right - 4, bottom]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
-      <Line points={[left + 4, bottom, right - 4, bottom]} stroke="#a83b3b" strokeWidth={3} lineCap="round" />
-      <Line points={[centerX - 7, top + 12, centerX - 5, bottom - 6]} stroke="#a83b3b" strokeWidth={2} lineCap="round" />
-      <Line points={[centerX + 7, top + 12, centerX + 5, bottom - 6]} stroke="#a83b3b" strokeWidth={2} lineCap="round" />
-    </Group>
+      <line x1={left - 2} y1={top} x2={right + 2} y2={top} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
+      <line x1={centerX - 8} y1={top - 6} x2={centerX + 8} y2={top - 6} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
+      <line x1={left} y1={top + 7} x2={left + 4} y2={bottom} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
+      <line x1={right} y1={top + 7} x2={right - 4} y2={bottom} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
+      <line x1={left + 4} y1={bottom} x2={right - 4} y2={bottom} stroke="#a83b3b" strokeWidth={3} strokeLinecap="round" />
+      <line x1={centerX - 7} y1={top + 12} x2={centerX - 5} y2={bottom - 6} stroke="#a83b3b" strokeWidth={2} strokeLinecap="round" />
+      <line x1={centerX + 7} y1={top + 12} x2={centerX + 5} y2={bottom - 6} stroke="#a83b3b" strokeWidth={2} strokeLinecap="round" />
+    </g>
   );
 }
 
 export default function FloorPlanEditor({ room, setRoom, imagePreview, showReferenceImage = false }) {
-  const shellRef = useRef(null);
-  const [stageScale, setStageScale] = useState(1);
+  const svgRef = useRef(null);
+  const [dragState, setDragState] = useState(null);
   const walls = Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
   const doors = Array.isArray(room.doors) ? room.doors : [];
   const furniture = Array.isArray(room.furniture) ? room.furniture : [];
   const desks = Array.isArray(room.desks) ? room.desks : [];
-  const [referenceImage] = useImage(imagePreview || "");
-  const roomSize = getRoomPixelSize(walls);
+  const roomSize = useMemo(() => getRoomPixelSize(walls), [walls]);
   const roomBox = {
     x: (CANVAS_WIDTH - roomSize.width) / 2,
     y: (CANVAS_HEIGHT - roomSize.height) / 2,
     width: roomSize.width,
     height: roomSize.height
   };
-
-  useEffect(() => {
-    const node = shellRef.current;
-    if (!node) {
-      return undefined;
-    }
-
-    if (typeof ResizeObserver === "undefined") {
-      const handleResize = () => {
-        const nextWidth = node.getBoundingClientRect().width;
-        setStageScale(Math.min(1, nextWidth / CANVAS_WIDTH));
-      };
-
-      handleResize();
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
-    }
-
-    const observer = new ResizeObserver(([entry]) => {
-      const nextWidth = entry.contentRect.width;
-      setStageScale(Math.min(1, nextWidth / CANVAS_WIDTH));
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   function updatePlacedItem(type, index, updates) {
     setRoom((currentRoom) => ({
@@ -224,15 +205,6 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
     }));
   }
 
-  function isOverTrash(position) {
-    return (
-      position.x >= TRASH_TARGET.x &&
-      position.x <= TRASH_TARGET.x + TRASH_TARGET.size &&
-      position.y >= TRASH_TARGET.y &&
-      position.y <= TRASH_TARGET.y + TRASH_TARGET.size
-    );
-  }
-
   function removePlacedItem(type, index) {
     setRoom((currentRoom) => ({
       ...currentRoom,
@@ -240,58 +212,53 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
     }));
   }
 
-  function handlePlacedItemDragEnd(type, index, event) {
-    const position = event.target.position();
+  function getSvgPoint(event) {
+    const svg = svgRef.current;
+    if (!svg) {
+      return { x: 0, y: 0 };
+    }
 
-    if (isOverTrash(position)) {
-      removePlacedItem(type, index);
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * CANVAS_WIDTH,
+      y: ((event.clientY - rect.top) / rect.height) * CANVAS_HEIGHT
+    };
+  }
+
+  function startDrag(type, index, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getSvgPoint(event);
+    setDragState({ type, index, point });
+  }
+
+  function handlePointerMove(event) {
+    if (!dragState) {
       return;
     }
 
-    updatePlacedItem(type, index, clampObjectPosition(position, roomBox));
+    const point = getSvgPoint(event);
+    const next = clampObjectPosition(point, roomBox);
+    updatePlacedItem(dragState.type, dragState.index, next);
   }
 
-  function moveWall(index, deltaXPercent, deltaYPercent) {
-    setRoom((currentRoom) => ({
-      ...currentRoom,
-      walls: currentRoom.walls.map((wall, wallIndex) => {
-        if (wallIndex !== index) {
-          return wall;
-        }
+  function handlePointerUp(event) {
+    if (!dragState) {
+      return;
+    }
 
-        return {
-          ...wall,
-          x1_percent: Math.max(0, Math.min(100, wall.x1_percent + deltaXPercent)),
-          y1_percent: Math.max(0, Math.min(100, wall.y1_percent + deltaYPercent)),
-          x2_percent: Math.max(0, Math.min(100, wall.x2_percent + deltaXPercent)),
-          y2_percent: Math.max(0, Math.min(100, wall.y2_percent + deltaYPercent))
-        };
-      })
-    }));
-  }
+    const point = getSvgPoint(event);
+    const overTrash =
+      point.x >= TRASH_TARGET.x &&
+      point.x <= TRASH_TARGET.x + TRASH_TARGET.size &&
+      point.y >= TRASH_TARGET.y &&
+      point.y <= TRASH_TARGET.y + TRASH_TARGET.size;
 
-  function rotateWall(index) {
-    setRoom((currentRoom) => ({
-      ...currentRoom,
-      walls: currentRoom.walls.map((wall, wallIndex) => {
-        if (wallIndex !== index) {
-          return wall;
-        }
+    if (overTrash) {
+      removePlacedItem(dragState.type, dragState.index);
+    }
 
-        const centerX = (wall.x1_percent + wall.x2_percent) / 2;
-        const centerY = (wall.y1_percent + wall.y2_percent) / 2;
-        const dx = (wall.x2_percent - wall.x1_percent) / 2;
-        const dy = (wall.y2_percent - wall.y1_percent) / 2;
-
-        return {
-          ...wall,
-          x1_percent: Math.max(0, Math.min(100, centerX + dy)),
-          y1_percent: Math.max(0, Math.min(100, centerY - dx)),
-          x2_percent: Math.max(0, Math.min(100, centerX - dy)),
-          y2_percent: Math.max(0, Math.min(100, centerY + dx))
-        };
-      })
-    }));
+    setDragState(null);
   }
 
   return (
@@ -303,220 +270,165 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview, showRefer
         </div>
       </div>
 
-      <div
-        ref={shellRef}
-        className="floor-stage-shell"
-        style={{ height: CANVAS_HEIGHT * stageScale }}
-      >
-        <Stage
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
-          scaleX={stageScale}
-          scaleY={stageScale}
-          className="floor-stage"
+      <div className="floor-stage-shell">
+        <svg
+          ref={svgRef}
+          className="floor-stage-svg"
+          viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
         >
-          <Layer>
-            {Array.from({ length: 19 }).map((_, index) => {
-              const x = PADDING + index * ((CANVAS_WIDTH - PADDING * 2) / 18);
-              const y = PADDING + index * ((CANVAS_HEIGHT - PADDING * 2) / 18);
-              return (
-                <Fragment key={`grid-${index}`}>
-                  <Line points={[x, PADDING, x, CANVAS_HEIGHT - PADDING]} stroke="#e3e8ef" strokeWidth={1} />
-                  <Line points={[PADDING, y, CANVAS_WIDTH - PADDING, y]} stroke="#e3e8ef" strokeWidth={1} />
-                </Fragment>
-              );
-            })}
+          {Array.from({ length: 19 }).map((_, index) => {
+            const x = PADDING + index * ((CANVAS_WIDTH - PADDING * 2) / 18);
+            const y = PADDING + index * ((CANVAS_HEIGHT - PADDING * 2) / 18);
+            return (
+              <g key={`grid-${index}`}>
+                <line x1={x} y1={PADDING} x2={x} y2={CANVAS_HEIGHT - PADDING} stroke="#e3e8ef" strokeWidth="1" />
+                <line x1={PADDING} y1={y} x2={CANVAS_WIDTH - PADDING} y2={y} stroke="#e3e8ef" strokeWidth="1" />
+              </g>
+            );
+          })}
 
-            <Rect
-              x={roomBox.x}
-              y={roomBox.y}
-              width={roomBox.width}
-              height={roomBox.height}
-              fill="#f8fbff"
-              opacity={0.92}
-              strokeEnabled={false}
-              cornerRadius={6}
-            />
+          <rect
+            x={roomBox.x}
+            y={roomBox.y}
+            width={roomBox.width}
+            height={roomBox.height}
+            rx={6}
+            fill="#f8fbff"
+            opacity={0.92}
+          />
 
-            {imagePreview && showReferenceImage ? (
-              <>
-                <Text
-                  x={roomBox.x}
-                  y={roomBox.y - 24}
-                  text="Reference image uploaded"
-                  fill="#53708f"
-                  fontSize={14}
+          {imagePreview && showReferenceImage ? (
+            <>
+              <text x={roomBox.x} y={roomBox.y - 10} fill="#53708f" fontSize="14">
+                Reference image uploaded
+              </text>
+              <image
+                href={imagePreview}
+                x={roomBox.x}
+                y={roomBox.y}
+                width={roomBox.width}
+                height={roomBox.height}
+                opacity={0.55}
+                preserveAspectRatio="none"
+              />
+            </>
+          ) : null}
+
+          {walls.map((wall, index) => {
+            const start = toCanvasPoint(
+              { x: wall.x1_percent, y: wall.y1_percent },
+              roomBox,
+              roomSize.bounds
+            );
+            const end = toCanvasPoint(
+              { x: wall.x2_percent, y: wall.y2_percent },
+              roomBox,
+              roomSize.bounds
+            );
+
+            return (
+              <line
+                key={`wall-${index}`}
+                x1={start.x}
+                y1={start.y}
+                x2={end.x}
+                y2={end.y}
+                stroke="#10233d"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+            );
+          })}
+
+          {windows.map((windowItem, index) => {
+            const x = roomBox.x + (windowItem.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (windowItem.y_percent / 100) * roomBox.height;
+            return (
+              <g
+                key={`window-${index}`}
+                transform={`translate(${x} ${y}) rotate(${windowItem.rotation_deg || 0})`}
+                onPointerDown={(event) => startDrag("windows", index, event)}
+                onDoubleClick={() =>
+                  updatePlacedItem("windows", index, { rotation_deg: ((windowItem.rotation_deg || 0) + 90) % 360 })
+                }
+              >
+                <line x1="-26" y1="0" x2="26" y2="0" stroke="#1877f2" strokeWidth="8" strokeLinecap="round" />
+              </g>
+            );
+          })}
+
+          {doors.map((doorItem, index) => {
+            const x = roomBox.x + (doorItem.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (doorItem.y_percent / 100) * roomBox.height;
+            return (
+              <g
+                key={`door-${index}`}
+                transform={`translate(${x} ${y}) rotate(${doorItem.rotation_deg || 0})`}
+                onPointerDown={(event) => startDrag("doors", index, event)}
+                onDoubleClick={() =>
+                  updatePlacedItem("doors", index, { rotation_deg: ((doorItem.rotation_deg || 0) + 90) % 360 })
+                }
+              >
+                <line x1="-18" y1="0" x2="18" y2="0" stroke="#8b5e34" strokeWidth="10" strokeLinecap="round" />
+              </g>
+            );
+          })}
+
+          {furniture.map((item, index) => {
+            const definition = getObjectDefinition(item.type);
+            const { width, height } = objectPixelSize(item, roomBox);
+            const x = roomBox.x + (item.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (item.y_percent / 100) * roomBox.height;
+
+            return (
+              <g
+                key={`furniture-${index}`}
+                transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${item.rotation_deg || 0} ${width / 2} ${height / 2})`}
+                onPointerDown={(event) => startDrag("furniture", index, event)}
+                onDoubleClick={() => updatePlacedItem("furniture", index, { rotation_deg: (item.rotation_deg + 90) % 360 })}
+              >
+                <SvgObjectShape
+                  item={item}
+                  roomBox={roomBox}
+                  fill={definition.tone}
+                  stroke={definition.stroke}
+                  strokeWidth={1.5}
+                  label={getLabel(item, "Object")}
                 />
-                {referenceImage ? (
-                  <Group clipX={roomBox.x} clipY={roomBox.y} clipWidth={roomBox.width} clipHeight={roomBox.height}>
-                    <KonvaImage
-                      image={referenceImage}
-                      x={roomBox.x}
-                      y={roomBox.y}
-                      width={roomBox.width}
-                      height={roomBox.height}
-                      opacity={0.55}
-                      listening={false}
-                    />
-                  </Group>
-                ) : null}
-              </>
-            ) : null}
+              </g>
+            );
+          })}
 
-            {walls.map((wall, index) => {
-              const start = toCanvasPoint(
-                { x: wall.x1_percent, y: wall.y1_percent },
-                roomBox,
-                roomSize.bounds
-              );
-              const end = toCanvasPoint(
-                { x: wall.x2_percent, y: wall.y2_percent },
-                roomBox,
-                roomSize.bounds
-              );
+          {desks.map((desk, index) => {
+            const definition = getObjectDefinition(desk.type);
+            const { width, height } = objectPixelSize(desk, roomBox);
+            const x = roomBox.x + (desk.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (desk.y_percent / 100) * roomBox.height;
 
-              return (
-                <Group
-                  key={`wall-${index}`}
-                  draggable
-                  onDragEnd={(event) => {
-                    const deltaXPercent = (event.target.x() / roomBox.width) * (roomSize.bounds.maxX - roomSize.bounds.minX);
-                    const deltaYPercent = (event.target.y() / roomBox.height) * (roomSize.bounds.maxY - roomSize.bounds.minY);
-                    moveWall(index, deltaXPercent, deltaYPercent);
-                    event.target.position({ x: 0, y: 0 });
-                  }}
-                  onDblClick={() => rotateWall(index)}
-                >
-                  <Line
-                    points={[start.x, start.y, end.x, end.y]}
-                    stroke="#10233d"
-                    strokeWidth={4}
-                    lineCap="round"
-                  />
-                </Group>
-              );
-            })}
+            return (
+              <g
+                key={`desk-${index}`}
+                transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${desk.rotation_deg || 0} ${width / 2} ${height / 2})`}
+                onPointerDown={(event) => startDrag("desks", index, event)}
+                onDoubleClick={() => updatePlacedItem("desks", index, { rotation_deg: (desk.rotation_deg + 90) % 360 })}
+              >
+                <SvgObjectShape
+                  item={desk}
+                  roomBox={roomBox}
+                  fill={definition.tone}
+                  stroke={definition.stroke}
+                  strokeWidth={2}
+                  label={`${getLabel(desk, "Desk")} ${index + 1}`}
+                />
+              </g>
+            );
+          })}
 
-            {windows.map((windowItem, index) => {
-              const x = roomBox.x + (windowItem.x_percent / 100) * roomBox.width;
-              const y = roomBox.y + (windowItem.y_percent / 100) * roomBox.height;
-              return (
-                <Group
-                  key={`window-${index}`}
-                  x={x}
-                  y={y}
-                  rotation={windowItem.rotation_deg || 0}
-                  offsetX={0}
-                  offsetY={0}
-                  draggable
-                  onDragMove={(event) => {
-                    const next = clampObjectPosition(event.target.position(), roomBox);
-                    updatePlacedItem("windows", index, next);
-                  }}
-                  onDblClick={() =>
-                    updatePlacedItem("windows", index, { rotation_deg: ((windowItem.rotation_deg || 0) + 90) % 360 })
-                  }
-                >
-                  <Line
-                    points={[-26, 0, 26, 0]}
-                    stroke="#1877f2"
-                    strokeWidth={8}
-                    lineCap="round"
-                  />
-                </Group>
-              );
-            })}
-
-            {doors.map((doorItem, index) => {
-              const x = roomBox.x + (doorItem.x_percent / 100) * roomBox.width;
-              const y = roomBox.y + (doorItem.y_percent / 100) * roomBox.height;
-              return (
-                <Group
-                  key={`door-${index}`}
-                  x={x}
-                  y={y}
-                  rotation={doorItem.rotation_deg || 0}
-                  draggable
-                  onDragMove={(event) => {
-                    const next = clampObjectPosition(event.target.position(), roomBox);
-                    updatePlacedItem("doors", index, next);
-                  }}
-                  onDblClick={() =>
-                    updatePlacedItem("doors", index, { rotation_deg: ((doorItem.rotation_deg || 0) + 90) % 360 })
-                  }
-                >
-                  <Line
-                    points={[-18, 0, 18, 0]}
-                    stroke="#8b5e34"
-                    strokeWidth={10}
-                    lineCap="round"
-                  />
-                </Group>
-              );
-            })}
-
-            {furniture.map((item, index) => {
-              const definition = getObjectDefinition(item.type);
-              const { width, height } = objectPixelSize(item, roomBox);
-              const x = roomBox.x + (item.x_percent / 100) * roomBox.width;
-              const y = roomBox.y + (item.y_percent / 100) * roomBox.height;
-
-              return (
-                <Group
-                  key={`furniture-${index}`}
-                  x={x}
-                  y={y}
-                  rotation={item.rotation_deg || 0}
-                  offsetX={width / 2}
-                  offsetY={height / 2}
-                  draggable
-                  onDragEnd={(event) => handlePlacedItemDragEnd("furniture", index, event)}
-                  onDblClick={() => updatePlacedItem("furniture", index, { rotation_deg: (item.rotation_deg + 90) % 360 })}
-                >
-                  <FootprintShape
-                    item={item}
-                    roomBox={roomBox}
-                    fill={definition.tone}
-                    stroke={definition.stroke}
-                    strokeWidth={1.5}
-                    label={getLabel(item, "Object")}
-                  />
-                </Group>
-              );
-            })}
-
-            {desks.map((desk, index) => {
-              const definition = getObjectDefinition(desk.type);
-              const { width, height } = objectPixelSize(desk, roomBox);
-              const x = roomBox.x + (desk.x_percent / 100) * roomBox.width;
-              const y = roomBox.y + (desk.y_percent / 100) * roomBox.height;
-
-              return (
-                <Group
-                  key={`desk-${index}`}
-                  x={x}
-                  y={y}
-                  rotation={desk.rotation_deg}
-                  offsetX={width / 2}
-                  offsetY={height / 2}
-                  draggable
-                  onDragEnd={(event) => handlePlacedItemDragEnd("desks", index, event)}
-                  onDblClick={() => updatePlacedItem("desks", index, { rotation_deg: (desk.rotation_deg + 90) % 360 })}
-                >
-                  <FootprintShape
-                    item={desk}
-                    roomBox={roomBox}
-                    fill={definition.tone}
-                    stroke={definition.stroke}
-                    strokeWidth={2}
-                    label={`${getLabel(desk, "Desk")} ${index + 1}`}
-                  />
-                </Group>
-              );
-            })}
-            <TrashTarget />
-          </Layer>
-        </Stage>
+          <TrashTarget />
+        </svg>
       </div>
     </div>
   );

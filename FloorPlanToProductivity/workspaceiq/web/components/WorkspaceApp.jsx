@@ -1,9 +1,9 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import UploadScreen from "@/components/UploadScreen";
 import ControlPanel from "@/components/ControlPanel";
+import FloorPlanEditor from "@/components/FloorPlanEditor";
 import FloorPlanEditorBoundary from "@/components/FloorPlanEditorBoundary";
 import ScorePanel from "@/components/ScorePanel";
 import { getObjectDefinition } from "@/lib/objectCatalog";
@@ -16,10 +16,6 @@ import {
   normalizeRotation,
   normalizeShapeKind
 } from "@/lib/roomState";
-
-const FloorPlanEditor = dynamic(() => import("@/components/FloorPlanEditor"), {
-  ssr: false
-});
 
 const API_BASE_URL = "/api";
 
