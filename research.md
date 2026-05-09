@@ -3,6 +3,19 @@
 ## Feng shui
 - Command position: desks should see door w/o being directly in line with it
 - Positive energy flow (chi) requires reducing clutter
+- Rounded edges (on desks etc.) to encourage flow of energy
+- Incorporate 5 elements
+    - Fire: Lighting; red/orange accents
+    - Wood: Plants, wooden furniture
+    - Earth: Stone, ceramics, yellow/beige
+    - Metal: Metal furnishings, white/grey
+    - Water: Aquariums, blue/black shades
+- Avoid fluorescent lighting
+- Artificial lighting = yang energy (creativity and activity)
+- Darkness = yin energy (resting and thinking)
+- Back of office chair shouldn't be behind chair/window
+- Supportive, full-back chairs
+- Keep walkways clear
 - 
 
 ## Productivity framework
