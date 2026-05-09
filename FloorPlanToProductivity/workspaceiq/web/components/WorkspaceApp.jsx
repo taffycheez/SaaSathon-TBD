@@ -598,6 +598,7 @@ export default function WorkspaceApp() {
   const [roomNotes, setRoomNotes] = useState([]);
   const [layoutNotes, setLayoutNotes] = useState([]);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [pendingScrollTarget, setPendingScrollTarget] = useState("");
 
   const scoreResult = useMemo(() => computeFengShuiScore(room, preferences), [room, preferences]);
 
@@ -612,6 +613,24 @@ export default function WorkspaceApp() {
 
     return () => window.clearTimeout(timeoutId);
   }, [error]);
+
+  useEffect(() => {
+    if (!pendingScrollTarget) {
+      return undefined;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const target = document.getElementById(pendingScrollTarget);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      setPendingScrollTarget("");
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [pendingScrollTarget, imagePreview]);
 
   function addObject(type) {
     setRoom((currentRoom) => addObjectToRoom(currentRoom, type));
@@ -757,17 +776,27 @@ export default function WorkspaceApp() {
     setShowResetConfirm(false);
   }
 
+  function goHome(target = "home") {
+    setShowResetConfirm(false);
+    setIsGenerating(false);
+    setError("");
+    setRoom(DEFAULT_ROOM);
+    setBaseRoom(DEFAULT_ROOM);
+    setPreferences(defaultPreferences);
+    setImagePreview("");
+    setShowReferenceImage(false);
+    setRoomNotes([]);
+    setLayoutNotes([]);
+    setPendingScrollTarget(target);
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <button
           type="button"
           className="brand-lockup brand-home-button"
-          onClick={() => {
-            if (!imagePreview) {
-              resetWorkspace();
-            }
-          }}
+          onClick={() => goHome("home")}
           aria-label="Go to WorkspaceIQ home"
         >
           <span className="brand-mark">WIQ</span>
@@ -796,6 +825,7 @@ export default function WorkspaceApp() {
           onUpload={handleUpload}
           isLoading={isAnalysing}
           error={error}
+          onHome={goHome}
         />
       ) : (
         <main className="workspace-layout">
@@ -850,7 +880,7 @@ export default function WorkspaceApp() {
           </aside>
         </main>
       )}
-      <Footer />
+      <Footer onHome={goHome} />
       {showResetConfirm ? (
         <div className="modal-backdrop" role="presentation" onClick={cancelResetWorkspace}>
           <div
@@ -909,7 +939,7 @@ function LoadingScreen() {
   );
 }
 
-function HomePage({ uploadRef, onUpload, isLoading, error }) {
+function HomePage({ uploadRef, onUpload, isLoading, error, onHome }) {
   return (
     <main className="home-page">
       <section className="hero-section" id="home">
@@ -928,6 +958,9 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
               disabled={isLoading}
             >
               {isLoading ? "Analysing..." : "Start with a photo"}
+            </button>
+            <button type="button" className="secondary-link" onClick={() => onHome("upload")}>
+              See upload area
             </button>
           </div>
         </div>
@@ -978,21 +1011,20 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
   );
 }
 
-function Footer() {
+function Footer({ onHome }) {
   return (
     <footer className="site-footer" id="footer">
       <div className="footer-links">
-        <div className="brand-lockup">
+        <button type="button" className="brand-lockup brand-home-button footer-home-button" onClick={() => onHome("home")}>
           <span className="brand-mark">WIQ</span>
           <div>
             <p className="eyebrow">WorkspaceIQ</p>
             <h2>Quick links</h2>
           </div>
-        </div>
+        </button>
         <nav aria-label="Footer quick links">
-          <a href="#home">Home</a>
-          <a href="#features">Features</a>
-          <a href="#upload">Upload</a>
+          <button type="button" className="footer-link-button" onClick={() => onHome("home")}>Home</button>
+          <button type="button" className="footer-link-button" onClick={() => onHome("upload")}>Upload</button>
           <a href="mailto:hello@workspaceiq.local">Contact</a>
         </nav>
       </div>
