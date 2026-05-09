@@ -655,7 +655,7 @@ function HomePage({ uploadRef, onUpload, isLoading, error }) {
       <section className="feature-section" id="features">
         <article>
           <span>01</span>
-          <h3>Read the room</h3>
+          <h3>Analyze the room</h3>
           <p>Estimate room size, walls, windows, doors, and obstacles from a simple workspace photo.</p>
         </article>
         <article>
