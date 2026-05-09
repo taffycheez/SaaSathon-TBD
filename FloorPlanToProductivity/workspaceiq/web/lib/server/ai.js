@@ -1,11 +1,30 @@
 import OpenAI from "openai";
 
-const usingOpenRouter = Boolean(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_BASE_URL);
+function sanitizeBaseUrl(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "..." || trimmed === "http://" || trimmed === "https://") {
+    return "";
+  }
+
+  try {
+    return new URL(trimmed).toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+const normalizedOpenRouterBaseUrl = sanitizeBaseUrl(process.env.OPENROUTER_BASE_URL);
+const normalizedOpenAiBaseUrl = sanitizeBaseUrl(process.env.OPENAI_BASE_URL);
+const usingOpenRouter = Boolean(process.env.OPENROUTER_API_KEY || normalizedOpenRouterBaseUrl);
 
 export const openRouterApiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || "";
 export const openRouterBaseUrl = usingOpenRouter
-  ? process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1"
-  : process.env.OPENAI_BASE_URL;
+  ? normalizedOpenRouterBaseUrl || "https://openrouter.ai/api/v1"
+  : normalizedOpenAiBaseUrl || undefined;
 export const openRouterModel =
   process.env.OPENROUTER_MODEL ||
   process.env.OPENAI_MODEL ||

@@ -510,24 +510,65 @@ button:disabled {
 
 .editor-undo-button {
   position: absolute;
-  right: 14px;
-  bottom: 86px;
   z-index: 5;
+  transform-origin: top left;
+}
+
+.trash-indicator-shell {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  transform-origin: top left;
 }
 
 .trash-indicator {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 5;
   width: 58px;
   height: 58px;
   border: 2px solid #f0b9b9;
   border-radius: 8px;
   background: #fff2f2;
   box-shadow: 0 10px 20px rgba(23, 32, 47, 0.12);
-  pointer-events: none;
-  animation: trash-float 2.2s ease-in-out infinite;
+  animation: trash-float 3.4s cubic-bezier(0.42, 0, 0.22, 1) infinite;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+  will-change: transform;
+}
+
+.trash-indicator.is-hot {
+  background: #ffe8e8;
+  border-color: #dd8e8e;
+  box-shadow: 0 14px 28px rgba(168, 59, 59, 0.16);
+  transform: translateY(-1px) scale(1.03);
+}
+
+.trash-indicator.is-hot .trash-body {
+  transform: translateX(-50%) translateY(1px) scaleY(1.03);
+}
+
+.trash-indicator.is-hot .trash-lid {
+  transform: translateX(-50%) translateY(-6px) rotate(-24deg);
+}
+
+.trash-indicator.is-hot .trash-handle {
+  transform: translateX(-50%) translateY(-5px);
+}
+
+.trash-indicator.is-hot .trash-body span:first-child {
+  transform: translateX(-50%) translateY(1px);
+}
+
+.trash-indicator.is-hot .trash-body span:last-child {
+  transform: translateX(-50%) translateY(-1px);
+}
+
+.trash-lid,
+.trash-handle,
+.trash-body,
+.trash-body span {
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .trash-lid,
@@ -545,6 +586,7 @@ button:disabled {
   height: 3px;
   border-radius: 999px;
   background: #a83b3b;
+  transform-origin: center center;
 }
 
 .trash-handle {
@@ -588,8 +630,8 @@ button:disabled {
   }
 
   50% {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 24px rgba(23, 32, 47, 0.16);
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(23, 32, 47, 0.14);
   }
 }
 
@@ -633,6 +675,19 @@ button:disabled {
   padding-left: 18px;
   color: var(--muted);
   font-size: 0.94rem;
+}
+
+.score-advice {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.score-advice-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 0.93rem;
 }
 
 .score-badge::after {

@@ -4,8 +4,10 @@ import FloorPlanEditor from "./components/FloorPlanEditor";
 import ControlPanel from "./components/ControlPanel";
 import ScorePanel from "./components/ScorePanel";
 import { getObjectDefinition } from "./objectCatalog";
+import { computeFengShuiScore } from "./lib/fengShuiScore";
 import {
   addObjectToRoom,
+  addOpeningToRoom,
   clampPercent,
   isDeskLikeFurniture,
   normalizeFootprintPoints,
@@ -32,7 +34,8 @@ const DEFAULT_ROOM = {
 };
 
 const defaultPreferences = {
-  numPeople: 8
+  numPeople: 8,
+  workStyle: "balanced"
 };
 
 function cloneValue(value) {
@@ -267,7 +270,10 @@ export default function App() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
 
-  const scoreResult = useMemo(() => computeScore(room), [room]);
+  const scoreResult = useMemo(
+    () => computeFengShuiScore(room, preferences),
+    [room, preferences]
+  );
 
   useEffect(() => {
     if (!error) {
@@ -320,17 +326,12 @@ export default function App() {
 
   function addWindow() {
     pushUndoSnapshot();
-    setRoom((currentRoom) => ({
-      ...currentRoom,
-      windows: [
-        ...(currentRoom.windows || []),
-        { x_percent: 50, y_percent: 12, rotation_deg: 0 }
-      ]
-    }));
+    setRoom((currentRoom) => addOpeningToRoom(currentRoom, "window"));
   }
 
-  function addTable() {
-    addObject("table");
+  function addDoor() {
+    pushUndoSnapshot();
+    setRoom((currentRoom) => addOpeningToRoom(currentRoom, "door"));
   }
 
   async function handleUpload(file) {
@@ -378,7 +379,7 @@ export default function App() {
         body: JSON.stringify({
           room,
           num_people: preferences.numPeople,
-          work_style: "balanced"
+          work_style: preferences.workStyle || "balanced"
         })
       });
 
@@ -500,7 +501,11 @@ export default function App() {
               onUndo={undoLastAction}
               canUndo={Boolean(undoStack.length)}
             />
-            <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} />
+            <ScorePanel
+              score={scoreResult.score}
+              breakdown={scoreResult.breakdown}
+              advice={scoreResult.advice}
+            />
             </section>
 
             <aside className="sidebar-column">
@@ -518,7 +523,7 @@ export default function App() {
                   setShowReferenceImage(updater);
                 }}
                 onAddWindow={addWindow}
-                onAddTable={addTable}
+                onAddDoor={addDoor}
                 onAddObject={addObject}
                 onGenerateLayout={handleGenerateLayout}
                 onReset={resetWorkspace}
