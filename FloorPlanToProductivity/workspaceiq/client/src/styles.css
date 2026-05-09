@@ -1,0 +1,247 @@
+:root {
+  font-family: "Segoe UI", sans-serif;
+  color: #10233d;
+  background: #f5f8fc;
+  line-height: 1.5;
+  font-weight: 400;
+  --accent: #1877f2;
+  --accent-dark: #0f4c81;
+  --border: #d7e2ef;
+  --panel: #ffffff;
+  --muted: #53708f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(24, 119, 242, 0.08), transparent 28%),
+    linear-gradient(180deg, #f9fbfe 0%, #eef4fb 100%);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  padding: 24px;
+}
+
+.app-header {
+  max-width: 980px;
+  margin: 0 auto 24px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  max-width: 760px;
+}
+
+.eyebrow,
+.upload-kicker {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.workspace-layout {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 7fr 3fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.canvas-column,
+.sidebar-column {
+  display: grid;
+  gap: 20px;
+}
+
+.upload-screen {
+  max-width: 980px;
+  margin: 48px auto;
+}
+
+.upload-card,
+.panel-card,
+.editor-card,
+.note-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(16, 35, 61, 0.08);
+}
+
+.upload-card {
+  padding: 52px;
+  text-align: center;
+  border-style: dashed;
+  cursor: pointer;
+}
+
+.editor-card {
+  padding: 20px;
+}
+
+.panel-card {
+  padding: 24px;
+}
+
+.note-card {
+  padding: 20px 24px;
+}
+
+.editor-header,
+.score-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.editor-note {
+  color: var(--muted);
+  max-width: 280px;
+  text-align: right;
+}
+
+.field,
+.field-row {
+  display: grid;
+  gap: 8px;
+}
+
+.field {
+  margin-bottom: 18px;
+}
+
+.field-row {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fbfdff;
+}
+
+.primary-button,
+.secondary-button {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: var(--accent);
+  color: white;
+}
+
+.secondary-button {
+  background: #eef4fb;
+  color: var(--accent-dark);
+  margin-top: 10px;
+}
+
+.floor-stage {
+  margin-top: 12px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #fbfdff, #f3f7fb);
+}
+
+.score-badge {
+  min-width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.score-badge.good {
+  background: #dff7e7;
+  color: #146c3c;
+}
+
+.score-badge.medium {
+  background: #fff2d6;
+  color: #8a5a00;
+}
+
+.score-badge.low {
+  background: #ffe1e1;
+  color: #ab2f2f;
+}
+
+.score-list {
+  margin: 18px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.note-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.error-banner {
+  margin: 0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: #8f1f1f;
+  background: #ffe3e3;
+}
+
+@media (max-width: 1024px) {
+  .workspace-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .upload-card {
+    padding: 28px;
+  }
+
+  .editor-header,
+  .score-topline,
+  .field-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .editor-note {
+    text-align: left;
+  }
+}

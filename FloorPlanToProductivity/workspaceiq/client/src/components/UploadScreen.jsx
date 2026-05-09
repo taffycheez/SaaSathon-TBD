@@ -1,0 +1,48 @@
+import { useRef } from "react";
+
+export default function UploadScreen({ onUpload, isLoading, error }) {
+  const inputRef = useRef(null);
+
+  function handleFileSelection(event) {
+    const file = event.target.files?.[0];
+    if (file) {
+      onUpload(file);
+    }
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      onUpload(file);
+    }
+  }
+
+  return (
+    <section className="upload-screen">
+      <div
+        className="upload-card"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+      >
+        <p className="upload-kicker">Step 1</p>
+        <h2>Upload an office photo</h2>
+        <p>Drop an image here or click to browse. We&apos;ll estimate the room and draw an editable floor plan.</p>
+        <button type="button" className="primary-button" disabled={isLoading}>
+          {isLoading ? "Analysing..." : "Choose Image"}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={handleFileSelection}
+        />
+      </div>
+      {error ? <p className="error-banner">{error}</p> : null}
+    </section>
+  );
+}
