@@ -2,6 +2,7 @@ import { getCvWorkerUrl } from "@/lib/config";
 import { aiProviderName, createAiClient, openRouterAnalysisModel, openRouterApiKey } from "@/lib/server/ai";
 import {
   buildRoomNotes,
+  fallbackRoom,
   mergeRoomAnalyses,
   normalizeAnalysisResult
 } from "@/lib/server/analyseRoomHelpers";
@@ -68,6 +69,18 @@ function getAnalysisPipelineMode(value: unknown): AnalysisPipelineMode {
     : (process.env.ANALYSIS_PIPELINE_MODE || process.env.NEXT_PUBLIC_ANALYSIS_PIPELINE_MODE || "hybrid").toLowerCase();
 
   return PIPELINE_MODES.has(candidate as AnalysisPipelineMode) ? candidate as AnalysisPipelineMode : "hybrid";
+}
+
+function buildFallbackAnalysisResponse(failureReasons: string[]) {
+  return {
+    ...fallbackRoom,
+    notes: [
+      "WorkspaceIQ could not reach the analysis services, so it opened a starter room you can edit manually.",
+      ...buildRoomNotes(fallbackRoom, true)
+    ],
+    reasons: failureReasons,
+    fallback: true
+  };
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
@@ -237,7 +250,8 @@ export async function POST(request: Request) {
         analysisSource = "llm";
       } catch (llmError) {
         failureReasons.push(formatLlmFailureReason(llmError));
-        throw new Error(failureReasons.join(" | "));
+        console.warn("analyse-room llm fallback failed, using editable starter room", llmError);
+        return Response.json(buildFallbackAnalysisResponse(failureReasons));
       }
     }
 
@@ -277,10 +291,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("analyse-room error", error);
-    return Response.json({
-      error: "Room analysis failed.",
-      reasons: [formatFailureReason("analyse-room", error)],
-      fallback: false
-    }, { status: 502 });
+    const reasons = [formatFailureReason("analyse-room", error)];
+    return Response.json(buildFallbackAnalysisResponse(reasons));
   }
 }

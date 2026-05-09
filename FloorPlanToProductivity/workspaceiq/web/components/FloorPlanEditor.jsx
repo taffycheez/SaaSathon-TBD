@@ -1372,6 +1372,15 @@ export default function FloorPlanEditor({
           end: getSnappedWallPoint(room, pointerToRoomPosition(dragState.point, roomBoxRef.current, false))
         }
       : null;
+  const hasEditorContextPanel = Boolean(
+    selectedItem ||
+      (!selectedItem && selectedOpening) ||
+      (!selectedItem && !selectedOpening && selectedWallIndex != null) ||
+      wallToolMode === "add" ||
+      wallToolMode === "rect" ||
+      scaleToolActive ||
+      northToolActive
+  );
 
   return (
     <div className="editor-card">
@@ -1419,199 +1428,209 @@ export default function FloorPlanEditor({
         </div>
       </div>
 
-      {selectedItem ? (
-        <div
-          className="object-scale-panel"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <label className="object-scale-field">
-            <span>
-              <strong>{selectedItemLabel}</strong>
-              <small>Scale {Math.round(selectedItemScale * 100)}%</small>
-            </span>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.05"
-              value={selectedItemScale}
-              onChange={(event) => updateSelectedItemScale(event.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            className="object-scale-reset"
-            onClick={() => updateSelectedItemScale(1)}
-            disabled={selectedItemScale === 1}
+      <div className={`editor-context-slot${hasEditorContextPanel ? " has-panel" : ""}`} aria-hidden={!hasEditorContextPanel}>
+        {selectedItem ? (
+          <div
+            className="object-scale-panel"
+            onPointerDown={(event) => event.stopPropagation()}
           >
-            Reset
-          </button>
-          <div className="object-scale-actions">
+            <label className="object-scale-field">
+              <span>
+                <strong>{selectedItemLabel}</strong>
+                <small>Scale {Math.round(selectedItemScale * 100)}%</small>
+              </span>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.05"
+                value={selectedItemScale}
+                onChange={(event) => updateSelectedItemScale(event.target.value)}
+              />
+            </label>
             <button
               type="button"
               className="object-scale-reset"
-              onClick={() => rotateSelectedItem(-ROTATION_STEP_DEGREES)}
+              onClick={() => updateSelectedItemScale(1)}
+              disabled={selectedItemScale === 1}
             >
-              Rotate -45°
+              Reset
             </button>
-            <button
-              type="button"
-              className="object-scale-reset"
-              onClick={() => rotateSelectedItem(ROTATION_STEP_DEGREES)}
-            >
-              Rotate +45°
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {!selectedItem && selectedOpening ? (
-        <div
-          className="object-scale-panel"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          {selectedEdgeItem?.type === "windows" ? (
-            <>
-              <label className="object-scale-field">
-                <span>
-                  <strong>Window size</strong>
-                  <small>Width {Math.round(Number(selectedOpening.width_percent) || 14)}%</small>
-                </span>
-                <input
-                  type="range"
-                  min="4"
-                  max="30"
-                  step="1"
-                  value={Number(selectedOpening.width_percent) || 14}
-                  onChange={(event) => updateSelectedWindowWidth(event.target.value)}
-                />
-              </label>
-              <button
-                type="button"
-                className="object-scale-reset"
-                onClick={() => updateSelectedWindowWidth(14)}
-                disabled={(Number(selectedOpening.width_percent) || 14) === 14}
-              >
-                Reset
-              </button>
-            </>
-          ) : null}
-          {selectedEdgeItem?.type === "doors" ? (
             <div className="object-scale-actions">
               <button
                 type="button"
                 className="object-scale-reset"
-                onClick={cycleSelectedDoorOrientation}
+                onClick={() => rotateSelectedItem(-ROTATION_STEP_DEGREES)}
               >
-                Flip door swing
+                Rotate -45°
               </button>
               <button
                 type="button"
                 className="object-scale-reset"
-                onClick={flipSelectedDoorHinge}
+                onClick={() => rotateSelectedItem(ROTATION_STEP_DEGREES)}
               >
-                Flip door hinge
+                Rotate +45°
               </button>
             </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {!selectedItem && !selectedOpening && selectedWallIndex != null ? (
-        <div
-          className="wall-action-panel"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <div className="wall-action-copy">
-            <strong>Wall {selectedWallIndex + 1}</strong>
-            <small>Delete removes only this wall segment. You can reconnect or reshape neighbouring walls afterwards.</small>
           </div>
-          <button
-            type="button"
-            className="wall-delete-button"
-            onClick={removeSelectedWall}
+        ) : null}
+
+        {!selectedItem && selectedOpening ? (
+          <div
+            className="object-scale-panel"
+            onPointerDown={(event) => event.stopPropagation()}
           >
-            Delete wall
-          </button>
-        </div>
-      ) : null}
-
-      {wallToolMode === "add" ? (
-        <div
-          className="wall-action-panel"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <div className="wall-action-copy">
-            <strong>Draw walls</strong>
-            <small>Click and drag to draw a snapped wall segment, like a build tool rather than a node editor.</small>
+            {selectedEdgeItem?.type === "windows" ? (
+              <>
+                <label className="object-scale-field">
+                  <span>
+                    <strong>Window size</strong>
+                    <small>Width {Math.round(Number(selectedOpening.width_percent) || 14)}%</small>
+                  </span>
+                  <input
+                    type="range"
+                    min="4"
+                    max="30"
+                    step="1"
+                    value={Number(selectedOpening.width_percent) || 14}
+                    onChange={(event) => updateSelectedWindowWidth(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="object-scale-reset"
+                  onClick={() => updateSelectedWindowWidth(14)}
+                  disabled={(Number(selectedOpening.width_percent) || 14) === 14}
+                >
+                  Reset
+                </button>
+              </>
+            ) : null}
+            {selectedEdgeItem?.type === "doors" ? (
+              <div className="object-scale-actions">
+                <button
+                  type="button"
+                  className="object-scale-reset"
+                  onClick={cycleSelectedDoorOrientation}
+                >
+                  Flip door swing
+                </button>
+                <button
+                  type="button"
+                  className="object-scale-reset"
+                  onClick={flipSelectedDoorHinge}
+                >
+                  Flip door hinge
+                </button>
+              </div>
+            ) : null}
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      {wallToolMode === "rect" ? (
-        <div
-          className="wall-action-panel"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <div className="wall-action-copy">
-            <strong>Rectangle room</strong>
-            <small>Click and drag to drop a four-wall room shell in one move.</small>
-          </div>
-        </div>
-      ) : null}
-
-      {scaleToolActive ? (
-        <div
-          className="wall-action-panel"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <div className="wall-action-copy">
-            <strong>Set scale</strong>
-            <small>
-              {scaleDraft
-                ? "Measured line captured. Enter the real-world length to calibrate the plan."
-                : "Click and drag a measurement line across something with a known real-world length."}
-            </small>
-          </div>
-        </div>
-      ) : null}
-
-      {northToolActive ? (
-        <div
-          className="wall-action-panel"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <div className="wall-action-copy">
-            <strong>Set north</strong>
-            <small>Drag anywhere on the room to rotate the compass. The 3D daylight will use this north direction.</small>
-          </div>
-          <label className="field">
-            <span className="field-label">
-              North direction
-              <strong>{Math.round(currentNorthAngle)}°</strong>
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="359"
-              step="1"
-              value={Math.round(currentNorthAngle)}
-              onChange={(event) => onApplyNorthDirection?.(Number(event.target.value))}
-            />
-          </label>
-          <div className="object-scale-actions">
-            <button type="button" className="object-scale-reset" onClick={() => nudgeNorthAngle(-15)}>
-              Turn Left 15°
-            </button>
-            <button type="button" className="object-scale-reset" onClick={() => onApplyNorthDirection?.(0)}>
-              Face Up
-            </button>
-            <button type="button" className="object-scale-reset" onClick={() => nudgeNorthAngle(15)}>
-              Turn Right 15°
+        {!selectedItem && !selectedOpening && selectedWallIndex != null ? (
+          <div
+            className="wall-action-panel"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="wall-action-copy">
+              <strong>Wall {selectedWallIndex + 1}</strong>
+              <small>Delete removes only this wall segment. You can reconnect or reshape neighbouring walls afterwards.</small>
+            </div>
+            <button
+              type="button"
+              className="wall-delete-button"
+              onClick={removeSelectedWall}
+            >
+              Delete wall
             </button>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+
+        {wallToolMode === "add" ? (
+          <div
+            className="wall-action-panel"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="wall-action-copy">
+              <strong>Draw walls</strong>
+              <small>Click and drag to draw a snapped wall segment, like a build tool rather than a node editor.</small>
+            </div>
+          </div>
+        ) : null}
+
+        {wallToolMode === "rect" ? (
+          <div
+            className="wall-action-panel"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="wall-action-copy">
+              <strong>Rectangle room</strong>
+              <small>Click and drag to drop a four-wall room shell in one move.</small>
+            </div>
+          </div>
+        ) : null}
+
+        {scaleToolActive ? (
+          <div
+            className="wall-action-panel"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="wall-action-copy">
+              <strong>Set scale</strong>
+              <small>
+                {scaleDraft
+                  ? "Measured line captured. Enter the real-world length to calibrate the plan."
+                  : "Click and drag a measurement line across something with a known real-world length."}
+              </small>
+            </div>
+          </div>
+        ) : null}
+
+        {northToolActive ? (
+          <div
+            className="wall-action-panel"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="wall-action-copy">
+              <strong>Set north</strong>
+              <small>Drag anywhere on the room to rotate the compass. The 3D daylight will use this north direction.</small>
+            </div>
+            <label className="field">
+              <span className="field-label">
+                North direction
+                <strong>{Math.round(currentNorthAngle)}°</strong>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="359"
+                step="1"
+                value={Math.round(currentNorthAngle)}
+                onChange={(event) => onApplyNorthDirection?.(Number(event.target.value))}
+              />
+            </label>
+            <div className="object-scale-actions">
+              <button type="button" className="object-scale-reset" onClick={() => nudgeNorthAngle(-15)}>
+                Turn Left 15°
+              </button>
+              <button
+                type="button"
+                className="object-scale-reset"
+                onClick={() => onApplyNorthDirection?.(0)}
+              >
+                Face Up
+              </button>
+              <button
+                type="button"
+                className="object-scale-reset"
+                onClick={() => nudgeNorthAngle(15)}
+              >
+                Turn Right 15°
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       {scaleDraft ? (
         <div className="modal-backdrop" role="presentation" onClick={cancelScaleDraft}>
