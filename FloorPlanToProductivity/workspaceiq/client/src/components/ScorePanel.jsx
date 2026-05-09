@@ -10,6 +10,9 @@ export default function ScorePanel({ score, breakdown }) {
         </div>
         <div className={`score-badge ${tone}`}>{score}</div>
       </div>
+      <div className="score-meter" aria-hidden="true">
+        <span style={{ width: `${score}%` }} />
+      </div>
 
       <ul className="score-list">
         {breakdown.map((item) => (

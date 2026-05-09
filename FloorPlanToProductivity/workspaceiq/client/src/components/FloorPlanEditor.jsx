@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Layer, Line, Rect, Stage, Text, Group, Image as KonvaImage } from "react-konva";
 import useImage from "use-image";
 
@@ -42,6 +42,8 @@ function clampDeskPosition(pointer, roomBox) {
 }
 
 export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
+  const shellRef = useRef(null);
+  const [stageScale, setStageScale] = useState(1);
   const windows = Array.isArray(room.windows) ? room.windows : [];
   const doors = Array.isArray(room.doors) ? room.doors : [];
   const furniture = Array.isArray(room.furniture) ? room.furniture : [];
@@ -54,6 +56,20 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
     width: roomSize.width,
     height: roomSize.height
   };
+
+  useEffect(() => {
+    const node = shellRef.current;
+    if (!node) {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      const nextWidth = entry.contentRect.width;
+      setStageScale(Math.min(1, nextWidth / CANVAS_WIDTH));
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   function updateEdgeItem(type, index, positionPercent) {
     setRoom((currentRoom) => ({
@@ -85,7 +101,18 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
         <p className="editor-note">Drag windows, doors, and desks. Double-click a desk to rotate it.</p>
       </div>
 
-      <Stage width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="floor-stage">
+      <div
+        ref={shellRef}
+        className="floor-stage-shell"
+        style={{ height: CANVAS_HEIGHT * stageScale }}
+      >
+        <Stage
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          scaleX={stageScale}
+          scaleY={stageScale}
+          className="floor-stage"
+        >
         <Layer>
           {Array.from({ length: 19 }).map((_, index) => {
             const x = PADDING + index * ((CANVAS_WIDTH - PADDING * 2) / 18);
@@ -248,7 +275,8 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             );
           })}
         </Layer>
-      </Stage>
+        </Stage>
+      </div>
     </div>
   );
 }

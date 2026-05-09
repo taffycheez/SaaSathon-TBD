@@ -28,9 +28,10 @@ export default function UploadScreen({ onUpload, isLoading, error }) {
         role="button"
         tabIndex={0}
       >
+        <div className="upload-icon" aria-hidden="true">+</div>
         <p className="upload-kicker">Step 1</p>
         <h2>Upload an office photo</h2>
-        <p>Drop an image here or click to browse. We&apos;ll estimate the room and draw an editable floor plan.</p>
+        <p>Drop an image here or click to browse. WorkspaceIQ estimates the room and opens an editable floor plan.</p>
         <button type="button" className="primary-button" disabled={isLoading}>
           {isLoading ? "Analysing..." : "Choose Image"}
         </button>

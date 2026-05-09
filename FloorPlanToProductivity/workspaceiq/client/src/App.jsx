@@ -268,9 +268,22 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div>
-          <p className="eyebrow">WorkspaceIQ</p>
-          <h1>Turn an office photo into an editable productivity layout.</h1>
+        <div className="brand-lockup">
+          <span className="brand-mark">WIQ</span>
+          <div>
+            <p className="eyebrow">WorkspaceIQ</p>
+            <h1>Plan a sharper room for focused work.</h1>
+          </div>
+        </div>
+        <div className="header-metrics" aria-label="Workspace summary">
+          <div>
+            <span>{room.desks?.length || 0}</span>
+            <small>desks</small>
+          </div>
+          <div>
+            <span>{scoreResult.score}</span>
+            <small>score</small>
+          </div>
         </div>
       </header>
 
