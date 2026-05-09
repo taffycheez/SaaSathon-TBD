@@ -1,5 +1,6 @@
 import { Fragment } from "react";
-import { Layer, Line, Rect, Stage, Text, Group } from "react-konva";
+import { Layer, Line, Rect, Stage, Text, Group, Image as KonvaImage } from "react-konva";
+import useImage from "use-image";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
@@ -41,6 +42,11 @@ function clampDeskPosition(pointer, roomBox) {
 }
 
 export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
+  const windows = Array.isArray(room.windows) ? room.windows : [];
+  const doors = Array.isArray(room.doors) ? room.doors : [];
+  const furniture = Array.isArray(room.furniture) ? room.furniture : [];
+  const desks = Array.isArray(room.desks) ? room.desks : [];
+  const [referenceImage] = useImage(imagePreview || "");
   const roomSize = getRoomPixelSize(room);
   const roomBox = {
     x: (CANVAS_WIDTH - roomSize.width) / 2,
@@ -92,14 +98,41 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             );
           })}
 
+          <Rect
+            x={roomBox.x}
+            y={roomBox.y}
+            width={roomBox.width}
+            height={roomBox.height}
+            fill="#f8fbff"
+            opacity={0.92}
+            stroke="#10233d"
+            strokeWidth={4}
+            cornerRadius={6}
+          />
+
           {imagePreview ? (
-            <Text
-              x={roomBox.x}
-              y={roomBox.y - 24}
-              text="Reference image uploaded"
-              fill="#53708f"
-              fontSize={14}
-            />
+            <>
+              <Text
+                x={roomBox.x}
+                y={roomBox.y - 24}
+                text="Reference image uploaded"
+                fill="#53708f"
+                fontSize={14}
+              />
+              {referenceImage ? (
+                <Group clipX={roomBox.x} clipY={roomBox.y} clipWidth={roomBox.width} clipHeight={roomBox.height}>
+                  <KonvaImage
+                    image={referenceImage}
+                    x={roomBox.x}
+                    y={roomBox.y}
+                    width={roomBox.width}
+                    height={roomBox.height}
+                    opacity={0.55}
+                    listening={false}
+                  />
+                </Group>
+              ) : null}
+            </>
           ) : null}
 
           <Rect
@@ -107,13 +140,13 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             y={roomBox.y}
             width={roomBox.width}
             height={roomBox.height}
-            fill="#ffffff"
+            fillEnabled={false}
             stroke="#10233d"
             strokeWidth={4}
             cornerRadius={6}
           />
 
-          {room.windows.map((windowItem, index) => {
+          {windows.map((windowItem, index) => {
             const point = pointFromWall(windowItem, roomBox);
             const isHorizontal = windowItem.wall === "top" || windowItem.wall === "bottom";
             return (
@@ -142,7 +175,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             );
           })}
 
-          {room.doors.map((doorItem, index) => {
+          {doors.map((doorItem, index) => {
             const point = pointFromWall(doorItem, roomBox);
             const isHorizontal = doorItem.wall === "top" || doorItem.wall === "bottom";
             return (
@@ -171,7 +204,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             );
           })}
 
-          {room.furniture.map((item, index) => (
+          {furniture.map((item, index) => (
             <Rect
               key={`furniture-${index}`}
               x={roomBox.x + (item.x_percent / 100) * roomBox.width - 18}
@@ -183,7 +216,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             />
           ))}
 
-          {room.desks.map((desk, index) => {
+          {desks.map((desk, index) => {
             const x = roomBox.x + (desk.x_percent / 100) * roomBox.width;
             const y = roomBox.y + (desk.y_percent / 100) * roomBox.height;
 

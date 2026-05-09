@@ -4,6 +4,8 @@ import FloorPlanEditor from "./components/FloorPlanEditor";
 import ControlPanel from "./components/ControlPanel";
 import ScorePanel from "./components/ScorePanel";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+
 const DEFAULT_ROOM = {
   estimated_width_m: 8,
   estimated_height_m: 6,
@@ -17,6 +19,29 @@ const defaultPreferences = {
   numPeople: 8,
   workStyle: "balanced"
 };
+
+function normalizeRoomData(data) {
+  const safeData = data && typeof data === "object" ? data : {};
+
+  return {
+    ...DEFAULT_ROOM,
+    estimated_width_m: Math.max(1, Number(safeData.estimated_width_m) || DEFAULT_ROOM.estimated_width_m),
+    estimated_height_m: Math.max(1, Number(safeData.estimated_height_m) || DEFAULT_ROOM.estimated_height_m),
+    windows: Array.isArray(safeData.windows) ? safeData.windows : [],
+    doors: Array.isArray(safeData.doors) ? safeData.doors : [],
+    furniture: Array.isArray(safeData.furniture) ? safeData.furniture : [],
+    desks: []
+  };
+}
+
+function normalizeDeskData(data) {
+  const desks = Array.isArray(data) ? data : Array.isArray(data?.desks) ? data.desks : [];
+  return desks.map((desk) => ({
+    x_percent: Number(desk?.x_percent) || 0,
+    y_percent: Number(desk?.y_percent) || 0,
+    rotation_deg: Number(desk?.rotation_deg) || 0
+  }));
+}
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -163,7 +188,7 @@ export default function App() {
       const base64 = await fileToBase64(file);
       setImagePreview(base64);
 
-      const response = await fetch("http://localhost:3001/analyse-room", {
+      const response = await fetch(`${API_BASE_URL}/analyse-room`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: base64 })
@@ -174,11 +199,7 @@ export default function App() {
       }
 
       const data = await response.json();
-      setRoom({
-        ...DEFAULT_ROOM,
-        ...data,
-        desks: []
-      });
+      setRoom(normalizeRoomData(data));
     } catch (uploadError) {
       setError(uploadError.message || "We couldn't analyse that image. Please try again.");
     } finally {
@@ -191,7 +212,7 @@ export default function App() {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:3001/generate-layout", {
+      const response = await fetch(`${API_BASE_URL}/generate-layout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -205,7 +226,7 @@ export default function App() {
         throw new Error("Layout generation failed.");
       }
 
-      const desks = await response.json();
+      const desks = normalizeDeskData(await response.json());
       setRoom((currentRoom) => ({
         ...currentRoom,
         desks

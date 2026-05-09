@@ -1,18 +1,10 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
+import { port } from "./config.js";
 import analyseRoomRouter from "./routes/analyseRoom.js";
 import generateLayoutRouter from "./routes/generateLayout.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
-
 const app = express();
-const port = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
@@ -24,6 +16,15 @@ app.get("/health", (_req, res) => {
 app.use("/analyse-room", analyseRoomRouter);
 app.use("/generate-layout", generateLayoutRouter);
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`WorkspaceIQ server running on port ${port}`);
+});
+
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`Port ${port} is already in use. Change PORT in .env or stop the other process using that port.`);
+    process.exit(1);
+  }
+
+  throw error;
 });

@@ -1,14 +1,45 @@
 import express from "express";
 import OpenAI from "openai";
+import { openAiApiKey } from "../config.js";
 
 const router = express.Router();
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: openAiApiKey
 });
 
 const systemPrompt =
   "You are an office space planning assistant. Always respond with valid JSON only, no prose, no markdown formatting.";
+
+function clampPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function normalizeRotation(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return ((numeric % 360) + 360) % 360;
+}
+
+function normalizeDeskArray(payload) {
+  const desks = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.desks)
+      ? payload.desks
+      : [];
+
+  return desks.map((item) => ({
+    x_percent: clampPercent(item?.x_percent),
+    y_percent: clampPercent(item?.y_percent),
+    rotation_deg: normalizeRotation(item?.rotation_deg)
+  }));
+}
 
 router.post("/", async (req, res) => {
   try {
@@ -43,7 +74,7 @@ work_style=${workStyle}`
 
     const rawOutput = response.output_text;
     const parsed = JSON.parse(rawOutput);
-    return res.json(parsed);
+    return res.json(normalizeDeskArray(parsed));
   } catch (error) {
     console.error("generate-layout error", error);
     return res.status(500).json({
