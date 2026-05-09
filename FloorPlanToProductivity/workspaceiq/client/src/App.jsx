@@ -30,17 +30,23 @@ function normalizeRoomData(data) {
     windows: Array.isArray(safeData.windows) ? safeData.windows : [],
     doors: Array.isArray(safeData.doors) ? safeData.doors : [],
     furniture: Array.isArray(safeData.furniture) ? safeData.furniture : [],
-    desks: []
+    desks: [],
+    notes: Array.isArray(safeData.notes) ? safeData.notes : []
   };
 }
 
 function normalizeDeskData(data) {
-  const desks = Array.isArray(data) ? data : Array.isArray(data?.desks) ? data.desks : [];
-  return desks.map((desk) => ({
-    x_percent: Number(desk?.x_percent) || 0,
-    y_percent: Number(desk?.y_percent) || 0,
-    rotation_deg: Number(desk?.rotation_deg) || 0
-  }));
+  const safeData = data && typeof data === "object" ? data : {};
+  const rawDesks = Array.isArray(data) ? data : Array.isArray(safeData.desks) ? safeData.desks : [];
+
+  return {
+    desks: rawDesks.map((desk) => ({
+      x_percent: Number(desk?.x_percent) || 0,
+      y_percent: Number(desk?.y_percent) || 0,
+      rotation_deg: Number(desk?.rotation_deg) || 0
+    })),
+    notes: Array.isArray(safeData.notes) ? safeData.notes : []
+  };
 }
 
 function clamp(value, min, max) {
@@ -177,6 +183,8 @@ export default function App() {
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [roomNotes, setRoomNotes] = useState([]);
+  const [layoutNotes, setLayoutNotes] = useState([]);
 
   const scoreResult = useMemo(() => computeScore(room, preferences), [room, preferences]);
 
@@ -200,6 +208,8 @@ export default function App() {
 
       const data = await response.json();
       setRoom(normalizeRoomData(data));
+      setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
+      setLayoutNotes([]);
     } catch (uploadError) {
       setError(uploadError.message || "We couldn't analyse that image. Please try again.");
     } finally {
@@ -226,11 +236,12 @@ export default function App() {
         throw new Error("Layout generation failed.");
       }
 
-      const desks = normalizeDeskData(await response.json());
+      const { desks, notes } = normalizeDeskData(await response.json());
       setRoom((currentRoom) => ({
         ...currentRoom,
         desks
       }));
+      setLayoutNotes(notes);
     } catch (generationError) {
       setError(generationError.message || "We couldn't generate a layout right now.");
     } finally {
@@ -250,6 +261,8 @@ export default function App() {
     setPreferences(defaultPreferences);
     setImagePreview("");
     setError("");
+    setRoomNotes([]);
+    setLayoutNotes([]);
   }
 
   return (
@@ -280,6 +293,26 @@ export default function App() {
               onReset={resetWorkspace}
               isGenerating={isGenerating}
             />
+            {roomNotes.length ? (
+              <div className="note-card">
+                <p className="upload-kicker">Room notes</p>
+                <ul className="note-list">
+                  {roomNotes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {layoutNotes.length ? (
+              <div className="note-card">
+                <p className="upload-kicker">Layout notes</p>
+                <ul className="note-list">
+                  {layoutNotes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {error ? <p className="error-banner">{error}</p> : null}
           </aside>
         </main>

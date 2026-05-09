@@ -81,7 +81,8 @@ select {
 
 .upload-card,
 .panel-card,
-.editor-card {
+.editor-card,
+.note-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 24px;
@@ -101,6 +102,10 @@ select {
 
 .panel-card {
   padding: 24px;
+}
+
+.note-card {
+  padding: 20px 24px;
 }
 
 .editor-header,
@@ -196,6 +201,12 @@ select {
 
 .score-list {
   margin: 18px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.note-list {
+  margin: 12px 0 0;
   padding-left: 18px;
   color: var(--muted);
 }
