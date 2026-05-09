@@ -14,6 +14,12 @@ Run commands from:
 cd "C:\Users\...\SaaSathon-TBD\FloorPlanToProductivity\workspaceiq"
 ```
 
+## Repo Layout
+
+- `client/`: current Vite + React prototype
+- `server/`: current Express + Python-backed analysis service
+- `web/`: new Next.js + TypeScript package for the cloud/Vercel migration path
+
 ## First-Time Setup
 
 Install dependencies before trying to start the app:
@@ -30,7 +36,7 @@ PORT=3001
 RUN_OPENAI_IMAGE_TESTS=0
 ANALYSIS_PIPELINE=hybrid
 CV_PYTHON_BIN=python
-CV_SEGMENTATION_MODEL=yolov8n-seg.pt
+CV_SEGMENTATION_MODEL=
 CV_MIN_WALL_SEGMENTS=3
 ```
 
@@ -57,7 +63,7 @@ To run only the backend:
 ```powershell
 npm.cmd run dev:server
 ```
-
+x
 The backend will start on:
 
 - `http://localhost:3001`
@@ -80,8 +86,6 @@ The server now supports three analysis modes:
 
 ### Python setup for the CV pipeline
 
-Important: `cv2` is **not** an npm package. It comes from the Python package `opencv-python`, so installing Node dependencies alone will not install it.
-
 From the server folder:
 
 ```powershell
@@ -91,21 +95,11 @@ python -m venv .venv
 pip install -r cv_pipeline\requirements-cv.txt
 ```
 
-Or from the workspace root, use the shortcut script:
-
-```powershell
-cd "C:\Users\varya\Documents\Uni\2026S1\SaaSathon-TBD\FloorPlanToProductivity\workspaceiq"
-npm.cmd run cv:setup
-npm.cmd run cv:check
-```
-
-By default, the CV pipeline now uses the standard Ultralytics segmentation model name:
+If you want segmentation to run, put a compatible Ultralytics segmentation model somewhere on disk and set:
 
 ```env
-CV_SEGMENTATION_MODEL=yolov8n-seg.pt
+CV_SEGMENTATION_MODEL=C:\path\to\your\segmentation-model.pt
 ```
-
-You can still override that with a different model name or path if you want. The goal is that users do not need to hardcode a machine-specific local file path just to get segmentation running.
 
 Examples of what this model would be used for:
 
@@ -113,11 +107,10 @@ Examples of what this model would be used for:
 - L-shaped desks
 - meeting tables
 - armchairs
-- plants
 - office equipment
-- toilets / sinks / showers
+- toilets / baths
 
-If segmentation cannot load, the CV pipeline will still do room contour and wall extraction, but object-shape detection will be limited.
+If `CV_SEGMENTATION_MODEL` is left blank, the CV pipeline will still do room contour and wall extraction, but object-shape detection will be limited.
 
 ## Start The Full App
 
@@ -229,12 +222,6 @@ Check:
 - the API key has billing/access enabled
 - if you are using `ANALYSIS_PIPELINE=cv` or `hybrid`, make sure Python dependencies are installed
 - if you want object-shape segmentation, make sure `CV_SEGMENTATION_MODEL` points to a real model file
-
-If you see `ModuleNotFoundError: No module named 'cv2'`, the CV pipeline is not installed yet. Run:
-
-```powershell
-npm.cmd run cv:setup
-```
 
 Even on failure, the app should still show fallback notes and a starter layout.
 

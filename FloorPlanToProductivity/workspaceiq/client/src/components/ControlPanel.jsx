@@ -77,7 +77,10 @@ export default function ControlPanel({
       </div>
 
       <label className="field toggle-field">
-        <span>Show original floor plan</span>
+        <span>
+          Show original floor plan
+          <small>Overlay the uploaded reference image on the canvas.</small>
+        </span>
         <button
           type="button"
           className={`toggle-button ${showReferenceImage ? "active" : ""}`}
