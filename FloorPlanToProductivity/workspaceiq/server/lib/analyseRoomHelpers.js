@@ -1,11 +1,17 @@
 export const fallbackRoom = {
   estimated_width_m: 8,
   estimated_height_m: 6,
-  windows: [
-    { wall: "top", position_percent: 25 },
-    { wall: "top", position_percent: 75 }
+  walls: [
+    { x1_percent: 0, y1_percent: 0, x2_percent: 100, y2_percent: 0 },
+    { x1_percent: 100, y1_percent: 0, x2_percent: 100, y2_percent: 100 },
+    { x1_percent: 100, y1_percent: 100, x2_percent: 0, y2_percent: 100 },
+    { x1_percent: 0, y1_percent: 100, x2_percent: 0, y2_percent: 0 }
   ],
-  doors: [{ wall: "left", position_percent: 70 }],
+  windows: [
+    { wall_index: 0, position_percent: 25 },
+    { wall_index: 0, position_percent: 75 }
+  ],
+  doors: [{ wall_index: 3, position_percent: 70 }],
   furniture: []
 };
 
@@ -17,34 +23,80 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, numeric));
 }
 
-function normalizeWall(value) {
-  const validWalls = ["top", "bottom", "left", "right"];
-  return validWalls.includes(value) ? value : "top";
+function clampIndex(value, max) {
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || max < 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(max, numeric));
+}
+
+function normalizeRotation(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return ((numeric % 360) + 360) % 360;
+}
+
+function normalizeWallSegment(item) {
+  return {
+    x1_percent: clampPercent(item?.x1_percent),
+    y1_percent: clampPercent(item?.y1_percent),
+    x2_percent: clampPercent(item?.x2_percent),
+    y2_percent: clampPercent(item?.y2_percent)
+  };
+}
+
+function normalizeLegacyWallToIndex(value) {
+  if (value === "top") {
+    return 0;
+  }
+  if (value === "right") {
+    return 1;
+  }
+  if (value === "bottom") {
+    return 2;
+  }
+  if (value === "left") {
+    return 3;
+  }
+  return 0;
+}
+
+function normalizeEdgeItems(items, walls) {
+  const wallCount = Math.max(0, walls.length - 1);
+  return Array.isArray(items)
+    ? items.map((item) => ({
+        wall_index: clampIndex(
+          item?.wall_index ?? normalizeLegacyWallToIndex(item?.wall),
+          wallCount
+        ),
+        position_percent: clampPercent(item?.position_percent)
+      }))
+    : [];
 }
 
 export function normalizeRoomDescription(payload) {
   const safePayload = payload && typeof payload === "object" ? payload : {};
+  const walls = Array.isArray(safePayload.walls) && safePayload.walls.length >= 3
+    ? safePayload.walls.map(normalizeWallSegment)
+    : fallbackRoom.walls.map(normalizeWallSegment);
 
   return {
     estimated_width_m: Math.max(1, Number(safePayload.estimated_width_m) || 8),
     estimated_height_m: Math.max(1, Number(safePayload.estimated_height_m) || 6),
-    windows: Array.isArray(safePayload.windows)
-      ? safePayload.windows.map((item) => ({
-          wall: normalizeWall(item?.wall),
-          position_percent: clampPercent(item?.position_percent)
-        }))
-      : [],
-    doors: Array.isArray(safePayload.doors)
-      ? safePayload.doors.map((item) => ({
-          wall: normalizeWall(item?.wall),
-          position_percent: clampPercent(item?.position_percent)
-        }))
-      : [],
+    walls,
+    windows: normalizeEdgeItems(safePayload.windows, walls),
+    doors: normalizeEdgeItems(safePayload.doors, walls),
     furniture: Array.isArray(safePayload.furniture)
       ? safePayload.furniture.map((item) => ({
-          type: typeof item?.type === "string" ? item.type : "furniture",
+          type: typeof item?.type === "string" ? item.type : "desk",
           x_percent: clampPercent(item?.x_percent),
-          y_percent: clampPercent(item?.y_percent)
+          y_percent: clampPercent(item?.y_percent),
+          width_percent: Math.max(2, clampPercent(item?.width_percent ?? 8)),
+          height_percent: Math.max(2, clampPercent(item?.height_percent ?? 5)),
+          rotation_deg: normalizeRotation(item?.rotation_deg)
         }))
       : []
   };
@@ -67,16 +119,17 @@ export function normalizeAnalysisResult(payload) {
 
 export function buildRoomNotes(room, isFallback) {
   const notes = [];
+  const wallCount = room.walls.length;
   const windowCount = room.windows.length;
   const doorCount = room.doors.length;
-  const furnitureCount = room.furniture.length;
+  const deskCount = room.furniture.filter((item) => item.type === "desk").length;
 
   notes.push(
     isFallback
       ? "Automatic vision analysis did not complete, so WorkspaceIQ created a starter room you can edit manually."
       : `Estimated room size is ${room.estimated_width_m}m by ${room.estimated_height_m}m.`
   );
-  notes.push(`${windowCount} window(s), ${doorCount} door(s), and ${furnitureCount} furniture item(s) were mapped.`);
+  notes.push(`${wallCount} wall segment(s), ${windowCount} window(s), ${doorCount} door(s), and ${deskCount} detected desk(s) were mapped.`);
 
   if (windowCount === 0) {
     notes.push("No windows were confidently detected, so daylight scoring may be conservative until you add them.");

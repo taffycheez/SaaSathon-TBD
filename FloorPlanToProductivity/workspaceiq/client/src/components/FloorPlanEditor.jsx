@@ -8,48 +8,105 @@ const PADDING = 40;
 const DESK_WIDTH = 50;
 const DESK_HEIGHT = 28;
 
-function getRoomPixelSize(room) {
-  const scale = Math.min(
-    (CANVAS_WIDTH - PADDING * 2) / Math.max(room.estimated_width_m, 1),
-    (CANVAS_HEIGHT - PADDING * 2) / Math.max(room.estimated_height_m, 1)
-  );
+function getWallBounds(walls) {
+  const points = walls.flatMap((wall) => [
+    { x: wall.x1_percent, y: wall.y1_percent },
+    { x: wall.x2_percent, y: wall.y2_percent }
+  ]);
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
 
   return {
-    width: room.estimated_width_m * scale,
-    height: room.estimated_height_m * scale,
-    scale
+    minX: Math.min(...xs, 0),
+    maxX: Math.max(...xs, 100),
+    minY: Math.min(...ys, 0),
+    maxY: Math.max(...ys, 100)
   };
 }
 
-function pointFromWall(item, roomBox) {
-  if (item.wall === "top") {
-    return { x: roomBox.x + (item.position_percent / 100) * roomBox.width, y: roomBox.y };
+function getRoomPixelSize(walls) {
+  const bounds = getWallBounds(walls);
+  const widthPercent = Math.max(1, bounds.maxX - bounds.minX);
+  const heightPercent = Math.max(1, bounds.maxY - bounds.minY);
+  const scale = Math.min(
+    (CANVAS_WIDTH - PADDING * 2) / widthPercent,
+    (CANVAS_HEIGHT - PADDING * 2) / heightPercent
+  );
+
+  return {
+    width: widthPercent * scale,
+    height: heightPercent * scale,
+    scale,
+    bounds
+  };
+}
+
+function toCanvasPoint(point, roomBox, bounds) {
+  return {
+    x: roomBox.x + ((point.x - bounds.minX) / Math.max(1, bounds.maxX - bounds.minX)) * roomBox.width,
+    y: roomBox.y + ((point.y - bounds.minY) / Math.max(1, bounds.maxY - bounds.minY)) * roomBox.height
+  };
+}
+
+function fromCanvasPoint(point, roomBox, bounds) {
+  return {
+    x: bounds.minX + ((point.x - roomBox.x) / roomBox.width) * (bounds.maxX - bounds.minX),
+    y: bounds.minY + ((point.y - roomBox.y) / roomBox.height) * (bounds.maxY - bounds.minY)
+  };
+}
+
+function pointFromWall(item, walls, roomBox, bounds) {
+  const wall = walls[item.wall_index];
+  if (!wall) {
+    return { x: roomBox.x, y: roomBox.y };
   }
-  if (item.wall === "bottom") {
-    return { x: roomBox.x + (item.position_percent / 100) * roomBox.width, y: roomBox.y + roomBox.height };
-  }
-  if (item.wall === "left") {
-    return { x: roomBox.x, y: roomBox.y + (item.position_percent / 100) * roomBox.height };
-  }
-  return { x: roomBox.x + roomBox.width, y: roomBox.y + (item.position_percent / 100) * roomBox.height };
+
+  const ratio = Math.max(0, Math.min(1, (item.position_percent || 0) / 100));
+  return toCanvasPoint({
+    x: wall.x1_percent + (wall.x2_percent - wall.x1_percent) * ratio,
+    y: wall.y1_percent + (wall.y2_percent - wall.y1_percent) * ratio
+  }, roomBox, bounds);
 }
 
 function clampDeskPosition(pointer, roomBox) {
   return {
-    x_percent: ((pointer.x - roomBox.x) / roomBox.width) * 100,
-    y_percent: ((pointer.y - roomBox.y) / roomBox.height) * 100
+    x_percent: Math.max(0, Math.min(100, ((pointer.x - roomBox.x) / roomBox.width) * 100)),
+    y_percent: Math.max(0, Math.min(100, ((pointer.y - roomBox.y) / roomBox.height) * 100))
+  };
+}
+
+function projectPointToSegment(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (!lengthSquared) {
+    return { point: start, ratio: 0, distanceSquared: (point.x - start.x) ** 2 + (point.y - start.y) ** 2 };
+  }
+
+  const rawRatio = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared;
+  const ratio = Math.max(0, Math.min(1, rawRatio));
+  const projected = {
+    x: start.x + dx * ratio,
+    y: start.y + dy * ratio
+  };
+
+  return {
+    point: projected,
+    ratio,
+    distanceSquared: (point.x - projected.x) ** 2 + (point.y - projected.y) ** 2
   };
 }
 
 export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
   const shellRef = useRef(null);
   const [stageScale, setStageScale] = useState(1);
+  const walls = Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
   const doors = Array.isArray(room.doors) ? room.doors : [];
   const furniture = Array.isArray(room.furniture) ? room.furniture : [];
   const desks = Array.isArray(room.desks) ? room.desks : [];
   const [referenceImage] = useImage(imagePreview || "");
-  const roomSize = getRoomPixelSize(room);
+  const roomSize = getRoomPixelSize(walls);
   const roomBox = {
     x: (CANVAS_WIDTH - roomSize.width) / 2,
     y: (CANVAS_HEIGHT - roomSize.height) / 2,
@@ -71,14 +128,39 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
     return () => observer.disconnect();
   }, []);
 
-  function updateEdgeItem(type, index, positionPercent) {
+  function updateEdgeItem(type, index, pointerPosition) {
     setRoom((currentRoom) => ({
       ...currentRoom,
-      [type]: currentRoom[type].map((item, itemIndex) =>
-        itemIndex === index
-          ? { ...item, position_percent: Math.max(0, Math.min(100, positionPercent)) }
-          : item
-      )
+      [type]: currentRoom[type].map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+
+        const normalizedPointer = fromCanvasPoint(pointerPosition, roomBox, roomSize.bounds);
+        let bestWallIndex = item.wall_index ?? 0;
+        let bestPositionPercent = item.position_percent ?? 0;
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        currentRoom.walls.forEach((wall, wallIndex) => {
+          const projection = projectPointToSegment(
+            normalizedPointer,
+            { x: wall.x1_percent, y: wall.y1_percent },
+            { x: wall.x2_percent, y: wall.y2_percent }
+          );
+
+          if (projection.distanceSquared < bestDistance) {
+            bestDistance = projection.distanceSquared;
+            bestWallIndex = wallIndex;
+            bestPositionPercent = projection.ratio * 100;
+          }
+        });
+
+        return {
+          ...item,
+          wall_index: bestWallIndex,
+          position_percent: bestPositionPercent
+        };
+      })
     }));
   }
 
@@ -98,7 +180,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
           <p className="upload-kicker">Step 2</p>
           <h2>Fine-tune the floor plan</h2>
         </div>
-        <p className="editor-note">Drag windows, doors, and desks. Double-click a desk to rotate it.</p>
+        <p className="editor-note">Detected walls are drawn as segments. Drag windows, doors, and desks. Double-click a desk to rotate it.</p>
       </div>
 
       <div
@@ -132,8 +214,7 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             height={roomBox.height}
             fill="#f8fbff"
             opacity={0.92}
-            stroke="#10233d"
-            strokeWidth={4}
+            strokeEnabled={false}
             cornerRadius={6}
           />
 
@@ -162,30 +243,40 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             </>
           ) : null}
 
-          <Rect
-            x={roomBox.x}
-            y={roomBox.y}
-            width={roomBox.width}
-            height={roomBox.height}
-            fillEnabled={false}
-            stroke="#10233d"
-            strokeWidth={4}
-            cornerRadius={6}
-          />
+          {walls.map((wall, index) => {
+            const start = toCanvasPoint(
+              { x: wall.x1_percent, y: wall.y1_percent },
+              roomBox,
+              roomSize.bounds
+            );
+            const end = toCanvasPoint(
+              { x: wall.x2_percent, y: wall.y2_percent },
+              roomBox,
+              roomSize.bounds
+            );
+
+            return (
+              <Line
+                key={`wall-${index}`}
+                points={[start.x, start.y, end.x, end.y]}
+                stroke="#10233d"
+                strokeWidth={4}
+                lineCap="round"
+              />
+            );
+          })}
 
           {windows.map((windowItem, index) => {
-            const point = pointFromWall(windowItem, roomBox);
-            const isHorizontal = windowItem.wall === "top" || windowItem.wall === "bottom";
+            const point = pointFromWall(windowItem, walls, roomBox, roomSize.bounds);
+            const wall = walls[windowItem.wall_index];
+            const isHorizontal = wall ? Math.abs(wall.x2_percent - wall.x1_percent) >= Math.abs(wall.y2_percent - wall.y1_percent) : true;
             return (
               <Group
                 key={`window-${index}`}
                 draggable
                 dragBoundFunc={(pos) => {
-                  const positionPercent = isHorizontal
-                    ? ((pos.x - roomBox.x) / roomBox.width) * 100
-                    : ((pos.y - roomBox.y) / roomBox.height) * 100;
-                  updateEdgeItem("windows", index, positionPercent);
-                  return point;
+                  updateEdgeItem("windows", index, pos);
+                  return pos;
                 }}
               >
                 <Line
@@ -203,18 +294,16 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
           })}
 
           {doors.map((doorItem, index) => {
-            const point = pointFromWall(doorItem, roomBox);
-            const isHorizontal = doorItem.wall === "top" || doorItem.wall === "bottom";
+            const point = pointFromWall(doorItem, walls, roomBox, roomSize.bounds);
+            const wall = walls[doorItem.wall_index];
+            const isHorizontal = wall ? Math.abs(wall.x2_percent - wall.x1_percent) >= Math.abs(wall.y2_percent - wall.y1_percent) : true;
             return (
               <Group
                 key={`door-${index}`}
                 draggable
                 dragBoundFunc={(pos) => {
-                  const positionPercent = isHorizontal
-                    ? ((pos.x - roomBox.x) / roomBox.width) * 100
-                    : ((pos.y - roomBox.y) / roomBox.height) * 100;
-                  updateEdgeItem("doors", index, positionPercent);
-                  return point;
+                  updateEdgeItem("doors", index, pos);
+                  return pos;
                 }}
               >
                 <Line
@@ -231,17 +320,39 @@ export default function FloorPlanEditor({ room, setRoom, imagePreview }) {
             );
           })}
 
-          {furniture.map((item, index) => (
-            <Rect
-              key={`furniture-${index}`}
-              x={roomBox.x + (item.x_percent / 100) * roomBox.width - 18}
-              y={roomBox.y + (item.y_percent / 100) * roomBox.height - 18}
-              width={36}
-              height={36}
-              fill="#d8dee8"
-              cornerRadius={6}
-            />
-          ))}
+          {furniture.map((item, index) => {
+            const x = roomBox.x + (item.x_percent / 100) * roomBox.width;
+            const y = roomBox.y + (item.y_percent / 100) * roomBox.height;
+            const width = Math.max(18, (item.width_percent / 100) * roomBox.width);
+            const height = Math.max(14, (item.height_percent / 100) * roomBox.height);
+
+            return (
+              <Group
+                key={`furniture-${index}`}
+                x={x}
+                y={y}
+                rotation={item.rotation_deg || 0}
+                offsetX={width / 2}
+                offsetY={height / 2}
+              >
+                <Rect
+                  width={width}
+                  height={height}
+                  fill={item.type === "desk" ? "#d7e9ff" : "#d8dee8"}
+                  stroke="#6c7c8f"
+                  strokeWidth={1.5}
+                  cornerRadius={6}
+                />
+                <Text
+                  text={item.type === "desk" ? "Desk" : item.type}
+                  x={6}
+                  y={Math.max(2, height / 2 - 8)}
+                  fontSize={12}
+                  fill="#304860"
+                />
+              </Group>
+            );
+          })}
 
           {desks.map((desk, index) => {
             const x = roomBox.x + (desk.x_percent / 100) * roomBox.width;
