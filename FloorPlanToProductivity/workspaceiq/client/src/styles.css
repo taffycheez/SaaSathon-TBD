@@ -781,25 +781,44 @@ button:disabled {
 }
 
 .toggle-field {
+  margin-top: 6px;
+  border: 1px solid #10161f;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #10161f;
   grid-template-columns: 1fr auto;
   align-items: center;
+  gap: 12px;
+}
+
+.toggle-field span {
+  display: grid;
+  gap: 4px;
+  color: #f4f7fb;
+  font-weight: 750;
+}
+
+.toggle-field small {
+  color: rgba(244, 247, 251, 0.72);
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
 .toggle-button {
   min-width: 72px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
   padding: 8px 12px;
-  background: var(--surface);
-  color: var(--muted);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f4f7fb;
   font-weight: 750;
   cursor: pointer;
 }
 
 .toggle-button.active {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: white;
+  background: white;
+  border-color: white;
+  color: var(--ink);
 }
 
 .segmented-control {
