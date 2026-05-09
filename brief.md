@@ -4,7 +4,7 @@
 People are not sure how to optimise their space for productivity. They want structured information on how their room is impeding or promoting productivity and actionable steps on how to optimise it. 
 
 # Target user
-Student and remote workers optimising a single dedicated workspace for focus. Small businesses doing a one-room refresh. Future scope for large office spaces. 
+Business owners wanting an office refresh. 
 
 ## Product
 An app/website which, given a short video or a series of photos of a room, create a 3D model using computer vision. A score is given for the productivity rating of the room based on parameters like lighting, air quality, or feng shui principles with a breakdown by area provided. The user can pan around the room, trying out different layouts, wall colour, floor texture, time of day/lighting direction et cetera. The recommendations are given based on the user's criteria (e.g. home office, corporate office, bedroom) The AI also suggests furniture placements in 3D which have affiliate links. The user can create a wishlist of items they want to buy.
