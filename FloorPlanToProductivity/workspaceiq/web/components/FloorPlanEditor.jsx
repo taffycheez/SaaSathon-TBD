@@ -440,7 +440,7 @@ export default function FloorPlanEditor({
   imagePreview,
   showReferenceImage = false,
   setShowReferenceImage,
-  showZones = true,
+  showZones = false,
   setShowZones,
   wallToolMode = "select",
   setWallToolMode,

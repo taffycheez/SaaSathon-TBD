@@ -601,7 +601,7 @@ export default function WorkspaceApp() {
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
   const [showReferenceImage, setShowReferenceImage] = useState(false);
-  const [showZones, setShowZones] = useState(true);
+  const [showZones, setShowZones] = useState(false);
   const [wallToolMode, setWallToolMode] = useState("select");
   const [scaleToolActive, setScaleToolActive] = useState(false);
   const [northToolActive, setNorthToolActive] = useState(false);
@@ -917,7 +917,7 @@ export default function WorkspaceApp() {
       );
       setImagePreview(originalDataUrl);
       setShowReferenceImage(false);
-      setShowZones(true);
+      setShowZones(false);
       setWallToolMode("select");
       setScaleToolActive(false);
       setRoom(normalizedRoom, { recordHistory: false, resetHistory: true });
@@ -984,7 +984,7 @@ export default function WorkspaceApp() {
       setRoom(baseRoom, { recordHistory: false, resetHistory: true });
       setPreferences((current) => preferencesForRoom(baseRoom, current));
       setShowReferenceImage(false);
-      setShowZones(true);
+      setShowZones(false);
       setWallToolMode("select");
       setScaleToolActive(false);
       setNorthToolActive(false);
@@ -999,6 +999,7 @@ export default function WorkspaceApp() {
       setBaseRoom(DEFAULT_ROOM);
       setPreferences(defaultPreferences);
       setShowReferenceImage(false);
+      setShowZones(false);
       setWallToolMode("select");
       setScaleToolActive(false);
       setNorthToolActive(false);
@@ -1014,7 +1015,7 @@ export default function WorkspaceApp() {
     setPreferences(defaultPreferences);
     setImagePreview("");
     setShowReferenceImage(false);
-    setShowZones(true);
+    setShowZones(false);
     setWallToolMode("select");
     setScaleToolActive(false);
     setNorthToolActive(false);
@@ -1040,7 +1041,7 @@ export default function WorkspaceApp() {
     setPreferences(defaultPreferences);
     setImagePreview("");
     setShowReferenceImage(false);
-    setShowZones(true);
+    setShowZones(false);
     setWallToolMode("select");
     setScaleToolActive(false);
     setNorthToolActive(false);
@@ -1075,6 +1076,7 @@ export default function WorkspaceApp() {
     setPreferences(defaultPreferences);
     setImagePreview("");
     setShowReferenceImage(false);
+    setShowZones(false);
     setWallToolMode("select");
     setScaleToolActive(false);
     setNorthToolActive(false);
