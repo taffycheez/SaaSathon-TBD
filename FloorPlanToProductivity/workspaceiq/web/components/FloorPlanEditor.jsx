@@ -309,6 +309,7 @@ function TrashIcon() {
 export default function FloorPlanEditor({
   room,
   setRoom,
+  onRoomPreviewChange,
   imagePreview,
   showReferenceImage = false,
   canUndo = false,
@@ -339,6 +340,23 @@ export default function FloorPlanEditor({
   dragStateRef.current = dragState;
   roomBoxRef.current = roomBox;
   wallsRef.current = walls;
+
+  function withUpdatedPlacedItem(currentRoom, type, index, updates) {
+    return {
+      ...currentRoom,
+      [type]: (currentRoom[type] || []).map((item, itemIndex) => (
+        itemIndex === index ? { ...item, ...updates } : item
+      ))
+    };
+  }
+
+  function clearRoomPreview() {
+    onRoomPreviewChange?.(null);
+  }
+
+  function previewPlacedItem(type, index, updates) {
+    onRoomPreviewChange?.(withUpdatedPlacedItem(room, type, index, updates));
+  }
 
   function updatePlacedItem(type, index, updates, options) {
     setRoom((currentRoom) => {
@@ -384,12 +402,8 @@ export default function FloorPlanEditor({
     );
   }
 
-  function getPreviewItem(type, index, item) {
-    if (!dragState || dragState.type !== type || dragState.index !== index) {
-      return item;
-    }
-
-    const previewPosition = pointerToRoomPosition(dragState.point, roomBoxRef.current, false);
+  function buildPreviewItem(item, type, point) {
+    const previewPosition = pointerToRoomPosition(point, roomBoxRef.current, false);
     if (type === "windows" || type === "doors") {
       return snapEdgeItemToWalls({ ...item, ...previewPosition }, wallsRef.current);
     }
@@ -398,6 +412,14 @@ export default function FloorPlanEditor({
       ...item,
       ...previewPosition
     };
+  }
+
+  function getPreviewItem(type, index, item) {
+    if (!dragState || dragState.type !== type || dragState.index !== index) {
+      return item;
+    }
+
+    return buildPreviewItem(item, type, dragState.point);
   }
 
   function startDrag(type, index, event) {
@@ -427,6 +449,8 @@ export default function FloorPlanEditor({
       point.y - currentDrag.startPoint.y
     );
 
+    clearRoomPreview();
+
     if (overTrash) {
       removePlacedItem(currentDrag.type, currentDrag.index);
       setDragState(null);
@@ -450,17 +474,28 @@ export default function FloorPlanEditor({
 
   useEffect(() => {
     if (!isDragging) {
+      clearRoomPreview();
       return undefined;
     }
 
     function handleWindowPointerMove(event) {
       const point = getSvgPointFromClient(event.clientX, event.clientY);
+      const overTrash = isOverTrash(event.clientX, event.clientY);
+      const currentDrag = dragStateRef.current;
+      const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
+
+      if (currentDrag && currentItem && !overTrash) {
+        previewPlacedItem(currentDrag.type, currentDrag.index, buildPreviewItem(currentItem, currentDrag.type, point));
+      } else {
+        clearRoomPreview();
+      }
+
       setDragState((current) => (
         current
           ? {
               ...current,
               point,
-              overTrash: isOverTrash(event.clientX, event.clientY)
+              overTrash
             }
           : current
       ));

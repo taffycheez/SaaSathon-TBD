@@ -652,6 +652,7 @@ export default function WorkspaceApp() {
   const uploadRef = useRef(null);
   const roomRef = useRef(DEFAULT_ROOM);
   const [room, setRoomState] = useState(DEFAULT_ROOM);
+  const [roomPreview, setRoomPreview] = useState(null);
   const [baseRoom, setBaseRoom] = useState(DEFAULT_ROOM);
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
@@ -666,8 +667,9 @@ export default function WorkspaceApp() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
 
-  const scoreResult = useMemo(() => computeFengShuiScore(room, preferences), [room, preferences]);
   const heroScene = HERO_LAYOUT_SCENES[heroSceneIndex];
+  const activeRoom = roomPreview ?? room;
+  const scoreResult = useMemo(() => computeFengShuiScore(activeRoom, preferences), [activeRoom, preferences]);
 
   useEffect(() => {
     if (!error) {
@@ -691,6 +693,7 @@ export default function WorkspaceApp() {
 
   function syncRoomState(nextRoom) {
     roomRef.current = nextRoom;
+    setRoomPreview(null);
     setRoomState(nextRoom);
     return nextRoom;
   }
@@ -939,6 +942,7 @@ export default function WorkspaceApp() {
               <FloorPlanEditor
                 room={room}
                 setRoom={setRoom}
+                onRoomPreviewChange={setRoomPreview}
                 imagePreview={imagePreview}
                 showReferenceImage={showReferenceImage}
                 canUndo={undoStack.length > 0}
@@ -947,7 +951,7 @@ export default function WorkspaceApp() {
                 onRedo={redoRoomChange}
               />
             </FloorPlanEditorBoundary>
-            <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} advice={scoreResult.advice} />
+            <ScorePanel score={scoreResult.score} breakdown={scoreResult.breakdown} advice={scoreResult.advice} isPreviewing={Boolean(roomPreview)} />
           </section>
 
           <aside className="sidebar-column">
