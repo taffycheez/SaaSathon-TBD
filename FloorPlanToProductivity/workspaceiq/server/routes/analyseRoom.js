@@ -1,6 +1,5 @@
 import express from "express";
-import OpenAI from "openai";
-import { openAiApiKey } from "../config.js";
+import { createAiClient, openRouterModel } from "../config.js";
 import {
   buildRoomNotes,
   fallbackRoom,
@@ -10,9 +9,7 @@ import { analyseRoomImage } from "../lib/analyseRoomVision.js";
 
 const router = express.Router();
 
-const client = new OpenAI({
-  apiKey: openAiApiKey
-});
+const client = createAiClient();
 
 router.post("/", async (req, res) => {
   try {
@@ -22,7 +19,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Image is required." });
     }
 
-    const analysis = await analyseRoomImage(client, image);
+    const analysis = await analyseRoomImage(client, image, openRouterModel);
 
     if (!analysis.is_valid_room) {
       return res.status(422).json({

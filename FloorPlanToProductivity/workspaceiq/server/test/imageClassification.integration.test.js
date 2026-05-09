@@ -2,21 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import OpenAI from "openai";
 import { fileURLToPath } from "node:url";
-import { openAiApiKey } from "../config.js";
+import { createAiClient, openRouterApiKey, openRouterModel } from "../config.js";
 import { analyseRoomImage } from "../lib/analyseRoomVision.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const fixturesDir = path.join(__dirname, "image_tests");
-const shouldRun = process.env.RUN_OPENAI_IMAGE_TESTS === "1" && Boolean(openAiApiKey);
+const shouldRun = process.env.RUN_OPENAI_IMAGE_TESTS === "1" && Boolean(openRouterApiKey);
 
-const client = shouldRun
-  ? new OpenAI({
-      apiKey: openAiApiKey
-    })
-  : null;
+const client = shouldRun ? createAiClient() : null;
 
 function getMimeType(filePath) {
   const extension = path.extname(filePath).toLowerCase();
@@ -49,7 +44,7 @@ test(
     const failingImages = await listFixtureFiles("fails");
 
     for (const filePath of passingImages) {
-      const result = await analyseRoomImage(client, await fileToDataUrl(filePath));
+      const result = await analyseRoomImage(client, await fileToDataUrl(filePath), openRouterModel);
       assert.equal(
         result.is_valid_room,
         true,
@@ -58,7 +53,7 @@ test(
     }
 
     for (const filePath of failingImages) {
-      const result = await analyseRoomImage(client, await fileToDataUrl(filePath));
+      const result = await analyseRoomImage(client, await fileToDataUrl(filePath), openRouterModel);
       assert.equal(
         result.is_valid_room,
         false,
