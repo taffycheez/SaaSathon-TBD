@@ -1305,17 +1305,18 @@ button:disabled {
 
 .loading-panel {
   width: min(520px, calc(100vw - 24px));
-  max-height: calc(100dvh - clamp(24px, 6vw, 48px));
+  max-width: 100%;
   display: grid;
   align-content: center;
   place-items: center;
+  gap: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: clamp(18px, 4vw, 28px);
   background: linear-gradient(180deg, rgba(255, 253, 246, 0.96), rgba(249, 242, 225, 0.96));
   box-shadow: 0 24px 70px rgba(22, 40, 69, 0.18);
   text-align: center;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .loading-visual {
@@ -1416,6 +1417,7 @@ button:disabled {
   color: var(--ink);
   font-size: clamp(1.25rem, 4.8vw, 1.7rem);
   line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .loading-panel p:not(.eyebrow) {
@@ -1423,6 +1425,8 @@ button:disabled {
   margin: 10px auto 0;
   color: var(--muted);
   font-size: clamp(0.9rem, 2.4vw, 1rem);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .loading-steps {
@@ -1473,7 +1477,7 @@ button:disabled {
 
 @media (max-height: 460px) {
   .loading-visual {
-    height: 92px;
+    height: 72px;
   }
 
   .loading-panel h2 {
@@ -1482,6 +1486,24 @@ button:disabled {
 
   .loading-panel p:not(.eyebrow) {
     font-size: 0.82rem;
+  }
+
+  .loading-steps span {
+    height: 6px;
+  }
+}
+
+@media (max-height: 380px) {
+  .loading-panel {
+    padding: 12px;
+  }
+
+  .loading-visual {
+    display: none;
+  }
+
+  .loading-steps {
+    margin-top: 8px;
   }
 }
 
