@@ -9,6 +9,7 @@ import ScorePanel from "@/components/ScorePanel";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import { computeFengShuiScore } from "@/lib/fengShuiScore";
 import {
+  addWallToRoom,
   addObjectToRoom,
   clampPercent,
   createDoorForRoom,
@@ -537,6 +538,7 @@ export default function WorkspaceApp() {
   const [preferences, setPreferences] = useState(defaultPreferences);
   const [imagePreview, setImagePreview] = useState("");
   const [showReferenceImage, setShowReferenceImage] = useState(false);
+  const [wallToolMode, setWallToolMode] = useState("select");
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -755,6 +757,10 @@ export default function WorkspaceApp() {
     }));
   }
 
+  function addWall(startPoint, endPoint) {
+    setRoom((currentRoom) => addWallToRoom(currentRoom, startPoint, endPoint));
+  }
+
   async function handleUpload(file) {
     setIsAnalysing(true);
     setError("");
@@ -776,7 +782,10 @@ export default function WorkspaceApp() {
 
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
-        throw new Error(failure?.error || "Room analysis failed.");
+        const reasonText = Array.isArray(failure?.reasons) && failure.reasons.length
+          ? ` ${failure.reasons.join(" | ")}`
+          : "";
+        throw new Error(`${failure?.error || "Room analysis failed."}${reasonText}`);
       }
 
       const data = await response.json();
@@ -788,6 +797,7 @@ export default function WorkspaceApp() {
       );
       setImagePreview(originalDataUrl);
       setShowReferenceImage(false);
+      setWallToolMode("select");
       setRoom(normalizedRoom, { recordHistory: false, resetHistory: true });
       setBaseRoom(normalizedRoom);
       setScoreExplanation(null);
@@ -858,6 +868,7 @@ export default function WorkspaceApp() {
       setRoom(baseRoom, { recordHistory: false, resetHistory: true });
       setPreferences(defaultPreferences);
       setShowReferenceImage(false);
+      setWallToolMode("select");
       setError("");
       setLayoutNotes([]);
       setScoreExplanation(null);
@@ -869,6 +880,7 @@ export default function WorkspaceApp() {
     setPreferences(defaultPreferences);
     setImagePreview("");
     setShowReferenceImage(false);
+    setWallToolMode("select");
     setError("");
     setRoomNotes([]);
     setLayoutNotes([]);
@@ -888,6 +900,7 @@ export default function WorkspaceApp() {
     setPreferences(defaultPreferences);
     setImagePreview("");
     setShowReferenceImage(false);
+    setWallToolMode("select");
     setRoomNotes([]);
     setLayoutNotes([]);
     setPendingScrollTarget(target);
@@ -940,6 +953,9 @@ export default function WorkspaceApp() {
                 room={room}
                 setRoom={setRoom}
                 onRoomPreviewChange={setRoomPreview}
+                wallToolMode={wallToolMode}
+                setWallToolMode={setWallToolMode}
+                onAddWall={addWall}
                 imagePreview={imagePreview}
                 showReferenceImage={showReferenceImage}
                 canUndo={undoStack.length > 0}
@@ -968,6 +984,8 @@ export default function WorkspaceApp() {
               setShowReferenceImage={setShowReferenceImage}
               onAddWindow={addWindow}
               onAddDoor={addDoor}
+              wallToolMode={wallToolMode}
+              setWallToolMode={setWallToolMode}
               onAddObject={addObject}
               onGenerateLayout={handleGenerateLayout}
               onReset={resetWorkspace}

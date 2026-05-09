@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import { getScaledItemDimensions, normalizeObjectScale, normalizeWallGraph, snapEdgeItemToWalls } from "@/lib/roomGeometry";
-import { updateEdgeItemPosition, updatePlacedObject, updateWallEndpoint } from "@/lib/roomState";
+import {
+  getSnappedWallPoint,
+  moveWallByDelta,
+  updateEdgeItemPosition,
+  updatePlacedObject,
+  updateWallEndpoint
+} from "@/lib/roomState";
 
 const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
@@ -313,6 +319,9 @@ export default function FloorPlanEditor({
   onRoomPreviewChange,
   imagePreview,
   showReferenceImage = false,
+  wallToolMode = "select",
+  setWallToolMode,
+  onAddWall,
   canUndo = false,
   canRedo = false,
   onUndo,
@@ -326,6 +335,7 @@ export default function FloorPlanEditor({
   const [dragState, setDragState] = useState(null);
   const [selectedWallIndex, setSelectedWallIndex] = useState(null);
   const [selectedPlacedItem, setSelectedPlacedItem] = useState(null);
+  const [pendingWallStart, setPendingWallStart] = useState(null);
   const wallGraph = useMemo(() => normalizeWallGraph(room.walls || []), [room.walls]);
   const walls = wallGraph.walls.length ? wallGraph.walls : Array.isArray(room.walls) ? room.walls : [];
   const windows = Array.isArray(room.windows) ? room.windows : [];
@@ -371,6 +381,12 @@ export default function FloorPlanEditor({
     }
   }, [selectedPlacedItem, furniture.length, desks.length]);
 
+  useEffect(() => {
+    if (wallToolMode !== "add" && pendingWallStart) {
+      setPendingWallStart(null);
+    }
+  }, [pendingWallStart, wallToolMode]);
+
   function withUpdatedPlacedItem(currentRoom, type, index, updates) {
     return {
       ...currentRoom,
@@ -414,6 +430,28 @@ export default function FloorPlanEditor({
   function commitWallUpdate(wallIndex, endpoint, point, options) {
     const previewPosition = pointerToRoomPosition(point, roomBoxRef.current, false);
     setRoom((currentRoom) => updateWallEndpoint(currentRoom, wallIndex, endpoint, previewPosition), options);
+  }
+
+  function wallDragDeltaToRoomPercent(startPoint, point) {
+    const startPosition = pointerToRoomPosition(startPoint, roomBoxRef.current, false);
+    const endPosition = pointerToRoomPosition(point, roomBoxRef.current, false);
+    return {
+      x_percent: endPosition.x_percent - startPosition.x_percent,
+      y_percent: endPosition.y_percent - startPosition.y_percent
+    };
+  }
+
+  function previewWallMove(wallIndex, startPoint, point) {
+    onRoomPreviewChange?.(
+      moveWallByDelta(room, wallIndex, wallDragDeltaToRoomPercent(startPoint, point))
+    );
+  }
+
+  function commitWallMove(wallIndex, startPoint, point, options) {
+    setRoom(
+      (currentRoom) => moveWallByDelta(currentRoom, wallIndex, wallDragDeltaToRoomPercent(startPoint, point)),
+      options
+    );
   }
 
   function removePlacedItem(type, index) {
@@ -508,6 +546,26 @@ export default function FloorPlanEditor({
     });
   }
 
+  function startWallMoveDrag(wallIndex, event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const point = getSvgPointFromClient(event.clientX, event.clientY);
+    setSelectedPlacedItem(null);
+    setSelectedWallIndex(wallIndex);
+    setDragState({
+      kind: "wall-move",
+      wallIndex,
+      startPoint: point,
+      point,
+      overTrash: false
+    });
+  }
+
+  function snapWallEditorPoint(point) {
+    return getSnappedWallPoint(room, pointerToRoomPosition(point, roomBoxRef.current, false));
+  }
+
   function finishDrag(clientX, clientY) {
     const currentDrag = dragStateRef.current;
     if (!currentDrag) {
@@ -526,6 +584,14 @@ export default function FloorPlanEditor({
     if (currentDrag.kind === "wall-handle") {
       if (dragDistance >= DRAG_THRESHOLD) {
         commitWallUpdate(currentDrag.wallIndex, currentDrag.endpoint, point);
+      }
+      setDragState(null);
+      return;
+    }
+
+    if (currentDrag.kind === "wall-move") {
+      if (dragDistance >= DRAG_THRESHOLD) {
+        commitWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
       }
       setDragState(null);
       return;
@@ -570,6 +636,8 @@ export default function FloorPlanEditor({
       const currentDrag = dragStateRef.current;
       if (currentDrag?.kind === "wall-handle") {
         previewWallUpdate(currentDrag.wallIndex, currentDrag.endpoint, point);
+      } else if (currentDrag?.kind === "wall-move") {
+        previewWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
       } else {
         const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
 
@@ -687,7 +755,19 @@ export default function FloorPlanEditor({
           ref={svgRef}
           className="floor-stage-svg"
           viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
-          onPointerDown={() => {
+          onPointerDown={(event) => {
+            if (wallToolMode === "add") {
+              const point = getSvgPointFromClient(event.clientX, event.clientY);
+              const snappedPoint = snapWallEditorPoint(point);
+              if (!pendingWallStart) {
+                setPendingWallStart(snappedPoint);
+              } else {
+                onAddWall?.(pendingWallStart, snappedPoint);
+                setPendingWallStart(null);
+              }
+              setSelectedWallIndex(null);
+              return;
+            }
             if (!dragStateRef.current) {
               setSelectedWallIndex(null);
               setSelectedPlacedItem(null);
@@ -763,11 +843,7 @@ export default function FloorPlanEditor({
                   stroke="transparent"
                   strokeWidth="16"
                   strokeLinecap="round"
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    setSelectedPlacedItem(null);
-                    setSelectedWallIndex(index);
-                  }}
+                  onPointerDown={(event) => startWallMoveDrag(index, event)}
                 />
                 {selectedWallIndex === index ? (
                   <>
@@ -798,6 +874,26 @@ export default function FloorPlanEditor({
               </g>
             );
           })}
+
+          {pendingWallStart ? (
+            <g pointerEvents="none">
+              <circle
+                cx={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).x}
+                cy={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).y}
+                r="6"
+                fill="#10233d"
+                opacity="0.85"
+              />
+              <text
+                x={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).x + 10}
+                y={toCanvasPoint(pendingWallStart, roomBox, roomSize.bounds).y - 10}
+                fill="#10233d"
+                fontSize="12"
+              >
+                Click another point to finish the wall
+              </text>
+            </g>
+          ) : null}
 
           {windows.map((windowItem, index) => {
             const renderedWindow = getPreviewItem("windows", index, windowItem);

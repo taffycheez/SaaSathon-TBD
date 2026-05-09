@@ -55,13 +55,6 @@ Only these folders are active:
 - `web/`
 - `web/python-worker/`
 
-Legacy folders:
-
-- `client/`
-- `server/`
-
-are reference-only and should not receive new work.
-
 ## Recommended day-to-day workflow
 
 1. Pull latest `main`.
@@ -108,7 +101,6 @@ This uses the local Python worker instead of Render.
 ## Team rules
 
 - Do not use a LAN/network copy as the reference environment.
-- Do not compare against `client/` or `server/`.
 - Do not commit secrets.
 - If behavior differs, first confirm whether the app is using Render or the local worker.
 - If a change affects production behavior, verify it in a Vercel preview before merging.

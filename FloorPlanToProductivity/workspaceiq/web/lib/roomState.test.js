@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  addWallToRoom,
   addObjectToRoom,
   createDoorForRoom,
   createWindowForRoom,
   normalizeFurnitureItem,
+  moveWallByDelta,
   normalizeRoomLayout,
   pointOnWall,
   updatePlacedObject,
@@ -231,4 +233,48 @@ test("updateWallEndpoint moves connected wall endpoints together", () => {
 
   assert.equal(updated.walls[0].x2_percent, updated.walls[1].x1_percent);
   assert.equal(updated.walls[0].y2_percent, updated.walls[1].y1_percent);
+});
+
+test("moveWallByDelta stretches a room wall while keeping corners connected", () => {
+  const room = normalizeRoomLayout(BASE_ROOM);
+  const moved = moveWallByDelta(room, 1, {
+    x_percent: -12,
+    y_percent: 0
+  });
+
+  assert.equal(moved.wallIssues.length, 0);
+  assert.equal(moved.walls[0].x2_percent, moved.walls[1].x1_percent);
+  assert.equal(moved.walls[2].x1_percent, moved.walls[1].x2_percent);
+  assert.ok(moved.walls[1].x1_percent < 100);
+  assert.equal(moved.walls[1].x1_percent, moved.walls[1].x2_percent);
+});
+
+test("addWallToRoom creates a connected wall by splitting the touched outer wall", () => {
+  const room = normalizeRoomLayout(BASE_ROOM);
+  const updated = addWallToRoom(
+    room,
+    { x_percent: 50, y_percent: 0 },
+    { x_percent: 50, y_percent: 100 }
+  );
+
+  assert.equal(updated.wallIssues.length, 0);
+  assert.ok(updated.walls.length >= 5);
+  assert.ok(
+    updated.walls.some(
+      (wall) =>
+        wall.x1_percent === 50 &&
+        wall.x2_percent === 50 &&
+        wall.y1_percent === 0 &&
+        wall.y2_percent === 100
+    )
+  );
+  assert.ok(
+    updated.walls.some(
+      (wall) =>
+        wall.y1_percent === 0 &&
+        wall.y2_percent === 0 &&
+        (wall.x1_percent === 0 || wall.x2_percent === 0) &&
+        (wall.x1_percent === 50 || wall.x2_percent === 50)
+    )
+  );
 });

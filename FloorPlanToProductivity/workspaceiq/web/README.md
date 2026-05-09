@@ -96,7 +96,14 @@ Example env for the worker:
 
 ```env
 CV_SEGMENTATION_MODEL=yolov8n-seg.pt
+CV_SEGMENTATION_MODE=auto
 ```
+
+`CV_SEGMENTATION_MODE` options:
+
+- `auto`: fast default, runs wall/opening CV first and only uses YOLO when the cropped room likely contains object-like regions
+- `always`: always run YOLO segmentation for furniture
+- `off`: disable YOLO segmentation entirely and use geometry-only CV
 
 ## Deploy the Python worker
 

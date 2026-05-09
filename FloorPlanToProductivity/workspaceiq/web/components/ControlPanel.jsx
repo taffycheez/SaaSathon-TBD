@@ -9,6 +9,8 @@ export default function ControlPanel({
   setShowReferenceImage,
   onAddWindow,
   onAddDoor,
+  wallToolMode,
+  setWallToolMode,
   onAddObject,
   onGenerateLayout,
   onReset,
@@ -70,6 +72,13 @@ export default function ControlPanel({
           </button>
           <button type="button" className="object-chip quick-add-chip" onClick={onAddDoor}>
             Add Door
+          </button>
+          <button
+            type="button"
+            className={`object-chip quick-add-chip${wallToolMode === "add" ? " active" : ""}`}
+            onClick={() => setWallToolMode((current) => (current === "add" ? "select" : "add"))}
+          >
+            {wallToolMode === "add" ? "Finish Wall Tool" : "Add Wall"}
           </button>
         </div>
       </div>

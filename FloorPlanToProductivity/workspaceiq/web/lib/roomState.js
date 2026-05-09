@@ -3,8 +3,11 @@ import {
   findFirstFreeObjectPlacement,
   findNearestValidObjectPlacement,
   normalizeObjectScale,
+  insertConnectedWall,
   isPlacementValid,
+  lineAngleDegrees,
   normalizeWallGraph,
+  snapEditorPointToWalls,
   snapEdgeItemToWalls
 } from "./roomGeometry.js";
 
@@ -280,4 +283,85 @@ export function updateWallEndpoint(room, wallIndex, endpoint, pointerPosition) {
       return nextWall;
     })
   });
+}
+
+function applyDeltaToPoint(point, delta) {
+  return {
+    x: clampPercent(point.x + delta.x),
+    y: clampPercent(point.y + delta.y)
+  };
+}
+
+export function moveWallByDelta(room, wallIndex, rawDelta) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  const targetWall = walls[wallIndex];
+  if (!targetWall) {
+    return room;
+  }
+
+  const start = { x: Number(targetWall.x1_percent), y: Number(targetWall.y1_percent) };
+  const end = { x: Number(targetWall.x2_percent), y: Number(targetWall.y2_percent) };
+  const wallAngleRadians = (lineAngleDegrees(targetWall) * Math.PI) / 180;
+  const normal = {
+    x: -Math.sin(wallAngleRadians),
+    y: Math.cos(wallAngleRadians)
+  };
+  const requestedDelta = {
+    x: Number(rawDelta?.x_percent) || 0,
+    y: Number(rawDelta?.y_percent) || 0
+  };
+  const projectedMagnitude = requestedDelta.x * normal.x + requestedDelta.y * normal.y;
+  const delta = {
+    x: normal.x * projectedMagnitude,
+    y: normal.y * projectedMagnitude
+  };
+
+  return normalizeRoomLayout({
+    ...room,
+    walls: walls.map((wall) => {
+      const nextWall = { ...wall };
+
+      if (endpointMatches(nextWall, "start", start)) {
+        const moved = applyDeltaToPoint(start, delta);
+        nextWall.x1_percent = moved.x;
+        nextWall.y1_percent = moved.y;
+      }
+      if (endpointMatches(nextWall, "end", start)) {
+        const moved = applyDeltaToPoint(start, delta);
+        nextWall.x2_percent = moved.x;
+        nextWall.y2_percent = moved.y;
+      }
+      if (endpointMatches(nextWall, "start", end)) {
+        const moved = applyDeltaToPoint(end, delta);
+        nextWall.x1_percent = moved.x;
+        nextWall.y1_percent = moved.y;
+      }
+      if (endpointMatches(nextWall, "end", end)) {
+        const moved = applyDeltaToPoint(end, delta);
+        nextWall.x2_percent = moved.x;
+        nextWall.y2_percent = moved.y;
+      }
+
+      return nextWall;
+    })
+  });
+}
+
+export function addWallToRoom(room, startPoint, endPoint) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  return normalizeRoomLayout({
+    ...room,
+    walls: insertConnectedWall(walls, startPoint, endPoint)
+  });
+}
+
+export function getSnappedWallPoint(room, pointerPosition) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  return snapEditorPointToWalls(
+    {
+      x_percent: pointerPosition?.x_percent,
+      y_percent: pointerPosition?.y_percent
+    },
+    walls
+  ).point;
 }

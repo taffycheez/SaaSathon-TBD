@@ -6,6 +6,7 @@ const WALL_ANGLE_INCREMENT_DEGREES = 45;
 const OPENING_WALL_BIAS = 0.75;
 const MIN_OBJECT_SCALE = 0.5;
 const MAX_OBJECT_SCALE = 2;
+const WALL_EDITOR_SNAP_TOLERANCE = 4;
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value) || 0));
@@ -67,7 +68,7 @@ function lineLength(wall) {
   return Math.hypot(wall.x2_percent - wall.x1_percent, wall.y2_percent - wall.y1_percent);
 }
 
-function lineAngleDegrees(wall) {
+export function lineAngleDegrees(wall) {
   return normalizeRotation(
     (Math.atan2(wall.y2_percent - wall.y1_percent, wall.x2_percent - wall.x1_percent) * 180) / Math.PI
   );
@@ -85,6 +86,14 @@ function isBorderValue(value, tolerance = SNAP_TOLERANCE_PERCENT) {
 
 function pointKey(point) {
   return `${point.x.toFixed(2)}:${point.y.toFixed(2)}`;
+}
+
+function nearlyEqual(a, b, tolerance = 0.6) {
+  return Math.abs(a - b) <= tolerance;
+}
+
+function samePoint(a, b, tolerance = 0.6) {
+  return nearlyEqual(a.x, b.x, tolerance) && nearlyEqual(a.y, b.y, tolerance);
 }
 
 function normalizeWallSegment(wall) {
@@ -344,6 +353,7 @@ export function normalizeWallGraph(rawWalls, tolerance = SNAP_TOLERANCE_PERCENT)
 
   const nodeKeys = [...nodesByKey.keys()];
   const danglingNodes = nodeKeys.filter((key) => (adjacency.get(key) || new Set()).size < 2);
+  const branchingNodes = nodeKeys.filter((key) => (adjacency.get(key) || new Set()).size > 2);
   const components = buildConnectedComponents(adjacency, nodeKeys);
   const outerPolygon = buildOuterPolygon(connectedWalls, adjacency, nodesByKey);
   const issues = [];
@@ -354,7 +364,7 @@ export function normalizeWallGraph(rawWalls, tolerance = SNAP_TOLERANCE_PERCENT)
   if (danglingNodes.length) {
     issues.push("Some wall endpoints do not meet another wall cleanly.");
   }
-  if (!outerPolygon) {
+  if (!outerPolygon && !branchingNodes.length && connectedWalls.length >= 3) {
     issues.push("The wall outline is not yet a clean closed loop.");
   }
 
@@ -406,6 +416,134 @@ export function projectPointOntoWall(point, wall) {
     distance: distanceBetweenPoints(projected, point),
     positionPercent: t * 100
   };
+}
+
+export function snapEditorPointToWalls(point, walls, tolerance = WALL_EDITOR_SNAP_TOLERANCE) {
+  const safeWalls = Array.isArray(walls) ? walls : [];
+  const safePoint = {
+    x: clampPercent(point?.x ?? point?.x_percent ?? 50),
+    y: clampPercent(point?.y ?? point?.y_percent ?? 50)
+  };
+
+  if (!safeWalls.length) {
+    return {
+      point: safePoint,
+      wallIndex: -1,
+      snappedTo: "free"
+    };
+  }
+
+  let bestNode = null;
+  safeWalls.forEach((wall, wallIndex) => {
+    [
+      { x: wall.x1_percent, y: wall.y1_percent, endpoint: "start" },
+      { x: wall.x2_percent, y: wall.y2_percent, endpoint: "end" }
+    ].forEach((candidate) => {
+      const distance = distanceBetweenPoints(safePoint, candidate);
+      if (!bestNode || distance < bestNode.distance) {
+        bestNode = { point: candidate, wallIndex, endpoint: candidate.endpoint, distance };
+      }
+    });
+  });
+
+  if (bestNode && bestNode.distance <= tolerance) {
+    return {
+      point: roundPoint(bestNode.point),
+      wallIndex: bestNode.wallIndex,
+      endpoint: bestNode.endpoint,
+      snappedTo: "node"
+    };
+  }
+
+  let bestProjection = null;
+  safeWalls.forEach((wall, wallIndex) => {
+    const projection = projectPointOntoWall(safePoint, wall);
+    if (!bestProjection || projection.distance < bestProjection.distance) {
+      bestProjection = {
+        point: projection.point,
+        wallIndex,
+        positionPercent: projection.positionPercent,
+        distance: projection.distance
+      };
+    }
+  });
+
+  if (bestProjection && bestProjection.distance <= tolerance) {
+    return {
+      point: roundPoint(bestProjection.point),
+      wallIndex: bestProjection.wallIndex,
+      positionPercent: bestProjection.positionPercent,
+      snappedTo: "wall"
+    };
+  }
+
+  return {
+    point: roundPoint(snapPointToBorder(safePoint, tolerance)),
+    wallIndex: -1,
+    snappedTo: "free"
+  };
+}
+
+function splitWallSegmentAtPoint(wall, point, tolerance = 1) {
+  const start = { x: wall.x1_percent, y: wall.y1_percent };
+  const end = { x: wall.x2_percent, y: wall.y2_percent };
+  if (samePoint(point, start, tolerance) || samePoint(point, end, tolerance)) {
+    return [wall];
+  }
+
+  if (!pointOnSegment(point, start, end)) {
+    return [wall];
+  }
+
+  const first = {
+    x1_percent: wall.x1_percent,
+    y1_percent: wall.y1_percent,
+    x2_percent: point.x,
+    y2_percent: point.y
+  };
+  const second = {
+    x1_percent: point.x,
+    y1_percent: point.y,
+    x2_percent: wall.x2_percent,
+    y2_percent: wall.y2_percent
+  };
+
+  return [first, second].filter((segment) => lineLength(segment) >= MIN_WALL_LENGTH_PERCENT);
+}
+
+export function insertConnectedWall(rawWalls, startPoint, endPoint, tolerance = WALL_EDITOR_SNAP_TOLERANCE) {
+  const safeWalls = Array.isArray(rawWalls) ? rawWalls.map(normalizeWallSegment) : [];
+  const startSnap = snapEditorPointToWalls(startPoint, safeWalls, tolerance);
+  const endSnap = snapEditorPointToWalls(endPoint, safeWalls, tolerance);
+  const snappedStart = startSnap.point;
+  const snappedEnd = endSnap.point;
+
+  if (samePoint(snappedStart, snappedEnd, tolerance) || distanceBetweenPoints(snappedStart, snappedEnd) < MIN_WALL_LENGTH_PERCENT) {
+    return safeWalls;
+  }
+
+  let nextWalls = [...safeWalls];
+  const splitTargets = [startSnap, endSnap]
+    .filter((snap) => snap.snappedTo === "wall" && snap.wallIndex >= 0)
+    .sort((a, b) => b.wallIndex - a.wallIndex);
+
+  splitTargets.forEach((snap) => {
+    const targetWall = nextWalls[snap.wallIndex];
+    if (!targetWall) {
+      return;
+    }
+    const replacement = splitWallSegmentAtPoint(targetWall, snap.point);
+    nextWalls.splice(snap.wallIndex, 1, ...replacement);
+  });
+
+  nextWalls.push({
+    x1_percent: snappedStart.x,
+    y1_percent: snappedStart.y,
+    x2_percent: snappedEnd.x,
+    y2_percent: snappedEnd.y
+  });
+
+  return dedupeWalls(nextWalls);
 }
 
 function edgeItemAnchorPoint(item, walls) {
