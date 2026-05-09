@@ -26,10 +26,16 @@ const OBJECT_TYPES = {
     height_percent: 10,
     seat_count: 6
   },
-  armchair: {
-    label: "Armchair",
+  chair: {
+    label: "Chair",
     shape_kind: "rect",
-    width_percent: 7,
+    width_percent: 6,
+    height_percent: 6
+  },
+  armchair: {
+    label: "Lounge Chair",
+    shape_kind: "rect",
+    width_percent: 8,
     height_percent: 7
   },
   table: {
@@ -47,14 +53,14 @@ const OBJECT_TYPES = {
   whiteboard: {
     label: "Whiteboard",
     shape_kind: "rect",
-    width_percent: 14,
-    height_percent: 4
+    width_percent: 16,
+    height_percent: 5
   },
   plant: {
     label: "Plant",
     shape_kind: "ellipse",
-    width_percent: 4,
-    height_percent: 4
+    width_percent: 5,
+    height_percent: 6
   },
   trashcan: {
     label: "Trashcan",
@@ -96,13 +102,17 @@ const OBJECT_ALIASES = {
   l_desk: "l_shaped_desk",
   conference_table: "meeting_table",
   meeting_desk: "meeting_table",
+  chair: "chair",
+  office_chair: "chair",
+  task_chair: "chair",
+  desk_chair: "chair",
+  rolling_chair: "chair",
+  visitor_chair: "chair",
+  seat: "chair",
+  seating: "chair",
   sofa_chair: "armchair",
   lounge_chair: "armchair",
-  chair: "armchair",
-  office_chair: "armchair",
-  task_chair: "armchair",
-  seat: "armchair",
-  seating: "armchair",
+  soft_chair: "armchair",
   filing_cabinet: "filing_cabinet",
   filingcabinet: "filing_cabinet",
   cabinet: "filing_cabinet",
@@ -110,6 +120,7 @@ const OBJECT_ALIASES = {
   dry_erase_board: "whiteboard",
   marker_board: "whiteboard",
   board: "whiteboard",
+  wall_board: "whiteboard",
   copier: "office_equipment",
   shredder: "office_equipment",
   potted_plant: "plant",
