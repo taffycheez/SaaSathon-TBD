@@ -1,0 +1,14 @@
+{
+  "name": "saasathon-tbd",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npm run dev --prefix FloorPlanToProductivity/workspaceiq",
+    "dev:web": "npm run dev:web --prefix FloorPlanToProductivity/workspaceiq",
+    "dev:full": "npm run dev:full --prefix FloorPlanToProductivity/workspaceiq",
+    "build": "npm run build --prefix FloorPlanToProductivity/workspaceiq",
+    "build:web": "npm run build:web --prefix FloorPlanToProductivity/workspaceiq",
+    "test": "npm run test --prefix FloorPlanToProductivity/workspaceiq",
+    "install:workspaceiq": "npm install --prefix FloorPlanToProductivity/workspaceiq --workspaces"
+  }
+}
