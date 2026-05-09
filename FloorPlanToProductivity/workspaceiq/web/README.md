@@ -7,8 +7,8 @@ This package is the cloud-ready Next.js + TypeScript app for WorkspaceIQ.
 - App Router pages for the SaaS frontend
 - Type-safe Route Handlers under `app/api`
 - A thin orchestration layer that can call:
-  - the existing Node/Express analysis service
   - a Python CV worker
+  - OpenRouter/OpenAI vision as fallback
 
 ## Environment variables
 
@@ -68,8 +68,9 @@ and configures a `/health` health check for the worker.
 
 ## Notes
 
-- `app/api/analyse/route.ts` is the public analysis endpoint for the web app.
-- `app/api/layout/route.ts` proxies layout generation.
+- `app/api/analyse-room/route.ts` is the primary room-analysis endpoint used by the app.
+- `app/api/generate-layout/route.ts` handles generated desk placement.
+- `app/api/analyse/route.ts` and `app/api/layout/route.ts` remain as thin compatibility aliases.
 - The heavy Python CV worker is intentionally not bundled into this Vercel app.
 - Deploy the worker separately and set `ANALYSIS_WORKER_URL` to that public endpoint.
 

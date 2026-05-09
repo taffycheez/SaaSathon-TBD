@@ -1,5 +1,11 @@
 import { OBJECT_PALETTE, getObjectDefinition } from "@/lib/objectCatalog";
 
+const WORK_STYLE_OPTIONS = [
+  { value: "focus", label: "Focus" },
+  { value: "balanced", label: "Balanced" },
+  { value: "collaborative", label: "Team" }
+];
+
 export default function ControlPanel({
   preferences,
   setPreferences,
@@ -42,6 +48,27 @@ export default function ControlPanel({
           }
         />
       </label>
+
+      <div className="field">
+        <span>Work style</span>
+        <div className="work-style-row" role="group" aria-label="Work style">
+          {WORK_STYLE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`object-chip work-style-chip${preferences.workStyle === option.value ? " active" : ""}`}
+              onClick={() =>
+                setPreferences((current) => ({
+                  ...current,
+                  workStyle: option.value
+                }))
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="field">
         <span>Quick add</span>

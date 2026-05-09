@@ -1485,9 +1485,26 @@ button:disabled {
   gap: 8px;
 }
 
+.work-style-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .quick-add-chip {
   justify-content: center;
   background: #eef4ff;
+}
+
+.work-style-chip {
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.work-style-chip.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
 }
 
 .toggle-field {
