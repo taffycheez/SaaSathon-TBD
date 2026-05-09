@@ -16,6 +16,8 @@ const CANVAS_WIDTH = 900;
 const CANVAS_HEIGHT = 560;
 const PADDING = 40;
 const DRAG_THRESHOLD = 6;
+const ROTATION_STEP_DEGREES = 45;
+const DOOR_RENDER_LENGTH = 30;
 
 function getWallBounds(walls) {
   const points = walls.flatMap((wall) => [
@@ -287,11 +289,42 @@ function CloseIcon() {
   );
 }
 
-function DoorShape() {
+function rotateByStep(rotationDeg, step = ROTATION_STEP_DEGREES) {
+  return ((rotationDeg || 0) + step + 360) % 360;
+}
+
+function cycleDoorOrientation(door) {
+  const currentHingeSide = door?.hinge_side === "end" ? "end" : "start";
+  const currentSwingDirection = Number(door?.swing_direction) === -1 ? -1 : 1;
+
+  if (currentHingeSide === "start" && currentSwingDirection === 1) {
+    return { hinge_side: "start", swing_direction: -1, opening_anchor: "edge" };
+  }
+  if (currentHingeSide === "start" && currentSwingDirection === -1) {
+    return { hinge_side: "end", swing_direction: 1, opening_anchor: "edge" };
+  }
+  if (currentHingeSide === "end" && currentSwingDirection === 1) {
+    return { hinge_side: "end", swing_direction: -1, opening_anchor: "edge" };
+  }
+  return { hinge_side: "start", swing_direction: 1, opening_anchor: "edge" };
+}
+
+function DoorShape({ hingeSide = "start", swingDirection = 1 }) {
+  const hingeX = hingeSide === "end" ? DOOR_RENDER_LENGTH / 2 : -DOOR_RENDER_LENGTH / 2;
+  const closedX = hingeSide === "end" ? hingeX - DOOR_RENDER_LENGTH : hingeX + DOOR_RENDER_LENGTH;
+  const openY = DOOR_RENDER_LENGTH * swingDirection;
+  const arcSweep = swingDirection > 0 ? 1 : 0;
   return (
     <>
-      <line x1="-12" y1="-15" x2="-12" y2="15" stroke="#8b5e34" strokeWidth="3.4" strokeLinecap="round" />
-      <path d="M -12 -15 A 30 30 0 0 1 18 15" fill="none" stroke="#8b5e34" strokeWidth="2.2" strokeDasharray="4 3" />
+      <line x1={hingeX} y1="0" x2={hingeX} y2={openY} stroke="#8b5e34" strokeWidth="2.8" strokeLinecap="round" />
+      <path
+        d={`M ${closedX} 0 A ${DOOR_RENDER_LENGTH} ${DOOR_RENDER_LENGTH} 0 0 ${arcSweep} ${hingeX} ${openY}`}
+        fill="none"
+        stroke="#8b5e34"
+        strokeWidth="2"
+        strokeDasharray="4 3"
+      />
+      <circle cx={hingeX} cy="0" r="2.1" fill="#8b5e34" />
     </>
   );
 }
@@ -358,6 +391,15 @@ export default function FloorPlanEditor({
   roomBoxRef.current = roomBox;
   wallsRef.current = walls;
 
+  function setLiveDragState(nextValueOrUpdater) {
+    const nextValue = typeof nextValueOrUpdater === "function"
+      ? nextValueOrUpdater(dragStateRef.current)
+      : nextValueOrUpdater;
+    dragStateRef.current = nextValue;
+    setDragState(nextValue);
+    return nextValue;
+  }
+
   useEffect(() => {
     if (selectedWallIndex == null) {
       return;
@@ -391,6 +433,50 @@ export default function FloorPlanEditor({
       setScaleDraft(null);
     }
   }, [scaleToolActive]);
+
+  useEffect(() => {
+    function isEditableTarget(target) {
+      return target instanceof HTMLElement &&
+        (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+    }
+
+    function handleKeyDown(event) {
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const usesCommand = event.ctrlKey || event.metaKey;
+
+      if (usesCommand && key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        onUndo?.();
+        return;
+      }
+
+      if ((usesCommand && key === "y") || (usesCommand && event.shiftKey && key === "z")) {
+        event.preventDefault();
+        onRedo?.();
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (selectedWallIndex != null) {
+          event.preventDefault();
+          removeSelectedWall();
+          return;
+        }
+
+        if (selectedPlacedItem?.type === "furniture" || selectedPlacedItem?.type === "desks") {
+          event.preventDefault();
+          removeSelectedPlacedItem();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onRedo, onUndo, selectedPlacedItem, selectedWallIndex]);
 
   function withUpdatedPlacedItem(currentRoom, type, index, updates) {
     return {
@@ -464,6 +550,15 @@ export default function FloorPlanEditor({
       ...currentRoom,
       [type]: currentRoom[type].filter((_item, itemIndex) => itemIndex !== index)
     }));
+  }
+
+  function removeSelectedPlacedItem() {
+    if (!(selectedPlacedItem?.type === "furniture" || selectedPlacedItem?.type === "desks")) {
+      return;
+    }
+
+    removePlacedItem(selectedPlacedItem.type, selectedPlacedItem.index);
+    setSelectedPlacedItem(null);
   }
 
   function removeSelectedWall() {
@@ -546,7 +641,7 @@ export default function FloorPlanEditor({
     } else {
       setSelectedPlacedItem(null);
     }
-    setDragState({
+    setLiveDragState({
       kind: "item",
       type,
       index,
@@ -576,7 +671,7 @@ export default function FloorPlanEditor({
     const point = getSvgPointFromClient(event.clientX, event.clientY);
     setSelectedPlacedItem(null);
     setSelectedWallIndex(wallIndex);
-    setDragState({
+    setLiveDragState({
       kind: "wall-handle",
       wallIndex,
       endpoint,
@@ -606,7 +701,7 @@ export default function FloorPlanEditor({
     const point = getSvgPointFromClient(event.clientX, event.clientY);
     setSelectedPlacedItem(null);
     setSelectedWallIndex(wallIndex);
-    setDragState({
+    setLiveDragState({
       kind: "wall-move",
       wallIndex,
       startPoint: point,
@@ -625,7 +720,7 @@ export default function FloorPlanEditor({
     setSelectedPlacedItem(null);
     setSelectedWallIndex(null);
     setPinnedZoneId(null);
-    setDragState({
+    setLiveDragState({
       kind: "wall-draw",
       startPoint: point,
       point,
@@ -635,7 +730,7 @@ export default function FloorPlanEditor({
   }
 
   function updateWallDrawPointer(point) {
-    setDragState((current) => (
+    setLiveDragState((current) => (
       current?.kind === "wall-draw"
         ? {
             ...current,
@@ -663,7 +758,7 @@ export default function FloorPlanEditor({
     setSelectedPlacedItem(null);
     setSelectedWallIndex(null);
     setPinnedZoneId(null);
-    setDragState({
+    setLiveDragState({
       kind: "room-rect",
       startPoint: point,
       point,
@@ -673,7 +768,7 @@ export default function FloorPlanEditor({
   }
 
   function updateRectangleRoomPointer(point) {
-    setDragState((current) => (
+    setLiveDragState((current) => (
       current?.kind === "room-rect"
         ? {
             ...current,
@@ -694,7 +789,7 @@ export default function FloorPlanEditor({
     setSelectedWallIndex(null);
     setPinnedZoneId(null);
     setScaleDraft(null);
-    setDragState({
+    setLiveDragState({
       kind: "scale-measure",
       startPoint: point,
       point,
@@ -704,7 +799,7 @@ export default function FloorPlanEditor({
   }
 
   function updateScalePointer(point) {
-    setDragState((current) => (
+    setLiveDragState((current) => (
       current?.kind === "scale-measure"
         ? {
             ...current,
@@ -758,7 +853,7 @@ export default function FloorPlanEditor({
       if (dragDistance >= DRAG_THRESHOLD) {
         commitWallUpdate(currentDrag.wallIndex, currentDrag.endpoint, point);
       }
-      setDragState(null);
+      setLiveDragState(null);
       return;
     }
 
@@ -766,7 +861,7 @@ export default function FloorPlanEditor({
       if (dragDistance >= DRAG_THRESHOLD) {
         commitWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
       }
-      setDragState(null);
+      setLiveDragState(null);
       return;
     }
 
@@ -780,7 +875,7 @@ export default function FloorPlanEditor({
       ) {
         onAddWall?.(currentDrag.startWallPoint, snappedEndPoint);
       }
-      setDragState(null);
+      setLiveDragState(null);
       return;
     }
 
@@ -792,7 +887,7 @@ export default function FloorPlanEditor({
       ) {
         onAddRectangleRoom?.(currentDrag.startRoomPoint, snappedEndPoint);
       }
-      setDragState(null);
+      setLiveDragState(null);
       return;
     }
 
@@ -811,7 +906,7 @@ export default function FloorPlanEditor({
           });
         }
       }
-      setDragState(null);
+      setLiveDragState(null);
       return;
     }
 
@@ -823,12 +918,12 @@ export default function FloorPlanEditor({
       ) {
         setSelectedPlacedItem(null);
       }
-      setDragState(null);
+      setLiveDragState(null);
       return;
     }
 
     if (dragDistance < DRAG_THRESHOLD) {
-      setDragState(null);
+      setLiveDragState(null);
       return;
     }
 
@@ -837,7 +932,7 @@ export default function FloorPlanEditor({
       currentDrag.index,
       pointerToRoomPosition(point, roomBoxRef.current, false)
     );
-    setDragState(null);
+    setLiveDragState(null);
   }
 
   const isDragging = Boolean(dragState);
@@ -857,10 +952,13 @@ export default function FloorPlanEditor({
       } else if (currentDrag?.kind === "wall-move") {
         previewWallMove(currentDrag.wallIndex, currentDrag.startPoint, point);
       } else if (currentDrag?.kind === "wall-draw") {
+        updateWallDrawPointer(point);
         clearRoomPreview();
       } else if (currentDrag?.kind === "room-rect") {
+        updateRectangleRoomPointer(point);
         clearRoomPreview();
       } else if (currentDrag?.kind === "scale-measure") {
+        updateScalePointer(point);
         clearRoomPreview();
       } else {
         const currentItem = currentDrag ? room?.[currentDrag.type]?.[currentDrag.index] : null;
@@ -872,7 +970,7 @@ export default function FloorPlanEditor({
         }
       }
 
-      setDragState((current) => (
+      setLiveDragState((current) => (
         current
           ? {
               ...current,
@@ -1048,36 +1146,54 @@ export default function FloorPlanEditor({
             <strong>Set scale</strong>
             <small>
               {scaleDraft
-                ? "Enter the real distance for this line in metres, then apply it to calibrate the room size."
+                ? "Measured line captured. Enter the real-world length to calibrate the plan."
                 : "Click and drag a measurement line across something with a known real-world length."}
             </small>
           </div>
-          {scaleDraft ? (
-            <div className="scale-tool-actions">
-              <input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={scaleInputValue}
-                onChange={(event) => setScaleInputValue(event.target.value)}
-                aria-label="Known real-world distance in metres"
-              />
+        </div>
+      ) : null}
+
+      {scaleDraft ? (
+        <div className="modal-backdrop" role="presentation" onClick={cancelScaleDraft}>
+          <div
+            className="confirm-modal scale-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="scale-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="upload-kicker">Set scale</p>
+            <h2 id="scale-modal-title">What is the real length of this line?</h2>
+            <p>Enter the known distance in metres and WorkspaceIQ will calibrate the whole plan from that measurement.</p>
+            <div className="scale-tool-actions scale-tool-actions--modal">
+              <label className="scale-modal-field">
+                <span>Real length (m)</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={scaleInputValue}
+                  onChange={(event) => setScaleInputValue(event.target.value)}
+                  aria-label="Known real-world distance in metres"
+                  autoFocus
+                />
+              </label>
               <button
                 type="button"
-                className="wall-delete-button"
+                className="primary-button modal-button"
                 onClick={applyScaleDraft}
               >
                 Apply scale
               </button>
               <button
                 type="button"
-                className="secondary-button scale-tool-cancel"
+                className="secondary-button modal-button"
                 onClick={cancelScaleDraft}
               >
                 Cancel
               </button>
             </div>
-          ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -1104,37 +1220,7 @@ export default function FloorPlanEditor({
           ref={svgRef}
           className="floor-stage-svg"
           viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
-          onPointerMove={(event) => {
-            if (dragStateRef.current?.kind === "wall-draw") {
-              updateWallDrawPointer(getSvgPointFromClient(event.clientX, event.clientY));
-            } else if (dragStateRef.current?.kind === "room-rect") {
-              updateRectangleRoomPointer(getSvgPointFromClient(event.clientX, event.clientY));
-            } else if (dragStateRef.current?.kind === "scale-measure") {
-              updateScalePointer(getSvgPointFromClient(event.clientX, event.clientY));
-            }
-          }}
-          onPointerUp={(event) => {
-            if (dragStateRef.current?.kind === "wall-draw") {
-              finishWallDraw(event.clientX, event.clientY);
-            } else if (dragStateRef.current?.kind === "room-rect") {
-              finishDrag(event.clientX, event.clientY);
-            } else if (dragStateRef.current?.kind === "scale-measure") {
-              finishScaleDrag(event.clientX, event.clientY);
-            }
-          }}
           onPointerDown={(event) => {
-            if (wallToolMode === "add") {
-              startWallDrawDrag(event);
-              return;
-            }
-            if (wallToolMode === "rect") {
-              startRectangleRoomDrag(event);
-              return;
-            }
-            if (scaleToolActive) {
-              startScaleDrag(event);
-              return;
-            }
             if (!dragStateRef.current) {
               setSelectedWallIndex(null);
               setSelectedPlacedItem(null);
@@ -1416,10 +1502,13 @@ export default function FloorPlanEditor({
                 transform={`translate(${x} ${y}) rotate(${renderedDoor.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("doors", index, event)}
                 onDoubleClick={() =>
-                  updatePlacedItem("doors", index, { rotation_deg: ((doorItem.rotation_deg || 0) + 90) % 360 })
+                  updatePlacedItem("doors", index, cycleDoorOrientation(doorItem))
                 }
               >
-                <DoorShape />
+                <DoorShape
+                  hingeSide={renderedDoor.hinge_side}
+                  swingDirection={renderedDoor.swing_direction}
+                />
               </g>
             );
           })}
@@ -1436,7 +1525,7 @@ export default function FloorPlanEditor({
                 key={`furniture-${index}`}
                 transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${renderedItem.rotation_deg || 0} ${width / 2} ${height / 2})`}
                 onPointerDown={(event) => startDrag("furniture", index, event)}
-                onDoubleClick={() => updatePlacedItem("furniture", index, { rotation_deg: ((item.rotation_deg || 0) + 90) % 360 })}
+                onDoubleClick={() => updatePlacedItem("furniture", index, { rotation_deg: rotateByStep(item.rotation_deg) })}
               >
                 <g className={`workspace-object workspace-object--${item.type.replace(/_/g, "-")}${dragState?.type === "furniture" && dragState?.index === index ? " is-dragging" : ""}${selectedPlacedItem?.type === "furniture" && selectedPlacedItem?.index === index ? " is-selected" : ""}`}>
                   <SvgObjectShape
@@ -1464,7 +1553,7 @@ export default function FloorPlanEditor({
                 key={`desk-${index}`}
                 transform={`translate(${x - width / 2} ${y - height / 2}) rotate(${renderedDesk.rotation_deg || 0} ${width / 2} ${height / 2})`}
                 onPointerDown={(event) => startDrag("desks", index, event)}
-                onDoubleClick={() => updatePlacedItem("desks", index, { rotation_deg: ((desk.rotation_deg || 0) + 90) % 360 })}
+                onDoubleClick={() => updatePlacedItem("desks", index, { rotation_deg: rotateByStep(desk.rotation_deg) })}
               >
                 <g className={`workspace-object workspace-object--${desk.type.replace(/_/g, "-")}${dragState?.type === "desks" && dragState?.index === index ? " is-dragging" : ""}${selectedPlacedItem?.type === "desks" && selectedPlacedItem?.index === index ? " is-selected" : ""}`}>
                   <SvgObjectShape
@@ -1545,6 +1634,48 @@ export default function FloorPlanEditor({
               </g>
             );
           })}
+
+          {(wallToolMode === "add" || wallToolMode === "rect" || scaleToolActive) ? (
+            <rect
+              x={roomBox.x}
+              y={roomBox.y}
+              width={roomBox.width}
+              height={roomBox.height}
+              fill="rgba(0, 0, 0, 0.001)"
+              pointerEvents="all"
+              onPointerDown={(event) => {
+                if (wallToolMode === "add") {
+                  startWallDrawDrag(event);
+                  return;
+                }
+                if (wallToolMode === "rect") {
+                  startRectangleRoomDrag(event);
+                  return;
+                }
+                if (scaleToolActive) {
+                  startScaleDrag(event);
+                }
+              }}
+              onPointerMove={(event) => {
+                if (dragStateRef.current?.kind === "wall-draw") {
+                  updateWallDrawPointer(getSvgPointFromClient(event.clientX, event.clientY));
+                } else if (dragStateRef.current?.kind === "room-rect") {
+                  updateRectangleRoomPointer(getSvgPointFromClient(event.clientX, event.clientY));
+                } else if (dragStateRef.current?.kind === "scale-measure") {
+                  updateScalePointer(getSvgPointFromClient(event.clientX, event.clientY));
+                }
+              }}
+              onPointerUp={(event) => {
+                if (dragStateRef.current?.kind === "wall-draw") {
+                  finishWallDraw(event.clientX, event.clientY);
+                } else if (dragStateRef.current?.kind === "room-rect") {
+                  finishDrag(event.clientX, event.clientY);
+                } else if (dragStateRef.current?.kind === "scale-measure") {
+                  finishScaleDrag(event.clientX, event.clientY);
+                }
+              }}
+            />
+          ) : null}
         </svg>
       </div>
     </div>

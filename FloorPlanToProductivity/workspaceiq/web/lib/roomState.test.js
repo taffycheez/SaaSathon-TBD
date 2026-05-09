@@ -76,6 +76,9 @@ test("createDoorForRoom attaches a new door to a wall", () => {
   assert.equal(doorItem.wall_index, 0);
   assert.equal(doorItem.y_percent, 0);
   assert.equal(doorItem.position_percent, 18);
+  assert.equal(doorItem.opening_anchor, "edge");
+  assert.equal(doorItem.hinge_side, "start");
+  assert.equal(doorItem.swing_direction, 1);
   assert.deepEqual(pointOnWall(doorItem, room.walls), { x: 18, y: 0 });
 });
 

@@ -3,8 +3,6 @@ import { OBJECT_PALETTE, getObjectDefinition } from "@/lib/objectCatalog";
 export default function ControlPanel({
   preferences,
   setPreferences,
-  room,
-  updateRoomDimensions,
   onAddWindow,
   onAddDoor,
   wallToolMode,
@@ -39,30 +37,6 @@ export default function ControlPanel({
           }
         />
       </label>
-
-      <div className="field-row">
-        <label className="field">
-          <span>Width (m)</span>
-          <input
-            type="number"
-            min="1"
-            step="0.5"
-            value={room.estimated_width_m}
-            onChange={(event) => updateRoomDimensions("estimated_width_m", event.target.value)}
-          />
-        </label>
-
-        <label className="field">
-          <span>Height (m)</span>
-          <input
-            type="number"
-            min="1"
-            step="0.5"
-            value={room.estimated_height_m}
-            onChange={(event) => updateRoomDimensions("estimated_height_m", event.target.value)}
-          />
-        </label>
-      </div>
 
       <div className="field">
         <span>Quick add</span>
@@ -104,6 +78,7 @@ export default function ControlPanel({
             {scaleToolActive ? "Cancel Scale" : "Set Scale"}
           </button>
         </div>
+        <small className="field-hint">Use Set Scale to calibrate the plan from a known real-world measurement.</small>
       </div>
 
       <div className="field">

@@ -6,8 +6,14 @@ export type WallSegment = {
 };
 
 export type EdgeItem = {
+  x_percent?: number;
+  y_percent?: number;
+  rotation_deg?: number;
   wall_index: number;
   position_percent: number;
+  opening_anchor?: "center" | "edge";
+  hinge_side?: "start" | "end";
+  swing_direction?: -1 | 1;
 };
 
 export type FurnitureItem = {

@@ -177,7 +177,15 @@ export function createWindowForRoom(room) {
 }
 
 export function createDoorForRoom(room) {
-  return createEdgeItemForRoom(room, "door");
+  return snapEdgeItemToWalls(
+    {
+      ...createEdgeItemForRoom(room, "door"),
+      opening_anchor: "edge",
+      hinge_side: "start",
+      swing_direction: 1
+    },
+    Array.isArray(room?.walls) ? room.walls : []
+  );
 }
 
 export function updateEdgeItemPosition(room, collectionType, index, pointerPosition) {

@@ -585,6 +585,9 @@ export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_
 
   const target = edgeItemAnchorPoint(item, safeWalls);
   const preferredWallIndex = Number.isInteger(Number(item?.wall_index)) ? Number(item.wall_index) : -1;
+  const openingAnchor = item?.opening_anchor === "edge" ? "edge" : "center";
+  const hingeSide = item?.hinge_side === "end" ? "end" : "start";
+  const swingDirection = Number(item?.swing_direction) === -1 ? -1 : 1;
 
   let best = null;
   safeWalls.forEach((wall, wallIndex) => {
@@ -597,10 +600,17 @@ export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_
   });
 
   const wallLengthPercent = Math.max(lineLength(best.wall), widthPercent);
-  const halfSpanPercent = Math.min(49, (widthPercent / wallLengthPercent) * 50);
-  const clampedPosition = Number(
-    Math.max(halfSpanPercent, Math.min(100 - halfSpanPercent, best.positionPercent)).toFixed(2)
-  );
+  const spanPercent = Math.min(98, (widthPercent / wallLengthPercent) * 100);
+  const halfSpanPercent = spanPercent / 2;
+  let clampedPosition;
+  if (openingAnchor === "edge") {
+    clampedPosition = hingeSide === "end"
+      ? Math.max(spanPercent, Math.min(100, best.positionPercent))
+      : Math.max(0, Math.min(100 - spanPercent, best.positionPercent));
+  } else {
+    clampedPosition = Math.max(halfSpanPercent, Math.min(100 - halfSpanPercent, best.positionPercent));
+  }
+  clampedPosition = Number(clampedPosition.toFixed(2));
   const t = clampedPosition / 100;
 
   return {
@@ -613,7 +623,10 @@ export function snapEdgeItemToWalls(item, walls, widthPercent = DEFAULT_OPENING_
     ),
     rotation_deg: lineAngleDegrees(best.wall),
     wall_index: best.wallIndex,
-    position_percent: clampedPosition
+    position_percent: clampedPosition,
+    opening_anchor: openingAnchor,
+    hinge_side: hingeSide,
+    swing_direction: swingDirection
   };
 }
 

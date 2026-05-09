@@ -5,6 +5,8 @@ import UploadScreen from "@/components/UploadScreen";
 import ControlPanel from "@/components/ControlPanel";
 import FloorPlanEditor from "@/components/FloorPlanEditor";
 import FloorPlanEditorBoundary from "@/components/FloorPlanEditorBoundary";
+import { FloorPlanObjectIcon } from "@/components/FloorPlanIconPack";
+import FloorPlanPreview3D from "@/components/FloorPlanPreview3D";
 import ScorePanel from "@/components/ScorePanel";
 import { getObjectDefinition } from "@/lib/objectCatalog";
 import { computeFengShuiScore } from "@/lib/fengShuiScore";
@@ -126,6 +128,33 @@ const HERO_LAYOUT_SCENES = [
       { id: "quiet-band", kind: "band", left: "12%", top: "60%", width: "76%", height: "18%", opacity: 0.3 }
     ]
   }
+];
+
+const LOADING_MESSAGES = [
+  {
+    title: "Tracing walls and boundaries",
+    detail: "WorkspaceIQ is finding the room outline first so the editor starts from something real."
+  },
+  {
+    title: "Looking for doors and windows",
+    detail: "We’re checking openings, daylight edges, and circulation points before placing anything inside."
+  },
+  {
+    title: "Scanning existing furniture",
+    detail: "Desks, seating, and utility fixtures are being matched into editable floor-plan objects."
+  },
+  {
+    title: "Preparing your editable plan",
+    detail: "We’re stitching the analysis into a layout you can immediately drag, tweak, and score."
+  }
+];
+
+const LOADING_FLOATING_OBJECTS = [
+  { id: "desk", type: "desk", size: 66, top: "-10%", left: "-18%", rotate: -8, delay: "0ms" },
+  { id: "chair", type: "chair", size: 52, top: "-8%", right: "-16%", rotate: 12, delay: "620ms" },
+  { id: "plant", type: "plant", size: 50, top: "36%", left: "-22%", rotate: -10, delay: "1220ms" },
+  { id: "couch", type: "couch", size: 82, bottom: "-8%", left: "-16%", rotate: -4, delay: "1820ms" },
+  { id: "sink", type: "sink", size: 52, bottom: "-6%", right: "-16%", rotate: 8, delay: "2420ms" }
 ];
 
 function normalizeWallIndex(value, wallsLength) {
@@ -401,24 +430,7 @@ function remapWallsIntoOriginalBounds(walls, analysisBounds) {
 }
 
 function chooseBestWalls(modelRoom, clientDetectedWalls) {
-  if (!Array.isArray(clientDetectedWalls) || clientDetectedWalls.length < 4) {
-    return modelRoom;
-  }
-
-  const modelWalls = Array.isArray(modelRoom?.walls) ? modelRoom.walls : [];
-  const shouldPreferClientWalls =
-    modelWalls.length < 4 ||
-    wallsLookLikeOuterBorder(modelWalls) ||
-    clientDetectedWalls.length > modelWalls.length + 1;
-
-  if (!shouldPreferClientWalls) {
-    return modelRoom;
-  }
-
-  return {
-    ...modelRoom,
-    walls: clientDetectedWalls
-  };
+  return modelRoom;
 }
 
 function remapPercentIntoOriginal(value, startPercent, sizePercent) {
@@ -841,9 +853,11 @@ export default function WorkspaceApp() {
       }
 
       const data = await response.json();
+      const remappedRoom = remapRoomToOriginalBounds(normalizeRoomData(data), analysisBounds);
+      const usedClientWallFallback = false;
       const normalizedRoom = normalizeRoomLayout(
         chooseBestWalls(
-          remapRoomToOriginalBounds(normalizeRoomData(data), analysisBounds),
+          remappedRoom,
           detectedWalls
         )
       );
@@ -860,7 +874,7 @@ export default function WorkspaceApp() {
         ...(normalizedRoom.wallIssues?.length
           ? normalizedRoom.wallIssues.map((issue) => `Wall validation: ${issue}`)
           : []),
-        ...(detectedWalls.length >= 4 ? ["WorkspaceIQ also extracted wall-line candidates directly from the image to avoid snapping only to the photo border."] : []),
+        ...(usedClientWallFallback ? ["WorkspaceIQ used browser-side wall-line fallback because the backend returned too little wall geometry."] : []),
         ...preprocessingNotes
       ]);
       setLayoutNotes([]);
@@ -902,13 +916,6 @@ export default function WorkspaceApp() {
     } finally {
       setIsGenerating(false);
     }
-  }
-
-  function updateRoomDimensions(dimension, value) {
-    setRoom((currentRoom) => ({
-      ...currentRoom,
-      [dimension]: Number(value) || 0
-    }));
   }
 
   function resetWorkspace() {
@@ -1063,14 +1070,13 @@ export default function WorkspaceApp() {
               isPreviewing={Boolean(roomPreview)}
               isLoadingExplanation={!roomPreview && isExplainingScore}
             />
+            <FloorPlanPreview3D room={activeRoom} />
           </section>
 
           <aside className="sidebar-column">
             <ControlPanel
               preferences={preferences}
               setPreferences={setPreferences}
-              room={room}
-              updateRoomDimensions={updateRoomDimensions}
               onAddWindow={addWindow}
               onAddDoor={addDoor}
               wallToolMode={wallToolMode}
@@ -1142,20 +1148,60 @@ export default function WorkspaceApp() {
 }
 
 function LoadingScreen() {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const message = LOADING_MESSAGES[messageIndex % LOADING_MESSAGES.length];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setMessageIndex((current) => (current + 1) % LOADING_MESSAGES.length);
+    }, 4200);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <section className="loading-screen" aria-live="polite" aria-label="Analysing uploaded floor plan">
       <div className="loading-panel">
-        <div className="loading-plan" aria-hidden="true">
-          <span className="loading-room" />
-          <span className="loading-desk desk-a" />
-          <span className="loading-desk desk-b" />
-          <span className="loading-path" />
+        <div className="loading-visual" aria-hidden="true">
+          <div className="loading-plan">
+            <span className="loading-room" />
+            <span className="loading-desk desk-a" />
+            <span className="loading-desk desk-b" />
+            <span className="loading-path" />
+          </div>
+          {LOADING_FLOATING_OBJECTS.map((item) => {
+            return (
+              <div
+                key={item.id}
+                className={`loading-float loading-float--${item.type}`}
+                style={{
+                  width: `${item.size}px`,
+                  height: `${item.size}px`,
+                  top: item.top,
+                  right: item.right,
+                  bottom: item.bottom,
+                  left: item.left,
+                  ["--float-rotate"]: `${item.rotate}deg`,
+                  ["--float-delay"]: item.delay
+                }}
+              >
+                <svg viewBox={`0 0 ${item.size} ${item.size}`} role="presentation">
+                  <FloorPlanObjectIcon
+                    item={{ type: item.type, rotation_deg: 0 }}
+                    width={item.size}
+                    height={item.size}
+                    fill="#b08968"
+                    stroke="#6f4e37"
+                    strokeWidth={2}
+                  />
+                </svg>
+              </div>
+            );
+          })}
         </div>
         <p className="eyebrow">Analysing image</p>
-        <h2>Checking the floor plan</h2>
-        <p>
-          WorkspaceIQ is reading walls, doors, windows, and existing objects before opening the editor.
-        </p>
+        <h2>{message.title}</h2>
+        <p>{message.detail}</p>
         <div className="loading-steps" aria-hidden="true">
           <span />
           <span />

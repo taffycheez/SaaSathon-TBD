@@ -517,7 +517,7 @@ def build_object_candidate_mask(room_crop: np.ndarray, room_features: Dict[str, 
     blob_mask = cv2.morphologyEx(
         blob_mask,
         cv2.MORPH_CLOSE,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
+        cv2.getStructuringElement(cv2.MORPH_RECT, (9, 5)),
         iterations=1,
     )
     return blob_mask
@@ -580,7 +580,7 @@ def detect_object_candidate_rects(
             continue
 
         aspect_ratio = max(w, h) / max(min(w, h), 1)
-        if aspect_ratio > 5.5:
+        if aspect_ratio > 10.5:
             continue
 
         rects.append((rx + x, ry + y, rx + x + w, ry + y + h))
@@ -898,6 +898,8 @@ def detect_symbol_fixtures(
             item_type = "sink"
         elif nearby_walls >= 2 and 0.75 <= aspect_ratio <= 1.35 and extent >= 0.58:
             item_type = "shower"
+        elif wall_distance >= 4.0 and extent >= 0.55 and 1.1 <= aspect_ratio <= 4.4:
+            item_type = "meeting_table" if area_ratio >= 0.006 else "desk"
 
         if not item_type:
             continue
