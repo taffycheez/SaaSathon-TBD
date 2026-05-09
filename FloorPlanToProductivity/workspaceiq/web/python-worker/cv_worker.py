@@ -1289,9 +1289,13 @@ def detect_door_openings_from_wall_gaps(
             if hinge_side is None:
                 continue
 
+            hinge_percent = start_percent if hinge_side == "start" else end_percent
+            opening_width_percent = max(4.0, min(24.0, abs(end_percent - start_percent)))
+
             doors.append({
                 "wall_index": wall_index,
-                "position_percent": round((start_percent + end_percent) / 2.0, 2),
+                "position_percent": round(hinge_percent, 2),
+                "width_percent": round(opening_width_percent, 2),
                 "opening_anchor": "edge",
                 "hinge_side": hinge_side,
                 "swing_direction": 1,

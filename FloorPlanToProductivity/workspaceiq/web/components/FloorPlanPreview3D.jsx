@@ -98,7 +98,7 @@ function lerpColor(startHex, endHex, t) {
   return `rgb(${mix(sr, er)}, ${mix(sg, eg)}, ${mix(sb, eb)})`;
 }
 
-function getSunState(timeOfDay, northDirectionDeg) {
+function getSunState(timeOfDay, northDirectionDeg, lightingStrength = 1) {
   const daylight = clampRange(Math.sin(((timeOfDay - 6) / 12) * Math.PI), 0, 1);
   const duskBlend = clampRange(1 - daylight, 0, 1);
   const nightBlend = clampRange((8 - timeOfDay) / 4, 0, 1) + clampRange((timeOfDay - 18) / 4, 0, 1);
@@ -106,11 +106,13 @@ function getSunState(timeOfDay, northDirectionDeg) {
   const azimuth = (azimuthDeg * Math.PI) / 180;
   const distance = 12;
   const elevation = 1.2 + daylight * 8.4;
+  const strength = clampRange(Number(lightingStrength) || 1, 0.2, 1.6);
+  const ambientStrength = 0.5 + strength * 0.5;
 
   return {
-    ambient: 0.12 + daylight * 0.9,
-    keyLight: 0.06 + daylight * 1.85,
-    fillLight: 0.04 + daylight * 0.52,
+    ambient: (0.12 + daylight * 0.9) * ambientStrength,
+    keyLight: (0.06 + daylight * 1.85) * strength,
+    fillLight: (0.04 + daylight * 0.52) * (0.7 + strength * 0.3),
     sunPosition: new THREE.Vector3(Math.sin(azimuth) * distance, elevation, -Math.cos(azimuth) * distance),
     background: nightBlend > 0.25
       ? lerpColor("#151c2f", "#35507d", clampRange(nightBlend, 0, 1))
@@ -317,6 +319,7 @@ export default function FloorPlanPreview3D({ room }) {
   const controlsRef = useRef(null);
   const animationFrameRef = useRef(null);
   const [timeOfDay, setTimeOfDay] = useState(12);
+  const [lightingStrength, setLightingStrength] = useState(1);
   const [webglStatus, setWebglStatus] = useState("idle");
 
   const walls = Array.isArray(room?.walls) ? room.walls : [];
@@ -491,7 +494,7 @@ export default function FloorPlanPreview3D({ room }) {
     const normalizedWalls = graph.walls.length ? graph.walls : Array.isArray(room?.walls) ? room.walls : [];
     const bounds = getWallBounds(normalizedWalls);
     const scale = getMetersScale(room, bounds);
-    const sun = getSunState(timeOfDay, clampNumber(room?.north_direction_deg, 0));
+    const sun = getSunState(timeOfDay, clampNumber(room?.north_direction_deg, 0), lightingStrength);
     const floorPoints = graph.outerPolygon?.length
       ? graph.outerPolygon
       : [
@@ -550,7 +553,7 @@ export default function FloorPlanPreview3D({ room }) {
     controlsRef.current.target.set(0, 0.8, 0);
     controlsRef.current.update();
     rendererRef.current?.render(scene, cameraRef.current);
-  }, [room, timeOfDay]);
+  }, [room, timeOfDay, lightingStrength]);
 
   function rotateView(deltaDegrees) {
     rotateCameraAroundTarget(
@@ -601,6 +604,20 @@ export default function FloorPlanPreview3D({ room }) {
             step="1"
             value={timeOfDay}
             onChange={(event) => setTimeOfDay(Number(event.target.value))}
+          />
+        </label>
+        <label className="preview3d-slider">
+          <span>
+            Light strength
+            <strong>{Math.round(lightingStrength * 100)}%</strong>
+          </span>
+          <input
+            type="range"
+            min="0.2"
+            max="1.6"
+            step="0.05"
+            value={lightingStrength}
+            onChange={(event) => setLightingStrength(Number(event.target.value))}
           />
         </label>
         <div className="preview3d-presets" role="group" aria-label="Choose a time of day preset">
