@@ -1280,8 +1280,6 @@ function LoadingScreen() {
         <p>{message.detail}</p>
         <div className="loading-steps" aria-hidden="true">
           <span />
-          <span />
-          <span />
         </div>
       </div>
     </section>
