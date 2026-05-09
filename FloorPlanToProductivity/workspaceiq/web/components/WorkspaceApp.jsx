@@ -591,7 +591,8 @@ export default function WorkspaceApp() {
   const [scoreExplanation, setScoreExplanation] = useState(null);
   const [isExplainingScore, setIsExplainingScore] = useState(false);
   const [isSandboxMode, setIsSandboxMode] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [confirmDialogMode, setConfirmDialogMode] = useState(null);
+  const [pendingDiscardTarget, setPendingDiscardTarget] = useState("home");
   const [pendingScrollTarget, setPendingScrollTarget] = useState("");
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
   const [headerHidden, setHeaderHidden] = useState(false);
@@ -934,11 +935,11 @@ export default function WorkspaceApp() {
   }
 
   function resetWorkspace() {
-    setShowResetConfirm(true);
+    setConfirmDialogMode("reset");
   }
 
   function confirmResetWorkspace() {
-    setShowResetConfirm(false);
+    setConfirmDialogMode(null);
 
     if (imagePreview) {
       setRoom(baseRoom, { recordHistory: false, resetHistory: true });
@@ -947,6 +948,7 @@ export default function WorkspaceApp() {
       setShowZones(true);
       setWallToolMode("select");
       setScaleToolActive(false);
+      setNorthToolActive(false);
       setError("");
       setLayoutNotes([]);
       setScoreExplanation(null);
@@ -959,6 +961,8 @@ export default function WorkspaceApp() {
       setPreferences(defaultPreferences);
       setShowReferenceImage(false);
       setWallToolMode("select");
+      setScaleToolActive(false);
+      setNorthToolActive(false);
       setError("");
       setRoomNotes(["Sandbox mode started. Add walls, doors, windows, desks, and objects from scratch."]);
       setLayoutNotes([]);
@@ -974,6 +978,7 @@ export default function WorkspaceApp() {
     setShowZones(true);
     setWallToolMode("select");
     setScaleToolActive(false);
+    setNorthToolActive(false);
     setError("");
     setRoomNotes([]);
     setLayoutNotes([]);
@@ -981,11 +986,13 @@ export default function WorkspaceApp() {
   }
 
   function cancelResetWorkspace() {
-    setShowResetConfirm(false);
+    setConfirmDialogMode(null);
+    setPendingDiscardTarget("home");
   }
 
-  function goHome(target = "home") {
-    setShowResetConfirm(false);
+  function discardWorkspaceToHome(target = "home") {
+    setConfirmDialogMode(null);
+    setPendingDiscardTarget("home");
     setIsGenerating(false);
     setIsSandboxMode(false);
     setError("");
@@ -994,15 +1001,32 @@ export default function WorkspaceApp() {
     setPreferences(defaultPreferences);
     setImagePreview("");
     setShowReferenceImage(false);
+    setShowZones(true);
     setWallToolMode("select");
     setScaleToolActive(false);
+    setNorthToolActive(false);
     setRoomNotes([]);
     setLayoutNotes([]);
+    setScoreExplanation(null);
     setPendingScrollTarget(target);
   }
 
+  function confirmDiscardWorkspace() {
+    discardWorkspaceToHome(pendingDiscardTarget);
+  }
+
+  function goHome(target = "home") {
+    if (hasWorkspace) {
+      setPendingDiscardTarget(target);
+      setConfirmDialogMode("discard");
+      return;
+    }
+
+    discardWorkspaceToHome(target);
+  }
+
   function startSandbox() {
-    setShowResetConfirm(false);
+    setConfirmDialogMode(null);
     setIsAnalysing(false);
     setIsGenerating(false);
     setIsSandboxMode(true);
@@ -1013,10 +1037,14 @@ export default function WorkspaceApp() {
     setImagePreview("");
     setShowReferenceImage(false);
     setWallToolMode("select");
+    setScaleToolActive(false);
+    setNorthToolActive(false);
     setRoomNotes(["Sandbox mode started. Add walls, doors, windows, desks, and objects from scratch."]);
     setLayoutNotes([]);
     setScoreExplanation(null);
   }
+
+  const isDiscardConfirm = confirmDialogMode === "discard";
 
   return (
     <div className="app-shell">
@@ -1135,7 +1163,7 @@ export default function WorkspaceApp() {
           </aside>
         </main>
       )}
-      {showResetConfirm ? (
+      {confirmDialogMode ? (
         <div className="modal-backdrop" role="presentation" onClick={cancelResetWorkspace}>
           <div
             className="confirm-modal"
@@ -1144,23 +1172,35 @@ export default function WorkspaceApp() {
             aria-labelledby="reset-confirm-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="upload-kicker">Confirm reset</p>
+            <p className="upload-kicker">{isDiscardConfirm ? "Discard workspace" : "Confirm reset"}</p>
             <h2 id="reset-confirm-title">
-              {imagePreview ? "Restore the analysed floor plan?" : isSandboxMode ? "Reset this sandbox?" : "Reset this workspace?"}
+              {isDiscardConfirm
+                ? "Leave this workspace?"
+                : imagePreview
+                  ? "Restore the analysed floor plan?"
+                  : isSandboxMode
+                    ? "Reset this sandbox?"
+                    : "Reset this workspace?"}
             </h2>
             <p>
-              {imagePreview
-                ? "This will remove your current edits and bring the layout back to the analysed starting point."
-                : isSandboxMode
-                  ? "This will clear the current sandbox and return it to a blank default workspace."
-                  : "This will clear the current workspace and return to the default starting state."}
+              {isDiscardConfirm
+                ? "This will discard the current workspace and return to the home screen so you can upload a different photo."
+                : imagePreview
+                  ? "This will remove your current edits and bring the layout back to the analysed starting point."
+                  : isSandboxMode
+                    ? "This will clear the current sandbox and return it to a blank default workspace."
+                    : "This will clear the current workspace and return to the default starting state."}
             </p>
             <div className="confirm-actions">
               <button type="button" className="secondary-button modal-button" onClick={cancelResetWorkspace}>
                 Keep editing
               </button>
-              <button type="button" className="primary-button modal-button" onClick={confirmResetWorkspace}>
-                Yes, reset
+              <button
+                type="button"
+                className="primary-button modal-button"
+                onClick={isDiscardConfirm ? confirmDiscardWorkspace : confirmResetWorkspace}
+              >
+                {isDiscardConfirm ? "Yes, discard" : "Yes, reset"}
               </button>
             </div>
           </div>
