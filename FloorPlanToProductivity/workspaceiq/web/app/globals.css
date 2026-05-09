@@ -1652,31 +1652,6 @@ button:disabled {
   color: white;
 }
 
-.toggle-field {
-  margin-top: 6px;
-  border: 1px solid #23458d;
-  border-radius: 12px;
-  padding: 14px 16px;
-  background: linear-gradient(135deg, #173b8d 0%, #245de2 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.toggle-field span {
-  display: grid;
-  gap: 4px;
-  color: #f4f7fb;
-  font-weight: 750;
-}
-
-.toggle-field small {
-  color: rgba(244, 247, 251, 0.72);
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
 .toggle-button {
   min-width: 72px;
   border: 1px solid rgba(255, 255, 255, 0.24);

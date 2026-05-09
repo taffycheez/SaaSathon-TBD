@@ -1139,9 +1139,6 @@ export default function WorkspaceApp() {
             <ControlPanel
               preferences={preferences}
               setPreferences={setPreferences}
-              canShowReferenceImage={Boolean(imagePreview)}
-              showReferenceImage={showReferenceImage}
-              setShowReferenceImage={setShowReferenceImage}
               onAddWindow={addWindow}
               onAddDoor={addDoor}
               wallToolMode={wallToolMode}
