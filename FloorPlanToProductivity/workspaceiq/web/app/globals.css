@@ -114,18 +114,6 @@ button:disabled {
   letter-spacing: 0.04em;
 }
 
-.header-upload-button {
-  margin-left: auto;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 10px 14px;
-  background: linear-gradient(135deg, var(--accent) 0%, #4a86ff 100%);
-  color: white;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 12px 24px rgba(36, 99, 235, 0.2);
-}
-
 .site-footer a,
 .secondary-link,
 .footer-link-button {
@@ -1260,10 +1248,6 @@ input[type="range"] {
 
   .app-header {
     display: grid;
-  }
-
-  .header-upload-button {
-    margin-left: 0;
   }
 
   .hero-section {

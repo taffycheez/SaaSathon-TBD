@@ -546,12 +546,14 @@ export default function WorkspaceApp() {
   const [layoutNotes, setLayoutNotes] = useState([]);
   const [scoreExplanation, setScoreExplanation] = useState(null);
   const [isExplainingScore, setIsExplainingScore] = useState(false);
+  const [isSandboxMode, setIsSandboxMode] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [pendingScrollTarget, setPendingScrollTarget] = useState("");
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
   const [headerHidden, setHeaderHidden] = useState(false);
 
   const heroScene = HERO_LAYOUT_SCENES[heroSceneIndex];
+  const hasWorkspace = Boolean(imagePreview) || isSandboxMode;
   const activeRoom = roomPreview ?? room;
   const scoreResult = useMemo(() => computeFengShuiScore(activeRoom, preferences), [activeRoom, preferences]);
   const committedScoreResult = useMemo(() => computeFengShuiScore(room, preferences), [room, preferences]);
@@ -763,6 +765,7 @@ export default function WorkspaceApp() {
 
   async function handleUpload(file) {
     setIsAnalysing(true);
+    setIsSandboxMode(false);
     setError("");
 
     try {
@@ -875,6 +878,19 @@ export default function WorkspaceApp() {
       return;
     }
 
+    if (isSandboxMode) {
+      setRoom(DEFAULT_ROOM, { recordHistory: false, resetHistory: true });
+      setBaseRoom(DEFAULT_ROOM);
+      setPreferences(defaultPreferences);
+      setShowReferenceImage(false);
+      setWallToolMode("select");
+      setError("");
+      setRoomNotes(["Sandbox mode started. Add walls, doors, windows, desks, and objects from scratch."]);
+      setLayoutNotes([]);
+      setScoreExplanation(null);
+      return;
+    }
+
     setRoom(DEFAULT_ROOM, { recordHistory: false, resetHistory: true });
     setBaseRoom(DEFAULT_ROOM);
     setPreferences(defaultPreferences);
@@ -894,6 +910,7 @@ export default function WorkspaceApp() {
   function goHome(target = "home") {
     setShowResetConfirm(false);
     setIsGenerating(false);
+    setIsSandboxMode(false);
     setError("");
     setRoom(DEFAULT_ROOM, { recordHistory: false, resetHistory: true });
     setBaseRoom(DEFAULT_ROOM);
@@ -904,6 +921,23 @@ export default function WorkspaceApp() {
     setRoomNotes([]);
     setLayoutNotes([]);
     setPendingScrollTarget(target);
+  }
+
+  function startSandbox() {
+    setShowResetConfirm(false);
+    setIsAnalysing(false);
+    setIsGenerating(false);
+    setIsSandboxMode(true);
+    setError("");
+    setRoom(DEFAULT_ROOM, { recordHistory: false, resetHistory: true });
+    setBaseRoom(DEFAULT_ROOM);
+    setPreferences(defaultPreferences);
+    setImagePreview("");
+    setShowReferenceImage(false);
+    setWallToolMode("select");
+    setRoomNotes(["Sandbox mode started. Add walls, doors, windows, desks, and objects from scratch."]);
+    setLayoutNotes([]);
+    setScoreExplanation(null);
   }
 
   return (
@@ -921,24 +955,15 @@ export default function WorkspaceApp() {
             <h1>Plan a sharper room for focused work.</h1>
           </div>
         </button>
-        {!imagePreview ? (
-          <button
-            type="button"
-            className="header-upload-button"
-            onClick={() => uploadRef.current?.openPicker()}
-            disabled={isAnalysing}
-          >
-            {isAnalysing ? "Analysing..." : "Upload image"}
-          </button>
-        ) : null}
       </header>
 
       {isAnalysing ? <LoadingScreen /> : null}
 
-      {!imagePreview ? (
+      {!hasWorkspace ? (
         <HomePage
           uploadRef={uploadRef}
           onUpload={handleUpload}
+          onStartSandbox={startSandbox}
           isLoading={isAnalysing}
           error={error}
           onHome={goHome}
@@ -1026,12 +1051,14 @@ export default function WorkspaceApp() {
           >
             <p className="upload-kicker">Confirm reset</p>
             <h2 id="reset-confirm-title">
-              {imagePreview ? "Restore the analysed floor plan?" : "Reset this workspace?"}
+              {imagePreview ? "Restore the analysed floor plan?" : isSandboxMode ? "Reset this sandbox?" : "Reset this workspace?"}
             </h2>
             <p>
               {imagePreview
                 ? "This will remove your current edits and bring the layout back to the analysed starting point."
-                : "This will clear the current workspace and return to the default starting state."}
+                : isSandboxMode
+                  ? "This will clear the current sandbox and return it to a blank default workspace."
+                  : "This will clear the current workspace and return to the default starting state."}
             </p>
             <div className="confirm-actions">
               <button type="button" className="secondary-button modal-button" onClick={cancelResetWorkspace}>
@@ -1073,7 +1100,7 @@ function LoadingScreen() {
   );
 }
 
-function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, heroSceneIndex }) {
+function HomePage({ uploadRef, onUpload, onStartSandbox, isLoading, error, onHome, heroScene, heroSceneIndex }) {
   const [pointerLight, setPointerLight] = useState({ x: 50, y: 50, active: false });
 
   function handlePlanPointerMove(event) {
@@ -1105,6 +1132,14 @@ function HomePage({ uploadRef, onUpload, isLoading, error, onHome, heroScene, he
               disabled={isLoading}
             >
               {isLoading ? "Analysing..." : "Start with a photo"}
+            </button>
+            <button
+              type="button"
+              className="secondary-link"
+              onClick={onStartSandbox}
+              disabled={isLoading}
+            >
+              Start sandbox
             </button>
           </div>
         </div>
