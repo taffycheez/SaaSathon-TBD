@@ -38,6 +38,13 @@ const defaultPreferences = {
   numPeople: 8
 };
 
+const DEFAULT_ANALYSIS_BOUNDS = {
+  x_percent: 0,
+  y_percent: 0,
+  width_percent: 100,
+  height_percent: 100
+};
+
 function normalizeWallIndex(value, wallsLength) {
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || wallsLength <= 0) {
@@ -105,6 +112,94 @@ function normalizeRoomData(data) {
     desks: detectedDesks,
     notes: Array.isArray(safeData.notes) ? safeData.notes : []
   };
+}
+
+function remapPercentIntoOriginal(value, startPercent, sizePercent) {
+  return clampPercent(startPercent + (clampPercent(value) / 100) * sizePercent);
+}
+
+function remapRoomToOriginalBounds(room, analysisBounds) {
+  if (!room || !analysisBounds) {
+    return room;
+  }
+
+  const { x_percent: startX, y_percent: startY, width_percent: widthScale, height_percent: heightScale } = analysisBounds;
+  const safeWidthScale = Math.max(1, widthScale);
+  const safeHeightScale = Math.max(1, heightScale);
+
+  return {
+    ...room,
+    walls: Array.isArray(room.walls)
+      ? room.walls.map((wall) => ({
+          ...wall,
+          x1_percent: remapPercentIntoOriginal(wall.x1_percent, startX, safeWidthScale),
+          y1_percent: remapPercentIntoOriginal(wall.y1_percent, startY, safeHeightScale),
+          x2_percent: remapPercentIntoOriginal(wall.x2_percent, startX, safeWidthScale),
+          y2_percent: remapPercentIntoOriginal(wall.y2_percent, startY, safeHeightScale)
+        }))
+      : room.walls,
+    windows: Array.isArray(room.windows)
+      ? room.windows.map((item) =>
+          item && item.x_percent != null && item.y_percent != null
+            ? {
+                ...item,
+                x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
+                y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale)
+              }
+            : item
+        )
+      : room.windows,
+    doors: Array.isArray(room.doors)
+      ? room.doors.map((item) =>
+          item && item.x_percent != null && item.y_percent != null
+            ? {
+                ...item,
+                x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
+                y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale)
+              }
+            : item
+        )
+      : room.doors,
+    furniture: Array.isArray(room.furniture)
+      ? room.furniture.map((item) => ({
+          ...item,
+          x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
+          y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale),
+          width_percent: clampPercent((Number(item.width_percent) || 0) * (safeWidthScale / 100)),
+          height_percent: clampPercent((Number(item.height_percent) || 0) * (safeHeightScale / 100))
+        }))
+      : room.furniture,
+    desks: Array.isArray(room.desks)
+      ? room.desks.map((item) => ({
+          ...item,
+          x_percent: remapPercentIntoOriginal(item.x_percent, startX, safeWidthScale),
+          y_percent: remapPercentIntoOriginal(item.y_percent, startY, safeHeightScale),
+          width_percent: clampPercent((Number(item.width_percent) || 0) * (safeWidthScale / 100)),
+          height_percent: clampPercent((Number(item.height_percent) || 0) * (safeHeightScale / 100))
+        }))
+      : room.desks
+  };
+}
+
+async function prepareImageForAnalysis(file) {
+  const originalDataUrl = await fileToBase64(file);
+
+  try {
+    const processed = await cropImageToLikelyPlanBounds(originalDataUrl);
+    return {
+      originalDataUrl,
+      analysisDataUrl: processed?.analysisDataUrl || originalDataUrl,
+      analysisBounds: processed?.analysisBounds || DEFAULT_ANALYSIS_BOUNDS,
+      preprocessingNotes: processed?.preprocessingNotes || []
+    };
+  } catch {
+    return {
+      originalDataUrl,
+      analysisDataUrl: originalDataUrl,
+      analysisBounds: DEFAULT_ANALYSIS_BOUNDS,
+      preprocessingNotes: []
+    };
+  }
 }
 
 function normalizeDeskData(data) {
@@ -302,12 +397,17 @@ export default function WorkspaceApp() {
     setError("");
 
     try {
-      const base64 = await fileToBase64(file);
+      const {
+        originalDataUrl,
+        analysisDataUrl,
+        analysisBounds,
+        preprocessingNotes
+      } = await prepareImageForAnalysis(file);
 
       const response = await fetch(`${API_BASE_URL}/analyse-room`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64 })
+        body: JSON.stringify({ image: analysisDataUrl })
       });
 
       if (!response.ok) {
@@ -316,12 +416,15 @@ export default function WorkspaceApp() {
       }
 
       const data = await response.json();
-      const normalizedRoom = normalizeRoomData(data);
-      setImagePreview(base64);
+      const normalizedRoom = remapRoomToOriginalBounds(normalizeRoomData(data), analysisBounds);
+      setImagePreview(originalDataUrl);
       setShowReferenceImage(false);
       setRoom(normalizedRoom);
       setBaseRoom(normalizedRoom);
-      setRoomNotes(Array.isArray(data.notes) ? data.notes : []);
+      setRoomNotes([
+        ...(Array.isArray(data.notes) ? data.notes : []),
+        ...preprocessingNotes
+      ]);
       setLayoutNotes([]);
     } catch (uploadError) {
       setError(uploadError.message || "We couldn't analyse that image. Please try again.");
@@ -650,4 +753,157 @@ function fileToBase64(file) {
     reader.onerror = () => reject(new Error("Could not read the uploaded file."));
     reader.readAsDataURL(file);
   });
+}
+
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not load the uploaded image."));
+    image.src = dataUrl;
+  });
+}
+
+function findNonBackgroundBounds(imageData, width, height) {
+  const pixels = imageData.data;
+
+  function samplePixel(x, y) {
+    const offset = (y * width + x) * 4;
+    return {
+      r: pixels[offset],
+      g: pixels[offset + 1],
+      b: pixels[offset + 2]
+    };
+  }
+
+  const cornerSamples = [
+    samplePixel(0, 0),
+    samplePixel(Math.max(0, width - 1), 0),
+    samplePixel(0, Math.max(0, height - 1)),
+    samplePixel(Math.max(0, width - 1), Math.max(0, height - 1))
+  ];
+
+  const background = cornerSamples.reduce(
+    (accumulator, sample) => ({
+      r: accumulator.r + sample.r / cornerSamples.length,
+      g: accumulator.g + sample.g / cornerSamples.length,
+      b: accumulator.b + sample.b / cornerSamples.length
+    }),
+    { r: 0, g: 0, b: 0 }
+  );
+
+  function isForeground(x, y) {
+    const { r, g, b } = samplePixel(x, y);
+    const distance =
+      Math.abs(r - background.r) +
+      Math.abs(g - background.g) +
+      Math.abs(b - background.b);
+    const brightness = (r + g + b) / 3;
+    return distance > 45 || brightness < 220;
+  }
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!isForeground(x, y)) {
+        continue;
+      }
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return null;
+  }
+
+  const paddingX = Math.max(6, Math.round(width * 0.02));
+  const paddingY = Math.max(6, Math.round(height * 0.02));
+
+  return {
+    x: Math.max(0, minX - paddingX),
+    y: Math.max(0, minY - paddingY),
+    width: Math.min(width, maxX - minX + 1 + paddingX * 2),
+    height: Math.min(height, maxY - minY + 1 + paddingY * 2)
+  };
+}
+
+async function cropImageToLikelyPlanBounds(dataUrl) {
+  const image = await loadImage(dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+
+  if (!context) {
+    throw new Error("Could not prepare the uploaded image.");
+  }
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const bounds = findNonBackgroundBounds(imageData, canvas.width, canvas.height);
+
+  if (!bounds) {
+    return {
+      analysisDataUrl: dataUrl,
+      analysisBounds: DEFAULT_ANALYSIS_BOUNDS,
+      preprocessingNotes: []
+    };
+  }
+
+  const areaRatio = (bounds.width * bounds.height) / Math.max(canvas.width * canvas.height, 1);
+  const hugsEdge =
+    bounds.x <= 2 &&
+    bounds.y <= 2 &&
+    bounds.x + bounds.width >= canvas.width - 2 &&
+    bounds.y + bounds.height >= canvas.height - 2;
+
+  if (areaRatio >= 0.94 || hugsEdge) {
+    return {
+      analysisDataUrl: dataUrl,
+      analysisBounds: DEFAULT_ANALYSIS_BOUNDS,
+      preprocessingNotes: []
+    };
+  }
+
+  const croppedCanvas = document.createElement("canvas");
+  croppedCanvas.width = bounds.width;
+  croppedCanvas.height = bounds.height;
+  const croppedContext = croppedCanvas.getContext("2d");
+
+  if (!croppedContext) {
+    throw new Error("Could not prepare the cropped analysis image.");
+  }
+
+  croppedContext.drawImage(
+    canvas,
+    bounds.x,
+    bounds.y,
+    bounds.width,
+    bounds.height,
+    0,
+    0,
+    bounds.width,
+    bounds.height
+  );
+
+  return {
+    analysisDataUrl: croppedCanvas.toDataURL("image/png"),
+    analysisBounds: {
+      x_percent: (bounds.x / canvas.width) * 100,
+      y_percent: (bounds.y / canvas.height) * 100,
+      width_percent: (bounds.width / canvas.width) * 100,
+      height_percent: (bounds.height / canvas.height) * 100
+    },
+    preprocessingNotes: [
+      "WorkspaceIQ cropped obvious outer margins before analysis so walls are less likely to snap to the image border."
+    ]
+  };
 }
