@@ -50,7 +50,7 @@ const UploadScreen = forwardRef(function UploadScreen({ onUpload, isLoading, err
       >
         <div className="upload-icon" aria-hidden="true">+</div>
         <p className="upload-kicker">Step 1</p>
-        <h2>Upload an office photo</h2>
+        <h2>Upload a floor plan</h2>
         <p>Drop an image here or click to browse. WorkspaceIQ estimates the room and opens an editable floor plan.</p>
         <button
           type="button"
