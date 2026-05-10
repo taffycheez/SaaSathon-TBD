@@ -522,43 +522,6 @@ function zoomCamera(camera, controls, scaleDelta) {
   controls.update();
 }
 
-function orbitCamera(camera, controls, deltaX, deltaY) {
-  if (!camera || !controls) {
-    return;
-  }
-
-  const offset = camera.position.clone().sub(controls.target);
-  const spherical = new THREE.Spherical().setFromVector3(offset);
-  spherical.theta -= deltaX * 0.01;
-  spherical.phi = THREE.MathUtils.clamp(spherical.phi + deltaY * 0.01, Math.PI / 5.5, Math.PI / 2.02);
-  offset.setFromSpherical(spherical);
-  camera.position.copy(controls.target.clone().add(offset));
-  camera.lookAt(controls.target);
-  controls.update();
-}
-
-function panCamera(camera, controls, deltaX, deltaY, viewportWidth, viewportHeight) {
-  if (!camera || !controls) {
-    return;
-  }
-
-  const offset = camera.position.clone().sub(controls.target);
-  const targetDistance = Math.max(offset.length(), 1);
-  const width = Math.max(viewportWidth || 1, 1);
-  const height = Math.max(viewportHeight || 1, 1);
-  const panScale = targetDistance * 0.85;
-  const panX = (-deltaX / width) * panScale;
-  const panY = (deltaY / height) * panScale;
-  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0).normalize();
-  const up = camera.up.clone().normalize();
-  const movement = right.multiplyScalar(panX).add(up.multiplyScalar(panY));
-
-  camera.position.add(movement);
-  controls.target.add(movement);
-  camera.lookAt(controls.target);
-  controls.update();
-}
-
 export default function FloorPlanPreview3D({ room }) {
   const mountRef = useRef(null);
   const rendererRef = useRef(null);
@@ -601,81 +564,31 @@ export default function FloorPlanPreview3D({ room }) {
     camera.position.set(7.5, 7.2, 7.5);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableRotate = false;
-    controls.enablePan = false;
-    controls.enableZoom = false;
+    controls.enabled = true;
+    controls.enableRotate = true;
+    controls.enablePan = true;
+    controls.enableZoom = true;
     controls.minDistance = 6;
     controls.maxDistance = 22;
     controls.maxPolarAngle = Math.PI / 2.1;
     controls.minPolarAngle = Math.PI / 5;
-    controls.enableDamping = false;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
     controls.screenSpacePanning = true;
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+    controls.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN
+    };
     controls.target.set(0, 0.8, 0);
     controls.update();
 
     const handleContextMenu = (event) => event.preventDefault();
     renderer.domElement.addEventListener("contextmenu", handleContextMenu);
-
-    let activePointer = null;
-
-    const handlePointerDown = (event) => {
-      renderer.domElement.setPointerCapture?.(event.pointerId);
-      activePointer = {
-        id: event.pointerId,
-        x: event.clientX,
-        y: event.clientY,
-        mode: event.button === 2 || event.shiftKey ? "pan" : "orbit"
-      };
-      renderer.domElement.style.cursor = "grabbing";
-      event.preventDefault();
-    };
-
-    const handlePointerMove = (event) => {
-      if (!activePointer || event.pointerId !== activePointer.id) {
-        return;
-      }
-
-      const deltaX = event.clientX - activePointer.x;
-      const deltaY = event.clientY - activePointer.y;
-      if (activePointer.mode === "pan") {
-        panCamera(
-          camera,
-          controls,
-          deltaX,
-          deltaY,
-          renderer.domElement.clientWidth,
-          renderer.domElement.clientHeight
-        );
-      } else {
-        orbitCamera(camera, controls, deltaX, deltaY);
-      }
-
-      activePointer.x = event.clientX;
-      activePointer.y = event.clientY;
-      renderer.render(sceneRef.current, cameraRef.current);
-      event.preventDefault();
-    };
-
-    const clearPointer = (event) => {
-      if (activePointer && event.pointerId === activePointer.id) {
-        renderer.domElement.releasePointerCapture?.(event.pointerId);
-        activePointer = null;
-        renderer.domElement.style.cursor = "grab";
-        event.preventDefault();
-      }
-    };
-
-    const handleWheel = (event) => {
-      zoomCamera(camera, controls, event.deltaY < 0 ? 0.92 : 1.08);
-      renderer.render(sceneRef.current, cameraRef.current);
-      event.preventDefault();
-    };
-
-    renderer.domElement.addEventListener("pointerdown", handlePointerDown);
-    renderer.domElement.addEventListener("pointermove", handlePointerMove);
-    renderer.domElement.addEventListener("pointerup", clearPointer);
-    renderer.domElement.addEventListener("pointercancel", clearPointer);
-    renderer.domElement.addEventListener("wheel", handleWheel, { passive: false });
 
     rendererRef.current = renderer;
     sceneRef.current = scene;
@@ -716,11 +629,6 @@ export default function FloorPlanPreview3D({ room }) {
       }
       controls.dispose();
       renderer.domElement.removeEventListener("contextmenu", handleContextMenu);
-      renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
-      renderer.domElement.removeEventListener("pointermove", handlePointerMove);
-      renderer.domElement.removeEventListener("pointerup", clearPointer);
-      renderer.domElement.removeEventListener("pointercancel", clearPointer);
-      renderer.domElement.removeEventListener("wheel", handleWheel);
       scene.traverse((child) => disposeObject(child));
       renderer.dispose();
       if (renderer.domElement.parentNode === mountRef.current) {

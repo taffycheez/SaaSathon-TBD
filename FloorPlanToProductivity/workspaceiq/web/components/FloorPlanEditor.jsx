@@ -16,6 +16,7 @@ import {
   getSnappedWallPoint,
   moveWallByDelta,
   normalizeRotation,
+  rotateDoorHalfTurnInRoom,
   resizeRoomBounds,
   updateEdgeItem,
   updatePlacedObject,
@@ -693,6 +694,23 @@ export default function FloorPlanEditor({
 
   function flipDoorHingeAtIndex(index) {
     setRoom((currentRoom) => flipDoorHingeInRoom(currentRoom, index));
+  }
+
+  function rotateDoorHalfTurnAtIndex(index) {
+    setRoom((currentRoom) => rotateDoorHalfTurnInRoom(currentRoom, index));
+  }
+
+  function rotateSelectedDoorHalfTurn() {
+    if (selectedEdgeItem?.type !== "doors") {
+      return;
+    }
+
+    const item = doors?.[selectedEdgeItem.index];
+    if (!item) {
+      return;
+    }
+
+    rotateDoorHalfTurnAtIndex(selectedEdgeItem.index);
   }
 
   function flipSelectedDoorHinge() {
@@ -1511,6 +1529,13 @@ export default function FloorPlanEditor({
                 <button
                   type="button"
                   className="object-scale-reset"
+                  onClick={rotateSelectedDoorHalfTurn}
+                >
+                  Rotate door 180deg
+                </button>
+                <button
+                  type="button"
+                  className="object-scale-reset"
                   onClick={cycleSelectedDoorOrientation}
                 >
                   Flip door swing
@@ -2058,7 +2083,7 @@ export default function FloorPlanEditor({
                 className={`workspace-opening${dragState?.type === "doors" && dragState?.index === index ? " is-dragging" : ""}`}
                 transform={`translate(${point.x} ${point.y}) rotate(${renderedDoor.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("doors", index, event)}
-                onDoubleClick={() => flipDoorHingeAtIndex(index)}
+                onDoubleClick={() => rotateDoorHalfTurnAtIndex(index)}
               >
                 <DoorShape
                   hingeSide={renderedDoor.hinge_side}

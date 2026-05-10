@@ -16,6 +16,7 @@ import {
   normalizeRoomLayout,
   pointOnWall,
   resizeRoomBounds,
+  rotateDoorHalfTurnInRoom,
   updateEdgeItem,
   updatePlacedObject,
   updateWallEndpoint,
@@ -369,6 +370,34 @@ test("flipDoorHingeInRoom preserves doorway span on shorter wall segments", () =
   assert.equal(flippedBack.doors[0].hinge_side, "start");
   assert.equal(flippedBack.doors[0].position_percent, 30);
   assert.equal(flippedBack.doors[0].x_percent, 34);
+});
+
+test("rotateDoorHalfTurnInRoom flips both hinge and swing while preserving the doorway span", () => {
+  const room = normalizeRoomLayout({
+    ...BASE_ROOM,
+    doors: [{
+      wall_index: 0,
+      position_percent: 20,
+      width_percent: 12,
+      opening_anchor: "edge",
+      hinge_side: "start",
+      swing_direction: 1
+    }]
+  });
+
+  const rotated = rotateDoorHalfTurnInRoom(room, 0);
+  assert.equal(rotated.doors[0].hinge_side, "end");
+  assert.equal(rotated.doors[0].swing_direction, -1);
+  assert.equal(rotated.doors[0].position_percent, 32);
+  assert.equal(rotated.doors[0].x_percent, 32);
+  assert.equal(rotated.doors[0].y_percent, 0);
+
+  const rotatedBack = rotateDoorHalfTurnInRoom(rotated, 0);
+  assert.equal(rotatedBack.doors[0].hinge_side, "start");
+  assert.equal(rotatedBack.doors[0].swing_direction, 1);
+  assert.equal(rotatedBack.doors[0].position_percent, 20);
+  assert.equal(rotatedBack.doors[0].x_percent, 20);
+  assert.equal(rotatedBack.doors[0].y_percent, 0);
 });
 
 test("updateWallEndpoint moves connected wall endpoints together", () => {

@@ -140,6 +140,31 @@ export function flipDoorHingeInRoom(room, index) {
   });
 }
 
+export function rotateDoorHalfTurnInRoom(room, index) {
+  const doors = Array.isArray(room?.doors) ? room.doors : [];
+  const door = doors[index];
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  if (!door || !walls.length) {
+    return room;
+  }
+
+  const wallIndex = Math.max(0, Math.min(walls.length - 1, Number(door.wall_index) || 0));
+  const wall = walls[wallIndex];
+  const nextHingeSide = door.hinge_side === "end" ? "start" : "end";
+  const currentSwingDirection = Number(door?.swing_direction) === -1 ? -1 : 1;
+  const range = doorOpeningRange(door, wall);
+  const nextPosition = nextHingeSide === "end" ? range.end : range.start;
+
+  return updateEdgeItem(room, "doors", index, {
+    ...pointAtWallPosition(wall, nextPosition),
+    wall_index: wallIndex,
+    position_percent: Number(nextPosition.toFixed(2)),
+    opening_anchor: "edge",
+    hinge_side: nextHingeSide,
+    swing_direction: currentSwingDirection === 1 ? -1 : 1
+  });
+}
+
 export function createPlacedObject(type, seedIndex = 0) {
   const canonicalType = canonicalizeObjectType(type);
   const definition = getObjectDefinition(canonicalType);
