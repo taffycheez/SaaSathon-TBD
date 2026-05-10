@@ -372,7 +372,7 @@ test("flipDoorHingeInRoom preserves doorway span on shorter wall segments", () =
   assert.equal(flippedBack.doors[0].x_percent, 34);
 });
 
-test("rotateDoorHalfTurnInRoom rotates the rendered door symbol without mirroring its parts", () => {
+test("rotateDoorHalfTurnInRoom rotates the whole door around the opening midpoint", () => {
   const room = normalizeRoomLayout({
     ...BASE_ROOM,
     doors: [{
@@ -386,16 +386,18 @@ test("rotateDoorHalfTurnInRoom rotates the rendered door symbol without mirrorin
   });
 
   const rotated = rotateDoorHalfTurnInRoom(room, 0);
-  assert.equal(rotated.doors[0].hinge_side, "start");
-  assert.equal(rotated.doors[0].swing_direction, 1);
-  assert.equal(rotated.doors[0].symbol_rotation_deg, 180);
-  assert.equal(rotated.doors[0].position_percent, 20);
-  assert.equal(rotated.doors[0].x_percent, 20);
+  assert.equal(rotated.doors[0].hinge_side, "end");
+  assert.equal(rotated.doors[0].swing_direction, -1);
+  assert.equal(rotated.doors[0].manual_swing_direction, true);
+  assert.equal(rotated.doors[0].symbol_rotation_deg, 0);
+  assert.equal(rotated.doors[0].position_percent, 32);
+  assert.equal(rotated.doors[0].x_percent, 32);
   assert.equal(rotated.doors[0].y_percent, 0);
 
   const rotatedBack = rotateDoorHalfTurnInRoom(rotated, 0);
   assert.equal(rotatedBack.doors[0].hinge_side, "start");
   assert.equal(rotatedBack.doors[0].swing_direction, 1);
+  assert.equal(rotatedBack.doors[0].manual_swing_direction, true);
   assert.equal(rotatedBack.doors[0].symbol_rotation_deg, 0);
   assert.equal(rotatedBack.doors[0].position_percent, 20);
   assert.equal(rotatedBack.doors[0].x_percent, 20);

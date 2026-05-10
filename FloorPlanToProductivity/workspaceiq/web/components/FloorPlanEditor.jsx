@@ -346,6 +346,7 @@ function cycleDoorOrientation(door) {
   return {
     hinge_side: currentHingeSide,
     swing_direction: currentSwingDirection === 1 ? -1 : 1,
+    manual_swing_direction: true,
     opening_anchor: "edge"
   };
 }
@@ -399,6 +400,10 @@ function DoorShape({ hingeSide = "start", swingDirection = 1, length = DOOR_REND
 
 function getRenderedDoorSwingDirection(door, outerPolygon) {
   const swingDirection = Number(door?.swing_direction) === -1 ? -1 : 1;
+  if (door?.manual_swing_direction) {
+    return swingDirection;
+  }
+
   if (!Array.isArray(outerPolygon) || outerPolygon.length < 3) {
     return swingDirection;
   }
@@ -2077,12 +2082,11 @@ export default function FloorPlanEditor({
             const renderedSwingDirection = getRenderedDoorSwingDirection(renderedDoor, wallGraph.outerPolygon);
             const point = toCanvasPoint({ x: renderedDoor.x_percent, y: renderedDoor.y_percent }, roomBox, roomSize.bounds);
             const doorLength = getOpeningCanvasLength(renderedDoor, walls, roomBox, roomSize.bounds, DOOR_RENDER_LENGTH);
-            const doorRotation = normalizeRotation((renderedDoor.rotation_deg || 0) + (renderedDoor.symbol_rotation_deg || 0));
             return (
               <g
                 key={`door-${index}`}
                 className={`workspace-opening${dragState?.type === "doors" && dragState?.index === index ? " is-dragging" : ""}`}
-                transform={`translate(${point.x} ${point.y}) rotate(${doorRotation})`}
+                transform={`translate(${point.x} ${point.y}) rotate(${renderedDoor.rotation_deg || 0})`}
                 onPointerDown={(event) => startDrag("doors", index, event)}
                 onDoubleClick={() => rotateDoorHalfTurnAtIndex(index)}
               >

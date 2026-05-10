@@ -143,12 +143,27 @@ export function flipDoorHingeInRoom(room, index) {
 export function rotateDoorHalfTurnInRoom(room, index) {
   const doors = Array.isArray(room?.doors) ? room.doors : [];
   const door = doors[index];
-  if (!door) {
+  const walls = Array.isArray(room?.walls) ? room.walls : [];
+  if (!door || !walls.length) {
     return room;
   }
 
+  const wallIndex = Math.max(0, Math.min(walls.length - 1, Number(door.wall_index) || 0));
+  const wall = walls[wallIndex];
+  const nextHingeSide = door.hinge_side === "end" ? "start" : "end";
+  const range = doorOpeningRange(door, wall);
+  const nextPosition = nextHingeSide === "end" ? range.end : range.start;
+  const nextSwingDirection = Number(door.swing_direction) === -1 ? 1 : -1;
+
   return updateEdgeItem(room, "doors", index, {
-    symbol_rotation_deg: normalizeRotation((door.symbol_rotation_deg || 0) + 180)
+    ...pointAtWallPosition(wall, nextPosition),
+    wall_index: wallIndex,
+    position_percent: Number(nextPosition.toFixed(2)),
+    opening_anchor: "edge",
+    hinge_side: nextHingeSide,
+    swing_direction: nextSwingDirection,
+    manual_swing_direction: true,
+    symbol_rotation_deg: 0
   });
 }
 

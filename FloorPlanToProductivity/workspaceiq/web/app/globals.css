@@ -998,6 +998,16 @@ button:disabled {
   transform: scale(1.025);
 }
 
+.workspace-object--trashcan .trashcan-lid {
+  transform-box: fill-box;
+  transform-origin: 12% 50%;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.workspace-object--trashcan:hover .trashcan-lid {
+  transform: translate(-1px, -2px) rotate(-28deg);
+}
+
 .workspace-object.is-dragging,
 .workspace-opening.is-dragging {
   cursor: grabbing;

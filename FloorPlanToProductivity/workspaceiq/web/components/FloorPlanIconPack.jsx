@@ -125,10 +125,14 @@ function PlantIcon({ width, height, stroke }) {
 }
 
 function TrashIcon({ width, height, fill, stroke, strokeWidth }) {
+  const lidStroke = Math.max(1, strokeWidth * 0.6);
   return (
     <>
-      <path d={`M ${width * 0.3} ${height * 0.26} L ${width * 0.7} ${height * 0.26} L ${width * 0.64} ${height * 0.82} L ${width * 0.36} ${height * 0.82} Z`} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />
-      <line x1={width * 0.26} y1={height * 0.24} x2={width * 0.74} y2={height * 0.24} stroke={stroke} strokeWidth={Math.max(1, strokeWidth * 0.6)} />
+      <path className="trashcan-body" d={`M ${width * 0.3} ${height * 0.26} L ${width * 0.7} ${height * 0.26} L ${width * 0.64} ${height * 0.82} L ${width * 0.36} ${height * 0.82} Z`} fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />
+      <g className="trashcan-lid">
+        <line x1={width * 0.26} y1={height * 0.24} x2={width * 0.74} y2={height * 0.24} stroke={stroke} strokeWidth={lidStroke} strokeLinecap="round" />
+        <line x1={width * 0.42} y1={height * 0.18} x2={width * 0.58} y2={height * 0.18} stroke={stroke} strokeWidth={lidStroke} strokeLinecap="round" />
+      </g>
     </>
   );
 }
