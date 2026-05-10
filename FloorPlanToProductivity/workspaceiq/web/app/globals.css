@@ -105,13 +105,50 @@ button:disabled {
   height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
-  background: linear-gradient(145deg, #162845 0%, #23406f 68%, #b98354 100%);
-  box-shadow: 0 12px 24px rgba(35, 64, 111, 0.24);
-  color: white;
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #10233d 0%, #23406f 66%, #6f4e37 100%);
+  box-shadow: 0 12px 24px rgba(35, 64, 111, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.brand-mark svg {
+  width: 34px;
+  height: 34px;
+  overflow: visible;
+}
+
+.brand-mark path:first-child {
+  fill: none;
+  stroke: #fff8e8;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.brand-mark-room {
+  fill: none;
+  stroke: #d9e3c7;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  opacity: 0.72;
+}
+
+.brand-mark-divider {
+  fill: none;
+  stroke: #fff8e8;
+  stroke-width: 4px;
+  stroke-linecap: round;
+  opacity: 0.78;
+}
+
+.brand-mark-node {
+  fill: #f0b56d;
+}
+
+.brand-mark-spark {
+  fill: none;
+  stroke: #162845;
+  stroke-width: 2.2px;
+  stroke-linecap: round;
 }
 
 .secondary-link {

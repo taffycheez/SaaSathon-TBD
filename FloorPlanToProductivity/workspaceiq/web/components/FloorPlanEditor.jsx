@@ -2077,11 +2077,12 @@ export default function FloorPlanEditor({
             const renderedSwingDirection = getRenderedDoorSwingDirection(renderedDoor, wallGraph.outerPolygon);
             const point = toCanvasPoint({ x: renderedDoor.x_percent, y: renderedDoor.y_percent }, roomBox, roomSize.bounds);
             const doorLength = getOpeningCanvasLength(renderedDoor, walls, roomBox, roomSize.bounds, DOOR_RENDER_LENGTH);
+            const doorRotation = normalizeRotation((renderedDoor.rotation_deg || 0) + (renderedDoor.symbol_rotation_deg || 0));
             return (
               <g
                 key={`door-${index}`}
                 className={`workspace-opening${dragState?.type === "doors" && dragState?.index === index ? " is-dragging" : ""}`}
-                transform={`translate(${point.x} ${point.y}) rotate(${renderedDoor.rotation_deg || 0})`}
+                transform={`translate(${point.x} ${point.y}) rotate(${doorRotation})`}
                 onPointerDown={(event) => startDrag("doors", index, event)}
                 onDoubleClick={() => rotateDoorHalfTurnAtIndex(index)}
               >

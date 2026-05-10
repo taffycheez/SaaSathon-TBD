@@ -557,9 +557,10 @@ async function prepareImageForAnalysis(file) {
   }
 }
 
-function normalizeDeskData(data) {
+function normalizeLayoutData(data) {
   const safeData = data && typeof data === "object" ? data : {};
   const rawDesks = Array.isArray(data) ? data : Array.isArray(safeData.desks) ? safeData.desks : [];
+  const rawFurniture = Array.isArray(safeData.furniture) ? safeData.furniture : [];
 
   return {
     desks: rawDesks.map((desk) => {
@@ -577,6 +578,7 @@ function normalizeDeskData(data) {
         footprint_points: normalizeFootprintPoints(desk?.footprint_points, definition.footprint_points)
       };
     }),
+    furniture: rawFurniture.map((item) => normalizeFurnitureItem(item)),
     notes: Array.isArray(safeData.notes) ? safeData.notes : []
   };
 }
@@ -960,10 +962,11 @@ export default function WorkspaceApp() {
         throw new Error("Layout generation failed.");
       }
 
-      const { desks, notes } = normalizeDeskData(await response.json());
+      const { desks, furniture, notes } = normalizeLayoutData(await response.json());
       setRoom((currentRoom) => ({
         ...currentRoom,
-        desks
+        desks,
+        furniture: furniture.length ? furniture : currentRoom.furniture
       }));
       setScoreExplanation(null);
       setLayoutNotes(notes);
@@ -1097,7 +1100,15 @@ export default function WorkspaceApp() {
           onClick={() => goHome("home")}
           aria-label="Go to WorkspaceIQ home"
         >
-          <span className="brand-mark">WIQ</span>
+          <span className="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64" focusable="false">
+              <path d="M18 18H46V30H35V46H18V18Z" />
+              <path className="brand-mark-room" d="M35 30H46V46H35" />
+              <path className="brand-mark-divider" d="M18 34H28" />
+              <circle className="brand-mark-node" cx="46" cy="18" r="7" />
+              <path className="brand-mark-spark" d="M46 14.8V21.2M42.8 18H49.2" />
+            </svg>
+          </span>
           <div>
             <p className="eyebrow">WorkspaceIQ</p>
             <h1>Plan a sharper room for focused work.</h1>

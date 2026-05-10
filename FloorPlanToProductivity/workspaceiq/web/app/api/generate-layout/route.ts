@@ -1,10 +1,9 @@
 import { createAiClient, openRouterApiKey, openRouterLayoutModel } from "@/lib/server/ai";
 import { extractJson } from "@/lib/server/json";
 import {
-  buildFallbackLayout,
+  buildFallbackRoomLayout,
   buildLayoutNotes,
-  normalizeDeskArray,
-  optimizeLayout
+  optimizeRoomLayout
 } from "@/lib/server/generateLayoutHelpers";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +42,20 @@ export async function POST(request: Request) {
           content: [
             {
               type: "input_text",
-              text: `Given this office floor plan and constraints, return JSON only. Use either a bare array or an object with a desks array. Each desk item must be {x_percent, y_percent, rotation_deg}. Prioritise natural light, avoid wall-facing orientations, maintain 1m corridors, group by work style.
+              text: `Given this office floor plan and constraints, return JSON only as an object with desks and furniture arrays.
+
+Each desk item must be {x_percent, y_percent, rotation_deg}.
+The furniture array should keep the existing furniture order from floor_plan.furniture and only propose updated {type, x_percent, y_percent, rotation_deg} values for movable non-desk objects.
+Do not move toilets, sinks, showers, fridges, or kitchenettes unless the floor plan clearly has them floating in the middle of the room.
+
+Optimise against these same productivity-score rules:
+- command position: desks can see the main door diagonally without sitting directly in the entry path
+- support: desks have a wall/edge behind them
+- flow: keep the door-to-center path open and maintain circulation between seats
+- light: shift desks toward windows, but not directly against glass
+- harmony: ${workStyle === "collaborative" ? "cluster desks around meeting tables or whiteboards" : workStyle === "focus" ? "keep focus desks away from noisy/social/utility objects" : "balance a quieter focus edge with a collaboration anchor"}
+- nature/clutter: plants near work zones, trash/clutter/utility objects away from desks
+- zoning: keep focus, collaboration, social, and utility areas legible and separated
 
 floor_plan=${JSON.stringify(room)}
 num_people=${numPeople}
@@ -55,20 +67,20 @@ work_style=${workStyle}`
     });
 
     const parsed = extractJson(response.output_text);
-    const desks = optimizeLayout(room, normalizeDeskArray(parsed), numPeople, workStyle);
+    const layout = optimizeRoomLayout(room, parsed, numPeople, workStyle);
     return Response.json({
-      desks,
-      notes: buildLayoutNotes(desks, false),
+      ...layout,
+      notes: buildLayoutNotes(layout, false),
       fallback: false
     });
   } catch (error) {
     console.error("generate-layout error", error);
     const { room, num_people: numPeople, work_style: workStyle } = body;
-    const desks = buildFallbackLayout(room, numPeople, workStyle);
+    const layout = buildFallbackRoomLayout(room, numPeople, workStyle);
 
     return Response.json({
-      desks,
-      notes: buildLayoutNotes(desks, true),
+      ...layout,
+      notes: buildLayoutNotes(layout, true),
       fallback: true
     });
   }
